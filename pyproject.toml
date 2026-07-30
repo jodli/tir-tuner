@@ -21,3 +21,5 @@ package = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Run the package in place (it is not installed; see [tool.uv] package = false).
+pythonpath = ["."]
