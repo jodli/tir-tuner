@@ -172,6 +172,8 @@ class Config:
     meal_clean_gap_min: int = 180      # no other meal bolus within +/- this
     excursion_peak_h: float = 3.0
     excursion_tail_h: float = 4.0
+    hypo_start_h: float = 1.5          # post-meal hypo judged only from here on
+                                       # (insulin tail), so early dips don't count
 
     # Recommendation guardrails (the safety clamp)
     min_clean_meals: int = 5           # below this -> insufficient data
