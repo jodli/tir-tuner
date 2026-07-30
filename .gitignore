@@ -3,6 +3,8 @@ ingest/
 runs/
 *.zip
 .env
+# Personal CR/CF configuration (use settings.example.json as a template).
+settings.json
 
 # --- Generated BAML client (produced by `uv run baml-cli generate`) ---
 baml_client/
