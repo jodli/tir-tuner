@@ -7,6 +7,8 @@ dependencies = [
     "pandas>=2.0",
     "matplotlib>=3.7",
     "baml-py>=0.221",
+    "typing-extensions>=4.0",   # required by the generated baml_client
+    "pydantic>=2.0",            # generated baml_client uses python/pydantic output
 ]
 
 [dependency-groups]

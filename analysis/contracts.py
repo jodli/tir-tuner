@@ -176,7 +176,8 @@ class Config:
                                        # (insulin tail), so early dips don't count
 
     # Recommendation guardrails (the safety clamp)
-    min_clean_meals: int = 5           # below this -> insufficient data
+    min_clean_meals: int = 5           # below this a CR block -> insufficient data
+    min_isolated_corrections: int = 3  # below this a CF block -> insufficient data
     max_change_pct: float = 0.10       # never propose more than +/-10% per run
 
     # Behaviour flags

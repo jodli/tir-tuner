@@ -25,7 +25,27 @@ from .contracts import (
     PipelineState,
     ResolvedSettings,
     SettingsHistory,
+    TimeBlock,
 )
+
+
+def value_for_block(schedule: dict[str, float], block: TimeBlock) -> Optional[float]:
+    """Look up a configured value for a config block from a settings schedule.
+
+    Handles both aligned keys (``"06-11"``) and coarse ones (``"00-24"``): the
+    value whose ``HH-HH`` hour range contains the block's start hour wins, with
+    an exact key match preferred.
+    """
+    if block.key in schedule:
+        return schedule[block.key]
+    for key, value in schedule.items():
+        try:
+            start, end = (int(x) for x in key.split("-"))
+        except ValueError:
+            continue
+        if start <= block.start_hour < end:
+            return value
+    return None
 
 
 def load_history(path: str) -> Optional[SettingsHistory]:
