@@ -12,7 +12,6 @@ client<llm> Reasoner {
     provider anthropic
     options {
         api_key env.ANTHROPIC_API_KEY
-        model "claude-sonnet-4-20250514"
-        temperature 0
+        model "claude-opus-4-8"
     }
 }
