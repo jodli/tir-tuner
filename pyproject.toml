@@ -1,0 +1,23 @@
+[project]
+name = "glooko-analysis"
+version = "0.1.0"
+description = "Type-1 diabetes Glooko export analysis: time-in-range and conservative carb-ratio / correction-factor tuning support"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+    "baml-py>=0.221",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+# This is an application, not a distributable library: don't try to build/install
+# the `analysis` package into the environment. It is run in place via `python -m analysis`.
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

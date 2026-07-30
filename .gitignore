@@ -1,0 +1,15 @@
+# --- Protected health information: never commit the real export or any run output ---
+ingest/
+runs/
+*.zip
+.env
+
+# --- Generated BAML client (produced by `uv run baml-cli generate`) ---
+baml_client/
+
+# --- Python / uv ---
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+# uv.lock IS committed for reproducible installs.
