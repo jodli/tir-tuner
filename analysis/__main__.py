@@ -20,6 +20,7 @@ import sys
 from . import (
     charts,
     clamp,
+    confounders,
     corrections,
     glycemic,
     history,
@@ -30,6 +31,7 @@ from . import (
     report,
     settings,
     snapshot,
+    stats,
     trends,
     window,
 )
@@ -45,7 +47,9 @@ STAGES = [
     ("corrections", corrections.run),
     ("settings", settings.run),
     ("iob", iob.run),
+    ("confounders", confounders.run),
     ("trends", trends.run),
+    ("stats", stats.run),
     ("snapshot", snapshot.run),
     ("recommend", recommend.run),
     ("clamp", clamp.run),

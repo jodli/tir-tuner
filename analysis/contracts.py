@@ -198,6 +198,19 @@ class Config:
     no_delivery_min_units: float = 1.0
     no_delivery_expected_drop: float = 40.0  # mg/dl a delivered dose should have produced
 
+    # Confounder detection (dawn phenomenon)
+    dawn_start_h: int = 3
+    dawn_end_h: int = 6
+    dawn_min_rise_mgdl: float = 30.0
+    dawn_min_nights: int = 3            # need this many qualifying nights to assert
+    dawn_min_fraction: float = 0.5     # ... and this fraction of them rising
+
+    # Robust statistics (bootstrap CI on effective CR)
+    n_boot: int = 1000
+    ci_pct: float = 90.0
+    bootstrap_seed: int = 0            # fixed -> deterministic / testable
+    min_ci_samples: int = 3
+
     # Behaviour flags
     use_llm: bool = True
     make_charts: bool = True
@@ -376,6 +389,39 @@ class IobAnalysis(JsonMixin):
 
 
 # ---------------------------------------------------------------------------
+# Stage (confounders): non-CR patterns that would otherwise mislead the reasoning
+# ---------------------------------------------------------------------------
+@dataclass
+class ConfounderFlags(JsonMixin):
+    dawn_rise: bool                      # consistent pre-wake rise, not food/rebound
+    dawn_magnitude: Optional[float]      # median overnight rise on rising nights (mg/dl)
+    dawn_nights: int                     # qualifying (bolus-free, no-preceding-hypo) nights
+    dawn_nights_rising: int
+
+
+# ---------------------------------------------------------------------------
+# Stage (stats): robust effective-CR estimation
+# ---------------------------------------------------------------------------
+@dataclass
+class BlockRobustStats(JsonMixin):
+    block: str
+    n: int                               # trimmed effective-CR sample size
+    median_effective_cr: Optional[float]
+    ci_low: Optional[float]              # bootstrap CI on the median
+    ci_high: Optional[float]
+    delta_vs_prior: Optional[float]      # current median - most-recent prior median
+    delta_significant: Optional[bool]    # prior median outside the current CI
+    cr_iob_filtered: Optional[float]     # median excluding contaminated / no-delivery meals
+    n_high_iob: int
+    n_suspected_no_delivery: int
+
+
+@dataclass
+class RobustStats(JsonMixin):
+    per_block: dict[str, BlockRobustStats]
+
+
+# ---------------------------------------------------------------------------
 # Stage 6: resolved settings (ground truth, if provided)
 # ---------------------------------------------------------------------------
 @dataclass
@@ -512,6 +558,8 @@ class PipelineState(JsonMixin):
     corrections: Optional[CorrectionAnalysis] = None     # after corrections
     settings: Optional[ResolvedSettings] = None          # after settings
     iob: Optional[IobAnalysis] = None                    # after iob
+    confounders: Optional[ConfounderFlags] = None        # after confounders
+    stats: Optional[RobustStats] = None                  # after stats
     snapshot: Optional[AnalysisSnapshot] = None          # after snapshot
     recommendation_raw: Optional[RecommendationSet] = None   # after recommend
     recommendation: Optional[RecommendationSet] = None       # after clamp

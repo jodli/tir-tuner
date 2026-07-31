@@ -2,7 +2,8 @@
 import json
 
 from analysis import (
-    clamp, corrections, glycemic, iob, loaders, meals, recommend, settings, snapshot, trends, window,
+    clamp, confounders, corrections, glycemic, iob, loaders, meals, recommend, settings,
+    snapshot, stats, trends, window,
 )
 from analysis.__main__ import main
 from analysis.contracts import Config, PipelineState
@@ -15,7 +16,8 @@ def _build_state(sample_dir):
     cfg = Config(data_dir=sample_dir, use_llm=False, settings_path=MISSING_SETTINGS, weeks=4)
     st = PipelineState()
     for fn in (loaders.run, window.run, glycemic.run, meals.run, corrections.run,
-               settings.run, iob.run, trends.run, snapshot.run, recommend.run, clamp.run):
+               settings.run, iob.run, confounders.run, trends.run, stats.run,
+               snapshot.run, recommend.run, clamp.run):
         st = fn(st, cfg)
     return st, cfg
 
@@ -27,7 +29,8 @@ def test_run_writes_result_and_history(tmp_path, sample_dir):
     assert rc == 0
     assert (out / "2026-07-30" / "result.json").exists()
     for stage in ("load", "window", "glycemic", "meals", "corrections",
-                  "settings", "iob", "trends", "snapshot", "recommend", "clamp", "history"):
+                  "settings", "iob", "confounders", "trends", "stats", "snapshot",
+                  "recommend", "clamp", "history"):
         assert (out / "2026-07-30" / "stages" / f"{stage}.json").exists()
     hist = json.loads((out / "history.json").read_text())
     assert any(r["as_of"] == "2026-07-30" for r in hist)
