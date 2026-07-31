@@ -1,4 +1,4 @@
-"""Glooko type-1 diabetes analysis pipeline.
+"""tir-tuner: a type-1 diabetes analysis pipeline.
 
 A staged pipeline that reads a de-identified Glooko CSV export (produced by
 ``strip_pii.py``) and produces time-in-range metrics plus conservative,

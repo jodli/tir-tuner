@@ -7,7 +7,7 @@ to adjust.
 from __future__ import annotations
 
 L = {
-    "title": "Glooko Typ-1-Diabetes Auswertung",
+    "title": "tir-tuner: Typ-1-Diabetes Auswertung",
     "window": "Zeitraum",
     "weeks": "Wochen",
     "readings": "Messwerte",

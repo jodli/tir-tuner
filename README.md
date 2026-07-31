@@ -1,4 +1,4 @@
-# Glooko T1D analysis pipeline
+# tir-tuner
 
 WIP. Analyzes a Glooko export (CamAPS FX closed loop + Libre 3 + YpsoPump) and
 proposes **conservative** carb-ratio (CR) and correction-factor (CF) changes to

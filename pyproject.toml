@@ -1,5 +1,5 @@
 [project]
-name = "glooko-analysis"
+name = "tir-tuner"
 version = "0.1.0"
 description = "Type-1 diabetes Glooko export analysis: time-in-range and conservative carb-ratio / correction-factor tuning support"
 requires-python = ">=3.11"
