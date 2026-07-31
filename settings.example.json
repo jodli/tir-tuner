@@ -1,5 +1,6 @@
 {
-  "_comment": "Copy to settings.json and fill in your configured CamAPS schedules. Each parameter is a dated history; the entry with the latest effective_from <= analysis date wins. Block keys are HH-HH (24h); use a coarse key like 00-24 if a factor is constant across the day. CR is g per unit, CF is mg/dl per unit.",
+  "_comment": "Copy to settings.json and fill in your configured CamAPS schedules. Each parameter is a dated history; the entry with the latest effective_from <= analysis date wins. Block keys are HH-HH (24h); use a coarse key like 00-24 if a factor is constant across the day. CR is g per unit, CF is mg/dl per unit. insulin_action_hours is the duration of insulin action used for IOB (optional; defaults to 2).",
+  "insulin_action_hours": 2,
   "carb_ratio": [
     {
       "effective_from": "2026-07-01",

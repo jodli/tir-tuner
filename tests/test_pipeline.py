@@ -67,6 +67,7 @@ def test_report_is_german_and_flags_inference_mode(sample_dir):
     assert "Hinweise" in text
     assert "Inferenzmodus" in text        # no settings.json -> inference-only banner
     assert "ärztliche Anweisung" in text   # standing caveat present
+    assert "Insulinwirkdauer" in text      # DIA shown (default 2h in inference mode)
 
 
 def test_full_state_round_trips_through_json(sample_dir):

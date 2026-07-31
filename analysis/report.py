@@ -35,6 +35,8 @@ def format_summary(state: PipelineState, config: Config) -> str:
                  f"{o.n_readings} {L['readings']})")
     if not state.settings.available:
         lines.append(f"! {L['inference_only']}")
+    if state.settings.insulin_action_hours is not None:
+        lines.append(f"{L['dia']}: {state.settings.insulin_action_hours} h")
     lines.append("")
 
     # Overall glycemic block
@@ -96,6 +98,29 @@ def format_summary(state: PipelineState, config: Config) -> str:
         d_tir = None if (cur.overall_tir is None or prior.overall_tir is None) else round(cur.overall_tir - prior.overall_tir, 1)
         lines.append(f"{L['trend']} ({prior.as_of}):  TIR {_fmt(prior.overall_tir, ' %')} → "
                      f"{_fmt(cur.overall_tir, ' %')} ({_fmt(d_tir, ' pp')})")
+        lines.append("")
+
+    # Backtest: did the previous run's recommendations play out?
+    bt = state.backtest
+    if bt is not None and bt.per_block:
+        applied_de = {True: L["applied_yes"], False: L["applied_no"], None: L["applied_unknown"]}
+        lines.append(f"{L['backtest']} ({bt.prior_run_date}):")
+        for key, r in bt.per_block.items():
+            arrow = {"up": "↑", "down": "↓", "hold": "→"}.get(r.direction or "hold", "→")
+            outcome = L.get(f"outcome_{r.outcome}", r.outcome)
+            tir = ""
+            if r.tir_before is not None and r.tir_after is not None:
+                tir = f"  (TIR {r.tir_before} → {r.tir_after})"
+            lines.append(f"  • [{r.parameter} {_block_de(config, key)}] {arrow}  "
+                         f"{L['applied']}: {applied_de[r.applied]} → {outcome}{tir}")
+        lines.append("")
+
+    # Suspected insulin-delivery failures (excluded from CR estimation)
+    nodel = [(_block_de(config, b.block), b.n_suspected_no_delivery)
+             for b in state.snapshot.blocks if b.n_suspected_no_delivery]
+    if nodel:
+        detail = ", ".join(f"{name} ({n})" for name, n in nodel)
+        lines.append(f"! {L['no_delivery_note']}: {detail}")
         lines.append("")
 
     # Clamp adjustments
