@@ -192,6 +192,11 @@ class Config:
     # Insulin-on-board (IOB): fallback duration of insulin action when the user's
     # settings.json does not carry one. A configured value always wins.
     insulin_action_hours_default: float = 2.0
+    iob_contamination_units: float = 1.0     # residual bolus IOB above this contaminates a meal
+    # Delivery robustness: a bolus at least this large whose CGM rises and never
+    # descends is treated as logged-but-not-absorbed (pump-to-body failure).
+    no_delivery_min_units: float = 1.0
+    no_delivery_expected_drop: float = 40.0  # mg/dl a delivered dose should have produced
 
     # Behaviour flags
     use_llm: bool = True
@@ -352,6 +357,25 @@ class CorrectionAnalysis(JsonMixin):
 
 
 # ---------------------------------------------------------------------------
+# Stage (iob): insulin-on-board + delivery robustness
+# ---------------------------------------------------------------------------
+@dataclass
+class EventIob(JsonMixin):
+    time: str
+    kind: str                            # 'meal' | 'correction'
+    units: float
+    iob_before: Optional[float]          # residual bolus IOB active just before this bolus
+    suspected_no_delivery: bool          # logged units but CGM rose and never descended
+
+
+@dataclass
+class IobAnalysis(JsonMixin):
+    available: bool                      # False when no DIA is resolvable
+    dia_hours: Optional[float]
+    per_event: list[EventIob]
+
+
+# ---------------------------------------------------------------------------
 # Stage 6: resolved settings (ground truth, if provided)
 # ---------------------------------------------------------------------------
 @dataclass
@@ -487,6 +511,7 @@ class PipelineState(JsonMixin):
     meals: Optional[MealAnalysis] = None                 # after meals
     corrections: Optional[CorrectionAnalysis] = None     # after corrections
     settings: Optional[ResolvedSettings] = None          # after settings
+    iob: Optional[IobAnalysis] = None                    # after iob
     snapshot: Optional[AnalysisSnapshot] = None          # after snapshot
     recommendation_raw: Optional[RecommendationSet] = None   # after recommend
     recommendation: Optional[RecommendationSet] = None       # after clamp
