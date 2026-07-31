@@ -1,20 +1,20 @@
 {
-  "_comment": "Copy to settings.json and fill in your configured CamAPS schedules. Each parameter is a dated history; the entry with the latest effective_from <= analysis date wins. Block keys are HH-HH (24h); use a coarse key like 00-24 if a factor is constant across the day. CR is g per unit, CF is mg/dl per unit. insulin_action_hours is the duration of insulin action used for IOB (optional; defaults to 2).",
+  "_comment": "Template only: the CR/CF numbers and dates below are illustrative placeholders, not a real therapy schedule. Copy to settings.json and fill in your configured CamAPS schedules. Each parameter is a dated history; the entry with the latest effective_from <= analysis date wins. Block keys are HH-HH (24h); use a coarse key like 00-24 if a factor is constant across the day. CR is g per unit, CF is mg/dl per unit. insulin_action_hours is the duration of insulin action used for IOB (optional; defaults to 2).",
   "insulin_action_hours": 2,
   "carb_ratio": [
     {
-      "effective_from": "2026-07-01",
-      "blocks": { "00-06": 12, "06-11": 10, "11-15": 11, "15-18": 12, "18-22": 10, "22-24": 12 }
+      "effective_from": "2026-01-01",
+      "blocks": { "00-06": 10, "06-11": 10, "11-15": 10, "15-18": 10, "18-22": 10, "22-24": 10 }
     },
     {
-      "effective_from": "2026-07-24",
-      "blocks": { "00-06": 12, "06-11": 11, "11-15": 11, "15-18": 12, "18-22": 11, "22-24": 12 }
+      "effective_from": "2026-02-01",
+      "blocks": { "00-06": 10, "06-11": 12, "11-15": 10, "15-18": 10, "18-22": 12, "22-24": 10 }
     }
   ],
   "correction_factor": [
     {
-      "effective_from": "2026-07-01",
-      "blocks": { "00-24": 40 }
+      "effective_from": "2026-01-01",
+      "blocks": { "00-24": 50 }
     }
   ]
 }
