@@ -211,6 +211,10 @@ class Config:
     bootstrap_seed: int = 0            # fixed -> deterministic / testable
     min_ci_samples: int = 3
 
+    # History / backtest
+    history_series_len: int = 6        # prior runs surfaced to the reasoning step
+    backtest_tir_epsilon: float = 3.0  # pp change counted as improved/worsened
+
     # Behaviour flags
     use_llm: bool = True
     make_charts: bool = True
@@ -422,6 +426,27 @@ class RobustStats(JsonMixin):
 
 
 # ---------------------------------------------------------------------------
+# Stage (backtest): did the previous run's recommendations play out?
+# ---------------------------------------------------------------------------
+@dataclass
+class BlockBacktest(JsonMixin):
+    block: str
+    had_reco: bool
+    parameter: Optional[str]             # "CR" | "CF"
+    direction: Optional[str]             # "up" | "down" | "hold"
+    applied: Optional[bool]              # configured value actually moved that way
+    tir_before: Optional[float]
+    tir_after: Optional[float]
+    outcome: str                         # "improved"|"worsened"|"unchanged"|"unknown"
+
+
+@dataclass
+class BacktestAnalysis(JsonMixin):
+    prior_run_date: Optional[str]
+    per_block: dict[str, BlockBacktest]
+
+
+# ---------------------------------------------------------------------------
 # Stage 6: resolved settings (ground truth, if provided)
 # ---------------------------------------------------------------------------
 @dataclass
@@ -438,6 +463,16 @@ class SettingsHistory(JsonMixin):
 
 
 @dataclass
+class CrChange(JsonMixin):
+    """The most recent configured-CR change in a block, so an outcome can be
+    lined up against the setting change that plausibly caused it."""
+    block: str
+    effective_from: str
+    from_value: float
+    to_value: float
+
+
+@dataclass
 class ResolvedSettings(JsonMixin):
     as_of: str
     available: bool                          # False if no settings.json
@@ -445,6 +480,7 @@ class ResolvedSettings(JsonMixin):
     correction_factor: dict[str, float]      # block key -> configured mg/dl per U
     change_dates: list[str]                  # every effective_from (chart markers)
     insulin_action_hours: Optional[float] = None   # resolved DIA (configured or default)
+    cr_changes: list[CrChange] = field(default_factory=list)  # most recent CR change per block
 
 
 # ---------------------------------------------------------------------------
@@ -466,6 +502,30 @@ class BlockEvidence(JsonMixin):
     tar_180: Optional[float]
     trend_effective_cr_delta: Optional[float]
     trend_tir_delta: Optional[float]
+    # Variability + data quality
+    cv: Optional[float] = None
+    tbr_54: Optional[float] = None
+    titr: Optional[float] = None
+    coverage_pct: Optional[float] = None
+    # Distribution + shape of the effective-CR / excursion sample
+    effective_cr_q25: Optional[float] = None
+    effective_cr_q75: Optional[float] = None
+    median_time_to_peak_min: Optional[float] = None
+    median_auc_over_baseline: Optional[float] = None
+    median_undershoot_depth: Optional[float] = None
+    median_effective_cr_inrange_start: Optional[float] = None
+    n_inrange_start: int = 0
+    # Robust estimate (bootstrap CI + significance + contamination-filtered)
+    ci_low: Optional[float] = None
+    ci_high: Optional[float] = None
+    delta_significant: Optional[bool] = None
+    cr_iob_filtered: Optional[float] = None
+    n_high_iob: int = 0
+    n_suspected_no_delivery: int = 0
+    # Confounder + causal-attribution + backtest context
+    dawn_rise: Optional[bool] = None
+    config_last_change: Optional[CrChange] = None
+    backtest_outcome: Optional[str] = None
 
 
 @dataclass
@@ -475,6 +535,7 @@ class CorrectionEvidence(JsonMixin):
     observed_drop_per_unit: Optional[float]
     n_isolated: int
     confounds: list[str]
+    n_suspected_no_delivery: int = 0         # corrections that likely never delivered
 
 
 @dataclass
@@ -491,6 +552,11 @@ class AnalysisSnapshot(JsonMixin):
     blocks: list[BlockEvidence]
     corrections: list[CorrectionEvidence]
     prior_run_date: Optional[str]
+    # Multi-run series (compact per-run refs, most recent last) for trend/arc reasoning
+    prior_runs: list[RunRef] = field(default_factory=list)
+    # Honesty ledger: what cannot be observed, and which derived flags fired
+    unavailable_signals: list[str] = field(default_factory=list)
+    active_flags: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -560,6 +626,7 @@ class PipelineState(JsonMixin):
     iob: Optional[IobAnalysis] = None                    # after iob
     confounders: Optional[ConfounderFlags] = None        # after confounders
     stats: Optional[RobustStats] = None                  # after stats
+    backtest: Optional[BacktestAnalysis] = None          # after backtest
     snapshot: Optional[AnalysisSnapshot] = None          # after snapshot
     recommendation_raw: Optional[RecommendationSet] = None   # after recommend
     recommendation: Optional[RecommendationSet] = None       # after clamp

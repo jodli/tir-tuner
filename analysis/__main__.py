@@ -18,6 +18,7 @@ import os
 import sys
 
 from . import (
+    backtest,
     charts,
     clamp,
     confounders,
@@ -50,6 +51,7 @@ STAGES = [
     ("confounders", confounders.run),
     ("trends", trends.run),
     ("stats", stats.run),
+    ("backtest", backtest.run),
     ("snapshot", snapshot.run),
     ("recommend", recommend.run),
     ("clamp", clamp.run),

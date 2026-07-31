@@ -25,6 +25,7 @@ from typing import Optional
 
 from .contracts import (
     Config,
+    CrChange,
     DatedSchedule,
     PipelineState,
     ResolvedSettings,
@@ -126,5 +127,14 @@ def resolve(history: Optional[SettingsHistory], as_of: str, dia_default: float =
 
 def run(state: PipelineState, config: Config) -> PipelineState:
     as_of = state.window.as_of if state.window else (config.as_of or "")
-    state.settings = resolve(load_history(config.settings_path), as_of, config.insulin_action_hours_default)
+    history = load_history(config.settings_path)
+    resolved = resolve(history, as_of, config.insulin_action_hours_default)
+    if history is not None:
+        changes = []
+        for b in config.blocks:
+            c = last_change_for_block(history.carb_ratio, b, as_of)
+            if c is not None:
+                changes.append(CrChange(block=b.key, effective_from=c[0], from_value=c[1], to_value=c[2]))
+        resolved.cr_changes = changes
+    state.settings = resolved
     return state
