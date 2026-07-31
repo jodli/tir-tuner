@@ -2,7 +2,7 @@
 import json
 
 from analysis import (
-    clamp, corrections, glycemic, loaders, meals, recommend, settings, snapshot, window,
+    clamp, corrections, glycemic, loaders, meals, recommend, settings, snapshot, trends, window,
 )
 from analysis.__main__ import main
 from analysis.contracts import Config, PipelineState
@@ -15,7 +15,7 @@ def _build_state(sample_dir):
     cfg = Config(data_dir=sample_dir, use_llm=False, settings_path=MISSING_SETTINGS, weeks=4)
     st = PipelineState()
     for fn in (loaders.run, window.run, glycemic.run, meals.run, corrections.run,
-               settings.run, snapshot.run, recommend.run, clamp.run):
+               settings.run, trends.run, snapshot.run, recommend.run, clamp.run):
         st = fn(st, cfg)
     return st, cfg
 
@@ -27,7 +27,7 @@ def test_run_writes_result_and_history(tmp_path, sample_dir):
     assert rc == 0
     assert (out / "2026-07-30" / "result.json").exists()
     for stage in ("load", "window", "glycemic", "meals", "corrections",
-                  "settings", "snapshot", "recommend", "clamp", "history"):
+                  "settings", "trends", "snapshot", "recommend", "clamp", "history"):
         assert (out / "2026-07-30" / "stages" / f"{stage}.json").exists()
     hist = json.loads((out / "history.json").read_text())
     assert any(r["as_of"] == "2026-07-30" for r in hist)

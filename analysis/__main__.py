@@ -29,6 +29,7 @@ from . import (
     report,
     settings,
     snapshot,
+    trends,
     window,
 )
 from .contracts import Config, PipelineState
@@ -42,6 +43,7 @@ STAGES = [
     ("meals", meals.run),
     ("corrections", corrections.run),
     ("settings", settings.run),
+    ("trends", trends.run),
     ("snapshot", snapshot.run),
     ("recommend", recommend.run),
     ("clamp", clamp.run),

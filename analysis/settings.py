@@ -9,9 +9,13 @@ pipeline still runs in inference-only mode (``available == False``).
 settings.json shape::
 
     {
+      "insulin_action_hours": 2,
       "carb_ratio":        [{"effective_from": "2026-07-01", "blocks": {"06-11": 10, ...}}],
       "correction_factor": [{"effective_from": "2026-07-01", "blocks": {"00-24": 40}}]
     }
+
+``insulin_action_hours`` is optional; when absent the IOB stage falls back to
+``Config.insulin_action_hours_default``.
 """
 from __future__ import annotations
 
@@ -65,7 +69,36 @@ def load_history(path: str) -> Optional[SettingsHistory]:
         out.sort(key=lambda s: s.effective_from)
         return out
 
-    return SettingsHistory(carb_ratio=parse("carb_ratio"), correction_factor=parse("correction_factor"))
+    dia = data.get("insulin_action_hours")
+    try:
+        dia = float(dia) if dia is not None else None
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid insulin_action_hours in {path}: {dia!r} ({exc})") from exc
+
+    return SettingsHistory(carb_ratio=parse("carb_ratio"),
+                           correction_factor=parse("correction_factor"),
+                           insulin_action_hours=dia)
+
+
+def last_change_for_block(
+    schedules: list[DatedSchedule], block: TimeBlock, as_of: str
+) -> Optional[tuple[str, float, float]]:
+    """Most recent change to this block's value on/before ``as_of``.
+
+    Returns ``(effective_from, from_value, to_value)`` for the latest schedule
+    whose value for this block differs from the one before it, or ``None`` if the
+    block has fewer than two applicable schedules or the value never changed. Lets
+    the reasoning step attribute an outcome to a specific setting change.
+    """
+    applicable = [(s.effective_from, value_for_block(s.blocks, block))
+                  for s in schedules if s.effective_from <= as_of]
+    applicable = [(d, v) for d, v in applicable if v is not None]
+    applicable.sort(key=lambda x: x[0])
+    for i in range(len(applicable) - 1, 0, -1):
+        (_, prev_v), (cur_d, cur_v) = applicable[i - 1], applicable[i]
+        if cur_v != prev_v:
+            return (cur_d, prev_v, cur_v)
+    return None
 
 
 def _pick(schedules: list[DatedSchedule], as_of: str) -> dict[str, float]:
@@ -73,20 +106,25 @@ def _pick(schedules: list[DatedSchedule], as_of: str) -> dict[str, float]:
     return dict(max(applicable, key=lambda s: s.effective_from).blocks) if applicable else {}
 
 
-def resolve(history: Optional[SettingsHistory], as_of: str) -> ResolvedSettings:
+def resolve(history: Optional[SettingsHistory], as_of: str, dia_default: float = 2.0) -> ResolvedSettings:
+    # DIA falls back to the configured default even in inference-only mode, so the
+    # IOB stage stays available without a settings.json.
     if history is None:
-        return ResolvedSettings(as_of=as_of, available=False, carb_ratio={}, correction_factor={}, change_dates=[])
+        return ResolvedSettings(as_of=as_of, available=False, carb_ratio={}, correction_factor={},
+                                change_dates=[], insulin_action_hours=dia_default)
     change_dates = sorted({s.effective_from for s in history.carb_ratio + history.correction_factor})
+    dia = history.insulin_action_hours if history.insulin_action_hours is not None else dia_default
     return ResolvedSettings(
         as_of=as_of,
         available=True,
         carb_ratio=_pick(history.carb_ratio, as_of),
         correction_factor=_pick(history.correction_factor, as_of),
         change_dates=change_dates,
+        insulin_action_hours=dia,
     )
 
 
 def run(state: PipelineState, config: Config) -> PipelineState:
     as_of = state.window.as_of if state.window else (config.as_of or "")
-    state.settings = resolve(load_history(config.settings_path), as_of)
+    state.settings = resolve(load_history(config.settings_path), as_of, config.insulin_action_hours_default)
     return state

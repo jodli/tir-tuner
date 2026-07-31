@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from . import history
+from . import trends
 from .contracts import (
     AnalysisSnapshot,
     BlockEvidence,
@@ -94,11 +94,9 @@ def build_snapshot(state: PipelineState, config: Config, prior: Optional[RunRef]
 
 
 def run(state: PipelineState, config: Config) -> PipelineState:
-    for name in ("glycemic", "meals", "corrections", "settings", "window"):
+    for name in ("glycemic", "meals", "corrections", "settings", "window", "trends"):
         if getattr(state, name) is None:
             raise ValueError(f"snapshot stage requires state.{name}")
-    current = history.build_current_ref(state.window.as_of, state.glycemic, state.meals)
-    state.trends = history.compute_trends(history.load_refs(config), current)
-    prior = history.most_recent_prior(state.trends)
+    prior = trends.most_recent_prior(state.trends)
     state.snapshot = build_snapshot(state, config, prior)
     return state

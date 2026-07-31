@@ -88,10 +88,16 @@ def from_jsonable(tp: typing.Any, data: typing.Any) -> typing.Any:
         return _df_from_payload(data[_DF_KEY])
     if dataclasses.is_dataclass(tp) and isinstance(tp, type):
         hints = typing.get_type_hints(tp)
-        kwargs = {
-            f.name: from_jsonable(hints[f.name], data.get(f.name))
-            for f in dataclasses.fields(tp)
-        }
+        kwargs = {}
+        for f in dataclasses.fields(tp):
+            if f.name in data:
+                kwargs[f.name] = from_jsonable(hints[f.name], data[f.name])
+            elif f.default is not dataclasses.MISSING:
+                kwargs[f.name] = f.default
+            elif f.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
+                kwargs[f.name] = f.default_factory()
+            else:
+                kwargs[f.name] = from_jsonable(hints[f.name], None)
         return tp(**kwargs)
     if origin in (list, tuple):
         args = typing.get_args(tp)
@@ -179,6 +185,10 @@ class Config:
     min_clean_meals: int = 5           # below this a CR block -> insufficient data
     min_isolated_corrections: int = 3  # below this a CF block -> insufficient data
     max_change_pct: float = 0.10       # never propose more than +/-10% per run
+
+    # Insulin-on-board (IOB): fallback duration of insulin action when the user's
+    # settings.json does not carry one. A configured value always wins.
+    insulin_action_hours_default: float = 2.0
 
     # Behaviour flags
     use_llm: bool = True
@@ -327,6 +337,7 @@ class DatedSchedule(JsonMixin):
 class SettingsHistory(JsonMixin):
     carb_ratio: list[DatedSchedule]
     correction_factor: list[DatedSchedule]
+    insulin_action_hours: Optional[float] = None   # duration of insulin action (h)
 
 
 @dataclass
@@ -336,6 +347,7 @@ class ResolvedSettings(JsonMixin):
     carb_ratio: dict[str, float]             # block key -> configured g/U
     correction_factor: dict[str, float]      # block key -> configured mg/dl per U
     change_dates: list[str]                  # every effective_from (chart markers)
+    insulin_action_hours: Optional[float] = None   # resolved DIA (configured or default)
 
 
 # ---------------------------------------------------------------------------
@@ -426,6 +438,9 @@ class RunRef(JsonMixin):
     overall_tir: Optional[float]
     per_block_effective_cr: dict[str, float]
     per_block_tir: dict[str, float]
+    # Configured CR in effect at this run, so the multi-run series can show the
+    # setting alongside its effect. Defaulted for backward-compatible history.json.
+    per_block_configured_cr: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass

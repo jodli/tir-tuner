@@ -1,6 +1,7 @@
 import json
 
 from analysis import settings
+from analysis.contracts import TimeBlock
 
 
 def _write(tmp_path, data):
@@ -47,3 +48,30 @@ def test_missing_file_is_inference_only():
     assert r.available is False
     assert r.carb_ratio == {}
     assert r.change_dates == []
+
+
+def test_dia_falls_back_to_default_when_absent(tmp_path):
+    hist = settings.load_history(_write(tmp_path, HISTORY))
+    assert hist.insulin_action_hours is None
+    # inference mode still exposes the default so IOB stays available
+    assert settings.resolve(None, "2026-07-20", dia_default=2.0).insulin_action_hours == 2.0
+    assert settings.resolve(hist, "2026-07-20", dia_default=2.0).insulin_action_hours == 2.0
+
+
+def test_dia_configured_value_wins(tmp_path):
+    data = {**HISTORY, "insulin_action_hours": 3.5}
+    r = settings.resolve(settings.load_history(_write(tmp_path, data)), "2026-07-20", dia_default=2.0)
+    assert r.insulin_action_hours == 3.5
+
+
+def test_last_change_for_block_reports_from_to(tmp_path):
+    hist = settings.load_history(_write(tmp_path, HISTORY))
+    b = TimeBlock("breakfast", 6, 11)  # 06-11: 10 -> 9 on 2026-07-15
+    assert settings.last_change_for_block(hist.carb_ratio, b, "2026-07-20") == ("2026-07-15", 10.0, 9.0)
+
+
+def test_last_change_none_before_second_schedule(tmp_path):
+    hist = settings.load_history(_write(tmp_path, HISTORY))
+    b = TimeBlock("breakfast", 6, 11)
+    # only the first schedule applies -> no change yet
+    assert settings.last_change_for_block(hist.carb_ratio, b, "2026-07-01") is None
