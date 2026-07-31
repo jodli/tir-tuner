@@ -42,7 +42,20 @@ def _band(values: pd.Series, config: Config) -> GlycemicBand:
         cv=cv,
         gmi=gmi,
         n_readings=n,
+        titr=_pct((values >= config.tir_low) & (values <= config.tir_tight_high)),
     )
+
+
+def _coverage_pct(n_readings: int, span_days: int, hours: float) -> Optional[float]:
+    """Actual readings vs. the ~1/min a Libre 3 would produce over the span.
+
+    ``span_days`` is the calendar span present in the window, so whole missing
+    days lower coverage. Capped at 100; ``None`` when the span is empty.
+    """
+    expected = span_days * hours * 60.0
+    if expected <= 0:
+        return None
+    return round(min(100.0, 100.0 * n_readings / expected), 1)
 
 
 def _hour_to_block_key(blocks: list[TimeBlock]) -> dict[int, str]:
@@ -51,6 +64,12 @@ def _hour_to_block_key(blocks: list[TimeBlock]) -> dict[int, str]:
 
 def compute(cgm: pd.DataFrame, config: Config) -> GlycemicMetrics:
     overall = _band(cgm["mg_dl"] if len(cgm) else pd.Series(dtype="float64"), config)
+
+    span_days = 0
+    if len(cgm):
+        dates = cgm["time"].dt.date
+        span_days = (dates.max() - dates.min()).days + 1
+    overall.coverage_pct = _coverage_pct(overall.n_readings, span_days, 24)
 
     per_block: dict[str, GlycemicBand] = {}
     hour_key = _hour_to_block_key(config.blocks)
@@ -61,6 +80,9 @@ def compute(cgm: pd.DataFrame, config: Config) -> GlycemicMetrics:
     else:
         for b in config.blocks:
             per_block[b.key] = _band(pd.Series(dtype="float64"), config)
+    for b in config.blocks:
+        per_block[b.key].coverage_pct = _coverage_pct(
+            per_block[b.key].n_readings, span_days, b.end_hour - b.start_hour)
 
     per_day: list[DayStat] = []
     if len(cgm):

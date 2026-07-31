@@ -56,3 +56,20 @@ def test_empty_series_is_safe():
     assert m.overall.tir is None
     assert all(b.n_readings == 0 for b in m.per_block.values())
     assert m.per_day == []
+    assert m.overall.coverage_pct is None
+
+
+def test_titr_is_narrower_than_tir():
+    pairs = [(f"2026-07-30 08:0{i}", v) for i, v in enumerate([80, 130, 160, 200])]
+    o = compute(cgm_df(pairs), Config()).overall
+    assert o.tir == 75.0     # 80, 130, 160 in 70-180
+    assert o.titr == 50.0    # 80, 130 in 70-140
+
+
+def test_coverage_pct_reflects_missing_readings():
+    # 3 readings on a single day, all in the breakfast block (06-11 -> 5h -> 300/day).
+    pairs = [("2026-07-30 07:00", 100), ("2026-07-30 08:00", 110), ("2026-07-30 09:00", 120)]
+    m = compute(cgm_df(pairs), Config())
+    assert m.per_block["06-11"].coverage_pct == 1.0                  # 3 / 300
+    assert m.per_block["11-15"].coverage_pct == 0.0                  # no readings
+    assert m.overall.coverage_pct == round(100 * 3 / 1440, 1)        # 3 over 24h * 1 day

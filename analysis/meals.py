@@ -29,6 +29,14 @@ from .contracts import (
 )
 
 
+_trapz = np.trapezoid if hasattr(np, "trapezoid") else np.trapz   # renamed in numpy 2.0
+
+
+def _minutes(a, b) -> float:
+    """Signed minutes between two timestamps (numpy datetime64 or pandas Timestamp)."""
+    return float((np.datetime64(pd.Timestamp(a)) - np.datetime64(pd.Timestamp(b))) / np.timedelta64(1, "m"))
+
+
 def _median(xs: list[Optional[float]]) -> Optional[float]:
     vals = [x for x in xs if x is not None and not (isinstance(x, float) and np.isnan(x))]
     return round(statistics.median(vals), 2) if vals else None
@@ -63,20 +71,45 @@ def analyze(cgm: pd.DataFrame, bolus: pd.DataFrame, config: Config) -> MealAnaly
         units = float(row["total_units"])
         block = block_for_hour(t.hour, config.blocks).key
         baseline = lookup.nearest(t, tol_min=15)
-        peak_window = lookup.window(t, config.excursion_peak_h)
-        tail_window = lookup.window(t, config.excursion_tail_h)
+        peak_t, peak_v = lookup.window_tv(t, 0.0, config.excursion_peak_h)
+        tail_t, tail_v = lookup.window_tv(t, 0.0, config.excursion_tail_h)
         val_3h = lookup.at_offset(t, 3.0)
         val_4h = lookup.at_offset(t, 4.0)
 
-        # Post-meal hypo is judged from the insulin-tail window only, so an
-        # early transient dip (or pre-meal low) is not mistaken for an over-bolus.
-        hypo_window = lookup.window_between(t, config.hypo_start_h, config.excursion_tail_h)
-        peak_rise = (float(peak_window.max()) - baseline) if (len(peak_window) and baseline is not None) else None
-        min_0_4h = float(tail_window.min()) if len(tail_window) else None
+        # Peak rise + time-to-peak: a fast early spike that still lands in range is
+        # a timing/pre-bolus issue, not a CR magnitude issue.
+        peak_rise = time_to_peak_min = None
+        if len(peak_v) and baseline is not None:
+            pidx = int(np.argmax(peak_v))
+            peak_rise = float(peak_v[pidx]) - baseline
+            time_to_peak_min = _minutes(peak_t[pidx], t)
+
+        # Positive area over baseline over the tail window (overall exposure).
+        auc_over_baseline = None
+        if len(tail_v) >= 2 and baseline is not None:
+            mins = np.array([_minutes(x, t) for x in tail_t], dtype=float)
+            auc_over_baseline = round(float(_trapz(np.clip(tail_v - baseline, 0.0, None), mins)), 1)
+
+        min_0_4h = float(tail_v.min()) if len(tail_v) else None
         delta_3h = (val_3h - baseline) if (val_3h is not None and baseline is not None) else None
         delta_4h = (val_4h - baseline) if (val_4h is not None and baseline is not None) else None
         ended_in_range = (config.tir_low <= val_3h <= config.tir_high) if val_3h is not None else None
-        post_meal_hypo = (float(hypo_window.min()) < config.tir_low) if len(hypo_window) else None
+
+        # Post-meal hypo + undershoot are judged from the insulin-tail window only,
+        # so an early transient dip (or pre-meal low) is not mistaken for an
+        # over-bolus.
+        hypo_t, hypo_v = lookup.window_tv(t, config.hypo_start_h, config.excursion_tail_h)
+        post_meal_hypo = (float(hypo_v.min()) < config.tir_low) if len(hypo_v) else None
+        undershoot_depth = undershoot_dur_min = rebound = None
+        if len(hypo_v):
+            below = hypo_v < config.tir_low
+            if below.any():
+                nadir_val = float(hypo_v.min())
+                nadir_idx = int(np.argmin(hypo_v))
+                below_t = hypo_t[below]
+                undershoot_depth = round(config.tir_low - nadir_val, 1)
+                undershoot_dur_min = _minutes(below_t.max(), below_t.min())
+                rebound = round(float(hypo_v[nadir_idx:].max()) - nadir_val, 1)
 
         features.append(MealFeature(
             time=t.isoformat(),
@@ -92,23 +125,59 @@ def analyze(cgm: pd.DataFrame, bolus: pd.DataFrame, config: Config) -> MealAnaly
             ended_in_range=ended_in_range,
             post_meal_hypo=post_meal_hypo,
             clean=clean_flags[i],
+            time_to_peak_min=round(time_to_peak_min, 1) if time_to_peak_min is not None else None,
+            auc_over_baseline=auc_over_baseline,
+            undershoot_depth=undershoot_depth,
+            undershoot_dur_min=undershoot_dur_min,
+            rebound=rebound,
         ))
 
     per_block = _aggregate(features, config)
     return MealAnalysis(meals=features, per_block=per_block)
 
 
+def _in_fences(cr: Optional[float], config: Config) -> bool:
+    return cr is not None and config.cr_plausible_min <= cr <= config.cr_plausible_max
+
+
 def _aggregate(features: list[MealFeature], config: Config) -> dict[str, MealBlockStats]:
     per_block: dict[str, MealBlockStats] = {}
     for b in config.blocks:
         clean = [f for f in features if f.block == b.key and f.clean]
+
+        # Trim implausible effective-CR (mis-logged carbs/units) before aggregating.
+        cr_all = [f.effective_cr for f in clean if f.effective_cr is not None]
+        cr_kept = [c for c in cr_all if _in_fences(c, config)]
+        n_trimmed = len(cr_all) - len(cr_kept)
+        q25 = round(float(np.percentile(cr_kept, 25)), 2) if cr_kept else None
+        q75 = round(float(np.percentile(cr_kept, 75)), 2) if cr_kept else None
+
+        # Segment the (trimmed) effective CR by starting glucose: a high start
+        # likely folded a correction into the bolus, deflating the apparent CR.
+        inrange = [f.effective_cr for f in clean if _in_fences(f.effective_cr, config)
+                   and f.baseline_mgdl is not None and config.tir_low <= f.baseline_mgdl <= config.tir_high]
+        high = [f.effective_cr for f in clean if _in_fences(f.effective_cr, config)
+                and f.baseline_mgdl is not None and f.baseline_mgdl > config.tir_high]
+
         per_block[b.key] = MealBlockStats(
             block=b.key,
             n_clean=len(clean),
-            median_effective_cr=_median([f.effective_cr for f in clean]),
+            median_effective_cr=_median(cr_kept),
             median_peak_rise=_median([f.peak_rise for f in clean]),
             pct_in_range=_pct_true([f.ended_in_range for f in clean]),
             pct_post_meal_hypo=_pct_true([f.post_meal_hypo for f in clean]),
+            effective_cr_q25=q25,
+            effective_cr_q75=q75,
+            effective_cr_min=round(min(cr_kept), 2) if cr_kept else None,
+            effective_cr_max=round(max(cr_kept), 2) if cr_kept else None,
+            n_trimmed=n_trimmed,
+            median_time_to_peak_min=_median([f.time_to_peak_min for f in clean]),
+            median_auc_over_baseline=_median([f.auc_over_baseline for f in clean]),
+            median_undershoot_depth=_median([f.undershoot_depth for f in clean]),
+            median_effective_cr_inrange_start=_median(inrange),
+            n_inrange_start=len(inrange),
+            median_effective_cr_high_start=_median(high),
+            n_high_start=len(high),
         )
     return per_block
 

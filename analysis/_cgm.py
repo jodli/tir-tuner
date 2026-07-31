@@ -43,10 +43,18 @@ class CgmLookup:
 
     def window_between(self, t0, start_h: float, end_h: float) -> np.ndarray:
         """Readings in the half-open interval (t0 + start_h, t0 + end_h]."""
+        return self.window_tv(t0, start_h, end_h)[1]
+
+    def window_tv(self, t0, start_h: float, end_h: float) -> tuple[np.ndarray, np.ndarray]:
+        """(times, values) in the half-open interval (t0 + start_h, t0 + end_h].
+
+        Times are kept so callers can locate *when* a peak or nadir occurred, not
+        just its value.
+        """
         if len(self.t) == 0:
-            return np.array([], dtype=float)
+            return np.array([], dtype="datetime64[ns]"), np.array([], dtype=float)
         base = pd.Timestamp(t0)
         a = np.datetime64(base + pd.Timedelta(minutes=round(start_h * 60)))
         b = np.datetime64(base + pd.Timedelta(minutes=round(end_h * 60)))
         mask = (self.t > a) & (self.t <= b)
-        return self.v[mask]
+        return self.t[mask], self.v[mask]

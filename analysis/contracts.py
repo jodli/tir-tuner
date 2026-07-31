@@ -171,6 +171,7 @@ class Config:
     # Glycemic thresholds (mg/dl)
     tir_low: float = 70.0
     tir_high: float = 180.0
+    tir_tight_high: float = 140.0      # upper bound for time-in-tight-range (70-140)
     vlow: float = 54.0
     high: float = 250.0
 
@@ -180,6 +181,8 @@ class Config:
     excursion_tail_h: float = 4.0
     hypo_start_h: float = 1.5          # post-meal hypo judged only from here on
                                        # (insulin tail), so early dips don't count
+    cr_plausible_min: float = 1.0      # effective-CR outside [min,max] is a mis-log,
+    cr_plausible_max: float = 50.0     # trimmed before aggregating (g/U)
 
     # Recommendation guardrails (the safety clamp)
     min_clean_meals: int = 5           # below this a CR block -> insufficient data
@@ -241,6 +244,8 @@ class GlycemicBand(JsonMixin):
     cv: Optional[float]         # % coefficient of variation
     gmi: Optional[float]        # glucose management indicator (%)
     n_readings: int
+    titr: Optional[float] = None          # % in tight range 70-140
+    coverage_pct: Optional[float] = None  # actual vs ~1/min readings over the span
 
 
 @dataclass
@@ -276,6 +281,12 @@ class MealFeature(JsonMixin):
     ended_in_range: Optional[bool]   # value at tail_h within [tir_low, tir_high]
     post_meal_hypo: Optional[bool]   # min over window < tir_low
     clean: bool                      # no overlapping meal bolus
+    # Excursion shape (help tell "wrong CR" from "wrong timing / over-bolus")
+    time_to_peak_min: Optional[float] = None    # minutes from meal to peak CGM
+    auc_over_baseline: Optional[float] = None   # positive area over baseline (mg/dl*min)
+    undershoot_depth: Optional[float] = None    # how far the nadir fell below tir_low
+    undershoot_dur_min: Optional[float] = None  # minutes below tir_low in the tail
+    rebound: Optional[float] = None             # recovery above nadir after a hypo
 
 
 @dataclass
@@ -286,6 +297,22 @@ class MealBlockStats(JsonMixin):
     median_peak_rise: Optional[float]
     pct_in_range: Optional[float]        # % of clean meals ending in range
     pct_post_meal_hypo: Optional[float]
+    # Distribution of the effective-CR estimate (spread + sample the median hides)
+    effective_cr_q25: Optional[float] = None
+    effective_cr_q75: Optional[float] = None
+    effective_cr_min: Optional[float] = None
+    effective_cr_max: Optional[float] = None
+    n_trimmed: int = 0                   # clean meals dropped as implausible CR
+    # Median excursion-shape features over the clean meals
+    median_time_to_peak_min: Optional[float] = None
+    median_auc_over_baseline: Optional[float] = None
+    median_undershoot_depth: Optional[float] = None
+    # Effective CR split by starting glucose (a high start likely folded in a
+    # correction, deflating the apparent CR)
+    median_effective_cr_inrange_start: Optional[float] = None
+    n_inrange_start: int = 0
+    median_effective_cr_high_start: Optional[float] = None
+    n_high_start: int = 0
 
 
 @dataclass
