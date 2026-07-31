@@ -73,6 +73,8 @@ def test_full_state_round_trips_through_json(sample_dir):
     st, _ = _build_state(sample_dir)
     back = PipelineState.from_json(st.to_json())
     assert back.recommendation is not None
+    assert back.recommendation_rule is not None   # rule cross-check persisted for the clamp
+    assert back.iob is not None and back.stats is not None and back.backtest is not None
     assert back.snapshot.as_of == st.snapshot.as_of
     assert len(back.glycemic.per_block) == len(st.glycemic.per_block)
     assert [c.time for c in back.corrections.corrections] == [c.time for c in st.corrections.corrections]

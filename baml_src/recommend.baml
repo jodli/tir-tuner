@@ -36,10 +36,7 @@ function RecommendSettings(snapshot_json: string) -> RecommendationSet {
           effektive CR wird pro Mahlzeit als carbs/Einheiten geschätzt; der CF wird
           nur schwach aus Korrektur-Boli abgeleitet (kein geloggter Auslöse-BZ,
           Basalrate wird vom Loop laufend angepasst). Behandle CF-Aussagen als
-          Beobachtungen mit niedriger Sicherheit.
-        - Sei KONSERVATIV: Schlage eine Änderung nur vor, wenn die Evidenz in einem
-          Block stark und konsistent ist (ausreichende Stichprobe, klares Muster).
-          Sonst direction = "hold" oder nenne den Block in insufficient_data_blocks.
+          Beobachtungen mit niedriger Sicherheit; CF-Sicherheit ist nie "high".
         - Das System begrenzt jede Änderung nachträglich hart auf +/-10 % pro Lauf;
           halte deine Vorschläge in diesem Rahmen.
 
@@ -50,8 +47,41 @@ function RecommendSettings(snapshot_json: string) -> RecommendationSet {
           (pct_post_meal_hypo) ist zu viel Insulin unterwegs → CR-Zahl ERHÖHEN.
         - CF (mg/dl pro E): nur bei klarer Evidenz und stets mit niedriger Sicherheit.
 
-        Nutze bei vorhandener Historie die Trend-Deltas (trend_effective_cr_delta,
-        trend_tir_delta), um die Reaktion auf frühere Änderungen zu berücksichtigen.
+        Gehe BLOCKWEISE vor. Beurteile jeden Tagesblock einzeln anhand dieser Evidenz:
+        - Stichprobe & Streuung: n_clean_meals, effective_cr_q25/q75, ci_low/ci_high.
+          Eine kleine Stichprobe oder ein breites Konfidenzintervall bedeutet
+          Unsicherheit → eher "hold".
+        - Signal vs. Rauschen: delta_significant. Ist die Änderung gegenüber dem
+          Vorlauf nicht signifikant, werte sie als Rauschen.
+        - Kontamination/Abgabe: n_high_iob (Rest-Insulin verzerrt das CR) und vor
+          allem n_suspected_no_delivery bzw. active_flags "no_delivery:...". Ist ein
+          Block von vermuteten Abgabestörungen (Pumpe/Katheter) geprägt, ist das ein
+          HARDWARE-Problem, KEIN CR-Signal → "hold" bzw. insufficient_data. Nutze
+          cr_iob_filtered als bereinigte Schätzung.
+        - Confounder: dawn_rise (nur Nacht/Frühstück) erklärt Morgenhochs ohne CR-Bezug.
+        - Datenqualität: coverage_pct; bei geringer Abdeckung zurückhaltend sein.
+        - Form der Auslenkung: median_time_to_peak_min / median_undershoot_depth
+          trennen "falsches CR" von "falschem Timing / Über-Bolus".
+        - Ursache-Wirkung: config_last_change (wann/worauf zuletzt geändert),
+          backtest_outcome (hat die letzte Empfehlung geholfen?) und prior_runs
+          (Mehr-Lauf-Verlauf), um auf frühere Änderungen zu reagieren.
+
+        Abstinenz-Regel: Schlage eine Änderung nur vor, wenn die Evidenz stark UND
+        konsistent ist (ausreichende Stichprobe, signifikantes Muster, keine
+        dominante Abgabestörung/Confounder). Sonst direction = "hold" oder nenne den
+        Block in insufficient_data_blocks. Im Zweifel: nicht ändern.
+
+        Selbstkritik vor der Ausgabe: Nenne für JEDEN Änderungsvorschlag im Kopf das
+        stärkste Gegenargument (kleine n, breites CI, Confounder, Abgabestörung).
+        Übernimm den Vorschlag nur, wenn er dieser Prüfung standhält; sonst "hold".
+
+        Sicherheit kalibrieren (nicht nach Ton, sondern nach Evidenz): "high" nur bei
+        großer Stichprobe, engem CI und signifikantem, bereinigtem Muster; "medium"
+        bei soliden, aber begrenzten Daten; sonst "low". CF nie über "medium".
+
+        active_flags und unavailable_signals zeigen, was NICHT beobachtet werden kann
+        (z. B. Sport, Krankheit, Fett/Eiweiß, angekündigte vs. tatsächliche KH). Nenne
+        solche Grenzen in caveats/overall_narrative.
 
         Gib rationale, caveats und overall_narrative auf DEUTSCH aus. Dies ist eine
         Entscheidungshilfe zur Besprechung mit dem Behandlungsteam, keine ärztliche

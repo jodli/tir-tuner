@@ -98,3 +98,59 @@ def test_clamp_caps_cf_confidence():
     assert p.confidence == "medium"
     assert p.proposed_value == 44.0         # within +10% of 40, unchanged
     assert any(a.field == "confidence" for a in audit)
+
+
+# --- clamp: evidence-direction guard (#3) --------------------------------
+def test_clamp_vetoes_direction_against_evidence():
+    # frequent post-meal hypos imply CR up; a "down" proposal (more insulin) is unsafe
+    snap = _snapshot([_block(configured_cr=10.0, n_clean_meals=10, pct_post_meal_hypo=60.0)])
+    raw = RecommendationSet(
+        proposals=[Proposal("06-11", "CR", "down", 10.0, 9.0, "high", "…", "…")],
+        overall_narrative="…", insufficient_data_blocks=[],
+    )
+    clamped, audit = clamp.apply(raw, snap, Config())
+    p = clamped.proposals[0]
+    assert p.direction == "hold"
+    assert p.proposed_value == p.current_value == 10.0
+    assert any(a.field == "direction" for a in audit)
+
+
+def test_clamp_allows_direction_matching_evidence():
+    snap = _snapshot([_block(configured_cr=10.0, n_clean_meals=10, pct_post_meal_hypo=60.0)])
+    raw = RecommendationSet(
+        proposals=[Proposal("06-11", "CR", "up", 10.0, 11.0, "medium", "…", "…")],
+        overall_narrative="…", insufficient_data_blocks=[],
+    )
+    clamped, audit = clamp.apply(raw, snap, Config())
+    p = clamped.proposals[0]
+    assert p.direction == "up" and p.proposed_value == 11.0
+    assert not any(a.field == "direction" for a in audit)
+
+
+# --- clamp: rule-engine cross-check confidence gate (#4) -----------------
+def test_clamp_caps_confidence_when_rule_disagrees():
+    snap = _snapshot([_block(configured_cr=10.0, n_clean_meals=10)])   # ambiguous evidence
+    raw = RecommendationSet(
+        proposals=[Proposal("06-11", "CR", "up", 10.0, 11.0, "high", "…", "…")],
+        overall_narrative="…", insufficient_data_blocks=[],
+    )
+    rule = RecommendationSet(proposals=[], overall_narrative="", insufficient_data_blocks=["06-11"])
+    clamped, audit = clamp.apply(raw, snap, Config(), rule)
+    p = clamped.proposals[0]
+    assert p.confidence == "low"
+    assert any(a.field == "confidence" and a.reason.startswith("rule-engine") for a in audit)
+
+
+def test_clamp_keeps_confidence_when_rule_agrees():
+    snap = _snapshot([_block(configured_cr=10.0, n_clean_meals=10)])
+    raw = RecommendationSet(
+        proposals=[Proposal("06-11", "CR", "up", 10.0, 11.0, "medium", "…", "…")],
+        overall_narrative="…", insufficient_data_blocks=[],
+    )
+    rule = RecommendationSet(
+        proposals=[Proposal("06-11", "CR", "up", 10.0, 11.0, "medium", "…", "…")],
+        overall_narrative="", insufficient_data_blocks=[],
+    )
+    clamped, audit = clamp.apply(raw, snap, Config(), rule)
+    assert clamped.proposals[0].confidence == "medium"
+    assert not any(a.field == "confidence" for a in audit)

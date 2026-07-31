@@ -215,6 +215,13 @@ class Config:
     history_series_len: int = 6        # prior runs surfaced to the reasoning step
     backtest_tir_epsilon: float = 3.0  # pp change counted as improved/worsened
 
+    # Evidence -> expected CR direction (shared by the rule engine and the clamp's
+    # direction guard, so the two never drift apart)
+    hypo_high_pct: float = 30.0        # >= this post-meal hypo -> expect CR up (less insulin)
+    peak_high_mgdl: float = 60.0       # high peak + low in-range + low hypo -> expect CR down
+    inrange_low_pct: float = 70.0
+    hypo_low_pct: float = 15.0
+
     # Behaviour flags
     use_llm: bool = True
     make_charts: bool = True
@@ -628,7 +635,8 @@ class PipelineState(JsonMixin):
     stats: Optional[RobustStats] = None                  # after stats
     backtest: Optional[BacktestAnalysis] = None          # after backtest
     snapshot: Optional[AnalysisSnapshot] = None          # after snapshot
-    recommendation_raw: Optional[RecommendationSet] = None   # after recommend
+    recommendation_raw: Optional[RecommendationSet] = None   # after recommend (LLM or rule)
+    recommendation_rule: Optional[RecommendationSet] = None   # rule-engine cross-check for the clamp
     recommendation: Optional[RecommendationSet] = None       # after clamp
     clamp_audit: list[ClampAudit] = field(default_factory=list)
     trends: Optional[Trends] = None                      # after history
