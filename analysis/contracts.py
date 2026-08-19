@@ -719,6 +719,9 @@ class RunRef(JsonMixin):
     # What this run proposed, so a later run can see advice that keeps being
     # repeated and never applied instead of re-deriving it as if it were new.
     proposals: list[ProposalRef] = field(default_factory=list)
+    # Clean-meal count behind each effective-CR value, so charts can drop the
+    # points that are below the min-sample gate instead of drawing noise.
+    per_block_n_clean_meals: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass

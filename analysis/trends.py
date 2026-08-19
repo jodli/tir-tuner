@@ -45,6 +45,7 @@ def build_current_ref(
         },
         per_block_tir={k: v.tir for k, v in glycemic.per_block.items() if v.tir is not None},
         per_block_configured_cr=configured,
+        per_block_n_clean_meals={k: v.n_clean for k, v in meals.per_block.items()},
     )
 
 
