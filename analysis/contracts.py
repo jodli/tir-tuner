@@ -517,6 +517,17 @@ class ResolvedSettings(JsonMixin):
     change_dates: list[str]                  # every effective_from (chart markers)
     insulin_action_hours: Optional[float] = None   # resolved DIA (configured or default)
     cr_changes: list[CrChange] = field(default_factory=list)  # most recent CR change per block
+    # How the analysis grid lines up with the pump's programmed schedule:
+    # analysis block -> schedule key it would be entered in, the schedule key ->
+    # analysis blocks sharing it, and the blocks that straddle two schedule
+    # entries with different values (no single configured value exists there).
+    schedule_block: dict[str, str] = field(default_factory=dict)
+    schedule_shared_with: dict[str, list[str]] = field(default_factory=dict)
+    ambiguous_blocks: list[str] = field(default_factory=list)
+    # Same three, for the independently programmed CF schedule.
+    schedule_block_cf: dict[str, str] = field(default_factory=dict)
+    schedule_shared_with_cf: dict[str, list[str]] = field(default_factory=dict)
+    ambiguous_blocks_cf: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -542,6 +553,10 @@ class BlockEvidence(JsonMixin):
     trend_tir_delta: Optional[float]
     pct_post_meal_dip: Optional[float] = None
     median_hypo_dur_min: Optional[float] = None
+    # Where a change for this block would actually have to be entered in the pump
+    schedule_block: Optional[str] = None       # configured schedule key
+    schedule_shared_with: list[str] = field(default_factory=list)   # other blocks it covers
+    configured_cr_ambiguous: bool = False      # block straddles two schedule values
     # Variability + data quality
     cv: Optional[float] = None
     tbr_54: Optional[float] = None
@@ -576,6 +591,10 @@ class CorrectionEvidence(JsonMixin):
     n_isolated: int
     confounds: list[str]
     n_suspected_no_delivery: int = 0         # corrections that likely never delivered
+    # Where a CF change would be entered in the pump (CF is often one 00-24 entry)
+    schedule_block: Optional[str] = None
+    schedule_shared_with: list[str] = field(default_factory=list)
+    configured_cf_ambiguous: bool = False
 
 
 @dataclass
@@ -618,6 +637,11 @@ class Proposal(JsonMixin):
     confidence: str           # "low" | "medium" | "high"
     rationale: str            # German (user-facing)
     caveats: str              # German (user-facing)
+    # Filled by the clamp from the block evidence: the pump schedule block this
+    # change has to be entered in, and the other analysis blocks that entry also
+    # covers (so "evening" cannot be changed without touching "late").
+    schedule_block: Optional[str] = None
+    also_affects: list[str] = field(default_factory=list)
 
 
 @dataclass

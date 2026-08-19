@@ -92,6 +92,10 @@ def build_snapshot(state: PipelineState, config: Config, prior) -> AnalysisSnaps
             pct_post_meal_hypo=mb.pct_post_meal_hypo,
             pct_post_meal_dip=mb.pct_post_meal_dip,
             median_hypo_dur_min=mb.median_hypo_dur_min,
+            schedule_block=settings.schedule_block.get(b.key),
+            schedule_shared_with=[k for k in settings.schedule_shared_with.get(
+                settings.schedule_block.get(b.key, ""), []) if k != b.key],
+            configured_cr_ambiguous=b.key in settings.ambiguous_blocks,
             tir=gb.tir,
             tbr_70=gb.tbr_70,
             tar_180=gb.tar_180,
@@ -122,6 +126,7 @@ def build_snapshot(state: PipelineState, config: Config, prior) -> AnalysisSnaps
         cb = corr.per_block[b.key]
         block_confounds = sorted({c for f in corr.corrections if f.block == b.key for c in f.confounds})
         configured_cf = value_for_block(settings.correction_factor, b) if settings.available else None
+        cf_key = settings.schedule_block_cf.get(b.key)
         corrections.append(CorrectionEvidence(
             block=b.key,
             configured_cf=configured_cf,
@@ -129,6 +134,10 @@ def build_snapshot(state: PipelineState, config: Config, prior) -> AnalysisSnaps
             n_isolated=cb.n_isolated,
             confounds=block_confounds,
             n_suspected_no_delivery=corr_nodel.get(b.key, 0),
+            schedule_block=cf_key,
+            schedule_shared_with=[k for k in settings.schedule_shared_with_cf.get(cf_key or "", [])
+                                  if k != b.key],
+            configured_cf_ambiguous=b.key in settings.ambiguous_blocks_cf,
         ))
 
     o = gly.overall

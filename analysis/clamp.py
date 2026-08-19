@@ -95,6 +95,10 @@ def apply(raw: RecommendationSet, snapshot: AnalysisSnapshot, config: Config,
         param = _norm_param(p.parameter)
         confidence = _norm_conf(p.confidence)
         ev = ev_by_block.get(p.block)
+        ce = corr_by_block.get(p.block)
+        # The pump-schedule mapping is per parameter: CR and CF are programmed
+        # independently, so a CF change is entered in the CF schedule.
+        mapping = ev if param == "CR" else ce
 
         if param == "CR":
             n = ev.n_clean_meals if ev else 0
@@ -102,7 +106,6 @@ def apply(raw: RecommendationSet, snapshot: AnalysisSnapshot, config: Config,
             base = (ev.configured_cr if ev and ev.configured_cr is not None
                     else (ev.effective_cr if ev else None))
         else:  # CF
-            ce = corr_by_block.get(p.block)
             n = ce.n_isolated if ce else 0
             gate = config.min_isolated_corrections
             base = (ce.configured_cf if ce and ce.configured_cf is not None
@@ -158,6 +161,10 @@ def apply(raw: RecommendationSet, snapshot: AnalysisSnapshot, config: Config,
             block=p.block, parameter=param, direction=direction,
             current_value=current, proposed_value=proposed, confidence=confidence,
             rationale=p.rationale, caveats=p.caveats,
+            # Carry the pump-schedule mapping so the report can state where the
+            # change goes and what else that entry covers.
+            schedule_block=mapping.schedule_block if mapping else None,
+            also_affects=list(mapping.schedule_shared_with) if mapping else [],
         ))
 
     kept_blocks = {p.block for p in kept}

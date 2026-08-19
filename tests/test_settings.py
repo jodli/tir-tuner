@@ -75,3 +75,39 @@ def test_last_change_none_before_second_schedule(tmp_path):
     b = TimeBlock("breakfast", 6, 11)
     # only the first schedule applies -> no change yet
     assert settings.last_change_for_block(hist.carb_ratio, b, "2026-07-01") is None
+
+
+# --- analysis grid vs. the configured pump schedule -------------------------
+REAL_SCHEDULE = {"00-06": 17.0, "06-11": 11.0, "11-17": 13.0, "17-24": 11.0}
+
+
+def test_coarse_key_covers_a_block():
+    assert settings.value_for_block({"00-24": 40.0}, TimeBlock("dinner", 18, 22)) == 40.0
+
+
+def test_block_inside_one_schedule_entry_resolves():
+    assert settings.value_for_block(REAL_SCHEDULE, TimeBlock("lunch", 11, 15)) == 13.0
+    assert settings.schedule_block_for(REAL_SCHEDULE, TimeBlock("lunch", 11, 15)) == "11-17"
+
+
+def test_block_straddling_two_schedule_values_has_no_configured_value():
+    """15-18 sits in both 11-17 (13) and 17-24 (11): no single configured CR."""
+    afternoon = TimeBlock("afternoon", 15, 18)
+    assert settings.overlapping_keys(REAL_SCHEDULE, afternoon) == ["11-17", "17-24"]
+    assert settings.value_for_block(REAL_SCHEDULE, afternoon) is None
+    # A change would still have to be entered in the entry holding its start hour.
+    assert settings.schedule_block_for(REAL_SCHEDULE, afternoon) == "11-17"
+
+
+def test_map_to_schedule_reports_shared_and_ambiguous_blocks(tmp_path):
+    from analysis.contracts import Config
+
+    hist = settings.load_history(_write(tmp_path, {
+        "carb_ratio": [{"effective_from": "2026-01-01", "blocks": REAL_SCHEDULE}]}))
+    r = settings.resolve(hist, "2026-08-19")
+    settings.map_to_schedule(r, Config())
+    assert r.schedule_block == {"00-06": "00-06", "06-11": "06-11", "11-15": "11-17",
+                                "15-18": "11-17", "18-22": "17-24", "22-24": "17-24"}
+    # Changing the evening also changes the late block, and vice versa.
+    assert r.schedule_shared_with == {"11-17": ["11-15", "15-18"], "17-24": ["18-22", "22-24"]}
+    assert r.ambiguous_blocks == ["15-18"]

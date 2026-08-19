@@ -50,11 +50,33 @@ def _data_quality(state: PipelineState, config: Config) -> list[str]:
         lines.append(f"! {L['partial_days']} ({len(gly.partial_days)}): {_abbrev(gly.partial_days)}")
     if cov is not None and cov < config.min_coverage_pct:
         lines.append(f"! {L['thin_window']}")
+    amb = state.settings.ambiguous_blocks if state.settings else []
+    if amb:
+        names = ", ".join(f"{_block_de(config, k)} ({k})" for k in amb)
+        lines.append(f"! {L['grid_mismatch'].format(blocks=names)}")
     return lines
 
 
 _VERDICT_ARROW = {"change": "→ ändern", "watch": "beobachten",
                   "no_cr_lever": "kein CR-Hebel", "ok": "ok"}
+
+
+def _proposal_lines(p, config: Config) -> list[str]:
+    """One proposal: the change, where to enter it, the reasoning, the caveat."""
+    arrow = {"up": "↑", "down": "↓", "hold": "→"}.get(p.direction, "→")
+    out = [f"  • [{p.parameter} {_block_de(config, p.block)}] "
+           f"{_fmt(p.current_value)} {arrow} {_fmt(p.proposed_value)}  "
+           f"({L['confidence']}: {p.confidence})"]
+    if p.schedule_block and p.direction in ("up", "down"):
+        where = f"      {L['enter_in']}: {p.schedule_block}"
+        if p.also_affects:
+            shared = ", ".join(_block_de(config, k) for k in p.also_affects)
+            where += f"  ({L['also_affects']}: {shared})"
+        out.append(where)
+    out.append(f"      {p.rationale}")
+    if p.caveats:
+        out.append(f"      ⚠ {p.caveats}")
+    return out
 
 
 def _loss_section(state: PipelineState, config: Config) -> list[str]:
@@ -146,15 +168,7 @@ def format_summary(state: PipelineState, config: Config) -> str:
     if not rec.proposals:
         lines.append(f"  {L['no_recommendations']}")
     for p in rec.proposals:
-        arrow = {"up": "↑", "down": "↓", "hold": "→"}.get(p.direction, "→")
-        lines.append(
-            f"  • [{p.parameter} {_block_de(config, p.block)}] "
-            f"{_fmt(p.current_value)} {arrow} {_fmt(p.proposed_value)}  "
-            f"({L['confidence']}: {p.confidence})"
-        )
-        lines.append(f"      {p.rationale}")
-        if p.caveats:
-            lines.append(f"      ⚠ {p.caveats}")
+        lines.extend(_proposal_lines(p, config))
     if rec.insufficient_data_blocks:
         blocks = ", ".join(_block_de(config, k) for k in rec.insufficient_data_blocks)
         lines.append(f"  {L['insufficient']}: {blocks}")

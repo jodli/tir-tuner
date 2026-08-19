@@ -44,6 +44,11 @@ L = {
     "col_meals": "Mahlz.",
     "hypo_event_legend": ("Hypo-E. = Mahlzeiten mit echtem Ereignis (>= {depth} mg/dl unter {low}, "
                           ">= {dur} min); Dips = jede kurze Unterschreitung"),
+    "enter_in": "Eintragen im Pumpenblock",
+    "also_affects": "betrifft auch",
+    "grid_mismatch": ("Analyse-Blöcke passen nicht zum Pumpenschema: {blocks} liegen in zwei "
+                      "Pumpenblöcken mit unterschiedlichem CR. Dort gibt es kein eindeutiges "
+                      "konfiguriertes CR; Blöcke in settings.json und Analyse angleichen."),
     "loss_title": "Wo TIR verloren geht (gewichtet nach Zeitanteil)",
     "col_share": "Anteil",
     "col_loss_pp": "Verlust",

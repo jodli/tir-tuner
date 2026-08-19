@@ -76,6 +76,13 @@ function RecommendSettings(snapshot_json: string) -> RecommendationSet {
           sind alle Blockwerte entsprechend unsicher → eher "hold".
         - Form der Auslenkung: median_time_to_peak_min / median_undershoot_depth
           trennen "falsches CR" von "falschem Timing / Über-Bolus".
+        - Umsetzbarkeit: schedule_block ist der PUMPENBLOCK, in dem die Änderung
+          eingetragen werden müsste, schedule_shared_with nennt weitere
+          Analyse-Blöcke, die dieser Eintrag mitverändert. Betrifft ein Vorschlag
+          auch einen Block mit gegenläufigem Muster, sei zurückhaltender und nenne
+          das in caveats. configured_cr_ambiguous heißt: der Block liegt in zwei
+          Pumpenblöcken mit unterschiedlichem CR, es gibt dort kein eindeutiges
+          konfiguriertes CR.
         - Ursache-Wirkung: config_last_change (wann/worauf zuletzt geändert),
           backtest_outcome (hat die letzte Empfehlung geholfen?) und prior_runs
           (Mehr-Lauf-Verlauf), um auf frühere Änderungen zu reagieren.

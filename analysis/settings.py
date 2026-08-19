@@ -34,22 +34,62 @@ from .contracts import (
 )
 
 
-def value_for_block(schedule: dict[str, float], block: TimeBlock) -> Optional[float]:
-    """Look up a configured value for a config block from a settings schedule.
+def _key_hours(key: str) -> Optional[tuple[int, int]]:
+    try:
+        start, end = (int(x) for x in key.split("-"))
+    except ValueError:
+        return None
+    return start, end
 
-    Handles both aligned keys (``"06-11"``) and coarse ones (``"00-24"``): the
-    value whose ``HH-HH`` hour range contains the block's start hour wins, with
-    an exact key match preferred.
+
+def overlapping_keys(schedule: dict[str, float], block: TimeBlock) -> list[str]:
+    """Schedule keys whose hour range overlaps the analysis block, in time order.
+
+    An analysis block can straddle a schedule boundary: with a pump programmed
+    ``11-17`` / ``17-24``, the analysis block ``15-18`` sits in both. Callers need
+    to know that, because a proposal for such a block cannot be entered anywhere
+    without also changing hours it was not measured over.
+    """
+    hits = []
+    for key in schedule:
+        hours = _key_hours(key)
+        if hours is None:
+            continue
+        start, end = hours
+        if start < block.end_hour and block.start_hour < end:
+            hits.append((start, key))
+    return [key for _, key in sorted(hits)]
+
+
+def schedule_block_for(schedule: dict[str, float], block: TimeBlock) -> Optional[str]:
+    """The schedule key a change for this block would have to be entered in."""
+    if block.key in schedule:
+        return block.key
+    keys = overlapping_keys(schedule, block)
+    if not keys:
+        return None
+    # The key containing the block's start hour is the one that governs it.
+    for key in keys:
+        hours = _key_hours(key)
+        if hours and hours[0] <= block.start_hour < hours[1]:
+            return key
+    return keys[0]
+
+
+def value_for_block(schedule: dict[str, float], block: TimeBlock) -> Optional[float]:
+    """Configured value for an analysis block, or ``None`` when it is ambiguous.
+
+    Handles aligned keys (``"06-11"``) and coarse ones (``"00-24"``). A block that
+    overlaps several schedule entries with *different* values has no single
+    configured value: reporting the one at its start hour silently compared meals
+    after 17:00 against the 11-17 setting. Such a block returns ``None`` and is
+    listed in ``ResolvedSettings.ambiguous_blocks`` instead.
     """
     if block.key in schedule:
         return schedule[block.key]
-    for key, value in schedule.items():
-        try:
-            start, end = (int(x) for x in key.split("-"))
-        except ValueError:
-            continue
-        if start <= block.start_hour < end:
-            return value
+    values = {schedule[key] for key in overlapping_keys(schedule, block)}
+    if len(values) == 1:
+        return values.pop()
     return None
 
 
@@ -125,6 +165,41 @@ def resolve(history: Optional[SettingsHistory], as_of: str, dia_default: float =
     )
 
 
+def _map_grid(schedule: dict[str, float], config: Config
+              ) -> tuple[dict[str, str], dict[str, list[str]], list[str]]:
+    """(analysis block -> schedule key, schedule key -> shared blocks, ambiguous)."""
+    by_block: dict[str, str] = {}
+    shared: dict[str, list[str]] = {}
+    ambiguous: list[str] = []
+    for b in config.blocks:
+        key = schedule_block_for(schedule, b)
+        if key is None:
+            continue
+        by_block[b.key] = key
+        shared.setdefault(key, []).append(b.key)
+        if len({schedule[k] for k in overlapping_keys(schedule, b)}) > 1:
+            ambiguous.append(b.key)
+    return by_block, {k: v for k, v in shared.items() if len(v) > 1}, ambiguous
+
+
+def map_to_schedule(resolved: ResolvedSettings, config: Config) -> None:
+    """Fill in how the analysis grid maps onto the configured schedules.
+
+    A change for an analysis block has to be entered in whichever schedule block
+    contains it, which may cover other analysis blocks too: with a pump programmed
+    ``17-24``, changing the evening also changes the late block. The report needs
+    to say so, and a block straddling two different schedule values gets no single
+    configured value at all. CR and CF are mapped separately, since the two
+    schedules are programmed independently (CF is often a single 00-24 entry).
+    """
+    if resolved.carb_ratio:
+        (resolved.schedule_block, resolved.schedule_shared_with,
+         resolved.ambiguous_blocks) = _map_grid(resolved.carb_ratio, config)
+    if resolved.correction_factor:
+        (resolved.schedule_block_cf, resolved.schedule_shared_with_cf,
+         resolved.ambiguous_blocks_cf) = _map_grid(resolved.correction_factor, config)
+
+
 def run(state: PipelineState, config: Config) -> PipelineState:
     as_of = state.window.as_of if state.window else (config.as_of or "")
     history = load_history(config.settings_path)
@@ -136,5 +211,6 @@ def run(state: PipelineState, config: Config) -> PipelineState:
             if c is not None:
                 changes.append(CrChange(block=b.key, effective_from=c[0], from_value=c[1], to_value=c[2]))
         resolved.cr_changes = changes
+    map_to_schedule(resolved, config)
     state.settings = resolved
     return state

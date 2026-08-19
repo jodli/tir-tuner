@@ -154,3 +154,29 @@ def test_clamp_keeps_confidence_when_rule_agrees():
     clamped, audit = clamp.apply(raw, snap, Config(), rule)
     assert clamped.proposals[0].confidence == "medium"
     assert not any(a.field == "confidence" for a in audit)
+
+
+def test_clamp_attaches_the_pump_schedule_block_per_parameter():
+    """A CR change goes into the CR schedule, a CF change into the CF schedule."""
+    from analysis.contracts import CorrectionEvidence
+
+    snap = _snapshot([_block(block="18-22", configured_cr=11.0, n_clean_meals=10,
+                             pct_post_meal_hypo=60.0, schedule_block="17-24",
+                             schedule_shared_with=["22-24"])])
+    snap.corrections = [CorrectionEvidence(
+        block="18-22", configured_cf=75.0, observed_drop_per_unit=110.0, n_isolated=5,
+        confounds=[], schedule_block="00-24", schedule_shared_with=["00-06", "06-11"])]
+    raw = RecommendationSet(
+        proposals=[
+            Proposal(block="18-22", parameter="CR", direction="up", current_value=11.0,
+                     proposed_value=12.0, confidence="medium", rationale="", caveats=""),
+            Proposal(block="18-22", parameter="CF", direction="up", current_value=75.0,
+                     proposed_value=80.0, confidence="low", rationale="", caveats=""),
+        ],
+        overall_narrative="", insufficient_data_blocks=[])
+    clamped, _ = clamp.apply(raw, snap, Config())
+    by_param = {p.parameter: p for p in clamped.proposals}
+    assert by_param["CR"].schedule_block == "17-24"
+    assert by_param["CR"].also_affects == ["22-24"]
+    assert by_param["CF"].schedule_block == "00-24"
+    assert by_param["CF"].also_affects == ["00-06", "06-11"]
