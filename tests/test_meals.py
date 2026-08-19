@@ -36,16 +36,65 @@ def test_meal_excursion_features():
     assert f.clean is True
 
 
-def test_post_meal_hypo_detected():
+def test_sustained_post_meal_hypo_is_an_event():
+    # 25 minutes below 70 inside the 1.5-4h window: deep and long enough.
+    cgm = cgm_df([("2026-07-30 12:00", 120), ("2026-07-30 13:00", 90)]
+                 + [(f"2026-07-30 14:{m:02d}", 62) for m in range(0, 30, 5)]
+                 + [("2026-07-30 15:00", 80)])
+    bolus = bolus_df([_meal("2026-07-30 12:00", 60, 9)])
+    f = meals.analyze(cgm, bolus, Config()).meals[0]
+    assert f.post_meal_hypo is True
+    assert f.post_meal_dip is True
+    assert f.undershoot_dur_min == 25.0
+
+
+def test_single_reading_dip_is_not_an_event():
+    """One reading at 62 is a dip, not a hypo event: no CR signal."""
     cgm = cgm_df([
         ("2026-07-30 12:00", 120),
         ("2026-07-30 13:00", 90),
-        ("2026-07-30 14:00", 62),    # dips below 70
+        ("2026-07-30 14:00", 62),    # dips below 70, but only once
         ("2026-07-30 15:00", 80),
     ])
     bolus = bolus_df([_meal("2026-07-30 12:00", 60, 9)])
     f = meals.analyze(cgm, bolus, Config()).meals[0]
-    assert f.post_meal_hypo is True
+    assert f.post_meal_dip is True
+    assert f.post_meal_hypo is False
+    assert f.undershoot_dur_min == 0.0
+
+
+def test_shallow_dip_is_not_an_event():
+    """69 mg/dl for half an hour is long enough but not deep enough."""
+    cgm = cgm_df([("2026-07-30 12:00", 120)]
+                 + [(f"2026-07-30 14:{m:02d}", 69) for m in range(0, 30, 5)])
+    f = meals.analyze(cgm, bolus_df([_meal("2026-07-30 12:00", 60, 9)]), Config()).meals[0]
+    assert f.post_meal_dip is True
+    assert f.post_meal_hypo is False
+
+
+def test_hypo_duration_is_the_longest_contiguous_stretch():
+    # Two short dips 40 min apart must not be merged into one 50 min event.
+    cgm = cgm_df([("2026-07-30 12:00", 120)]
+                 + [(f"2026-07-30 14:{m:02d}", 60) for m in (0, 5, 10)]
+                 + [("2026-07-30 14:25", 120)]
+                 + [(f"2026-07-30 14:{m:02d}", 60) for m in (50, 55)])
+    f = meals.analyze(cgm, bolus_df([_meal("2026-07-30 12:00", 60, 9)]), Config()).meals[0]
+    assert f.undershoot_dur_min == 10.0      # longest run, not 55 - 0
+    assert f.post_meal_hypo is False         # 10 min < 15 min gate
+
+
+def test_block_hypo_event_and_dip_rates_are_reported_separately():
+    cgm = cgm_df(
+        # Meal A: sustained event.
+        [("2026-07-30 08:00", 120)] + [(f"2026-07-30 10:{m:02d}", 60) for m in range(0, 30, 5)]
+        # Meal B (next day): single-reading dip only.
+        + [("2026-07-31 08:00", 120), ("2026-07-31 10:00", 60), ("2026-07-31 10:30", 120)]
+    )
+    bolus = bolus_df([_meal("2026-07-30 08:00", 60, 6), _meal("2026-07-31 08:00", 60, 6)])
+    block = meals.analyze(cgm, bolus, Config()).per_block["06-11"]
+    assert block.n_clean == 2
+    assert block.pct_post_meal_hypo == 50.0    # only meal A
+    assert block.pct_post_meal_dip == 100.0    # both dipped below 70
 
 
 def test_clean_detection_by_gap():
@@ -95,7 +144,7 @@ def test_undershoot_depth_and_rebound():
         ("2026-07-30 15:00", 80),    # recovery
     ])
     f = meals.analyze(cgm, bolus_df([_meal("2026-07-30 12:00", 60, 9)]), Config()).meals[0]
-    assert f.post_meal_hypo is True
+    assert f.post_meal_dip is True
     assert f.undershoot_depth == 8.0     # 70 - 62
     assert f.rebound == 18.0             # 80 - 62
 

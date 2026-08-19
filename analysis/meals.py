@@ -47,6 +47,29 @@ def _pct_true(flags: list[Optional[bool]]) -> Optional[float]:
     return round(100.0 * sum(known) / len(known), 2) if known else None
 
 
+def _longest_below_min(times: np.ndarray, below: np.ndarray, config: Config) -> float:
+    """Minutes of the longest *contiguous* stretch below the low threshold.
+
+    Contiguous means consecutive below-readings no more than
+    ``config.hypo_gap_tolerance_min`` apart, so a normal CGM gap does not split a
+    single event in two. A stretch is measured from its first to its last reading,
+    which underestimates by one sampling interval; that is deliberate, since this
+    number gates a "lower the insulin" signal and should err low.
+    """
+    idx = np.flatnonzero(below)
+    if len(idx) == 0:
+        return 0.0
+    tol = float(config.hypo_gap_tolerance_min)
+    best = 0.0
+    seg_start = idx[0]
+    for prev, cur in zip(idx, idx[1:]):
+        if _minutes(times[cur], times[prev]) > tol:
+            best = max(best, _minutes(times[prev], times[seg_start]))
+            seg_start = cur
+    best = max(best, _minutes(times[idx[-1]], times[seg_start]))
+    return round(best, 1)
+
+
 def _clean_flags(times: np.ndarray, gap_min: int) -> list[bool]:
     """A meal is clean if no *other* meal bolus falls within +/- gap."""
     gap = np.timedelta64(gap_min, "m")
@@ -99,17 +122,25 @@ def analyze(cgm: pd.DataFrame, bolus: pd.DataFrame, config: Config) -> MealAnaly
         # so an early transient dip (or pre-meal low) is not mistaken for an
         # over-bolus.
         hypo_t, hypo_v = lookup.window_tv(t, config.hypo_start_h, config.excursion_tail_h)
-        post_meal_hypo = (float(hypo_v.min()) < config.tir_low) if len(hypo_v) else None
+        post_meal_dip = (float(hypo_v.min()) < config.tir_low) if len(hypo_v) else None
+        post_meal_hypo = post_meal_dip
         undershoot_depth = undershoot_dur_min = rebound = None
         if len(hypo_v):
             below = hypo_v < config.tir_low
             if below.any():
                 nadir_val = float(hypo_v.min())
                 nadir_idx = int(np.argmin(hypo_v))
-                below_t = hypo_t[below]
                 undershoot_depth = round(config.tir_low - nadir_val, 1)
-                undershoot_dur_min = _minutes(below_t.max(), below_t.min())
+                undershoot_dur_min = _longest_below_min(hypo_t, below, config)
                 rebound = round(float(hypo_v[nadir_idx:].max()) - nadir_val, 1)
+            # An event, not a blip: deep enough AND long enough. Ungated, half of
+            # all clean meals qualify (median 12 mg/dl deep, 18 min long, lower
+            # quartile 9 min), which makes the flag useless as a CR signal.
+            post_meal_hypo = bool(
+                undershoot_depth is not None
+                and undershoot_depth >= config.hypo_event_min_depth
+                and (undershoot_dur_min or 0.0) >= config.hypo_event_min_dur_min
+            )
 
         features.append(MealFeature(
             time=t.isoformat(),
@@ -124,6 +155,7 @@ def analyze(cgm: pd.DataFrame, bolus: pd.DataFrame, config: Config) -> MealAnaly
             min_0_4h=min_0_4h,
             ended_in_range=ended_in_range,
             post_meal_hypo=post_meal_hypo,
+            post_meal_dip=post_meal_dip,
             clean=clean_flags[i],
             time_to_peak_min=round(time_to_peak_min, 1) if time_to_peak_min is not None else None,
             auc_over_baseline=auc_over_baseline,
@@ -166,6 +198,9 @@ def _aggregate(features: list[MealFeature], config: Config) -> dict[str, MealBlo
             median_peak_rise=_median([f.peak_rise for f in clean]),
             pct_in_range=_pct_true([f.ended_in_range for f in clean]),
             pct_post_meal_hypo=_pct_true([f.post_meal_hypo for f in clean]),
+            pct_post_meal_dip=_pct_true([f.post_meal_dip for f in clean]),
+            median_hypo_dur_min=_median([f.undershoot_dur_min for f in clean
+                                         if f.post_meal_dip]),
             effective_cr_q25=q25,
             effective_cr_q75=q75,
             effective_cr_min=round(min(cr_kept), 2) if cr_kept else None,

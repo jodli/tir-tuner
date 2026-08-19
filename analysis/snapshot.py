@@ -90,6 +90,8 @@ def build_snapshot(state: PipelineState, config: Config, prior) -> AnalysisSnaps
             median_peak_rise=mb.median_peak_rise,
             pct_in_range=mb.pct_in_range,
             pct_post_meal_hypo=mb.pct_post_meal_hypo,
+            pct_post_meal_dip=mb.pct_post_meal_dip,
+            median_hypo_dur_min=mb.median_hypo_dur_min,
             tir=gb.tir,
             tbr_70=gb.tbr_70,
             tar_180=gb.tar_180,

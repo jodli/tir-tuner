@@ -80,11 +80,12 @@ def format_summary(state: PipelineState, config: Config) -> str:
                  f"{L['gmi']}: {_fmt(o.gmi, ' %')}   {L['cv']}: {_fmt(o.cv, ' %')}")
     lines.append("")
 
-    # Per-block table
+    # Per-block table. TBR/TAR sit next to the meal-level hypo columns on purpose:
+    # a high "Hypo-E." share with a low TBR means short dips, not lost time.
     lines.append(f"{L['per_block']}:")
-    header = (f"  {L['col_block']:<12}{L['col_tir']:>7}{L['col_eff_cr']:>9}"
-              f"{L['col_conf_cr']:>9}{L['col_peak']:>8}{L['col_inrange']:>8}"
-              f"{L['col_hypo']:>8}{L['col_meals']:>8}")
+    header = (f"  {L['col_block']:<12}{L['col_tir']:>7}{L['col_tbr']:>7}{L['col_tar']:>7}"
+              f"{L['col_eff_cr']:>9}{L['col_conf_cr']:>9}{L['col_peak']:>8}"
+              f"{L['col_hypo_event']:>8}{L['col_dip']:>7}{L['col_meals']:>8}")
     lines.append(header)
     lines.append("  " + "-" * (len(header) - 2))
     ev_by_block = {b.block: b for b in state.snapshot.blocks}
@@ -92,10 +93,13 @@ def format_summary(state: PipelineState, config: Config) -> str:
         ev = ev_by_block[b.key]
         lines.append(
             f"  {_block_de(config, b.key):<12}"
-            f"{_fmt(ev.tir):>7}{_fmt(ev.effective_cr):>9}{_fmt(ev.configured_cr):>9}"
-            f"{_fmt(ev.median_peak_rise):>8}{_fmt(ev.pct_in_range):>8}"
-            f"{_fmt(ev.pct_post_meal_hypo):>8}{ev.n_clean_meals:>8}"
+            f"{_fmt(ev.tir):>7}{_fmt(ev.tbr_70):>7}{_fmt(ev.tar_180):>7}"
+            f"{_fmt(ev.effective_cr):>9}{_fmt(ev.configured_cr):>9}"
+            f"{_fmt(ev.median_peak_rise):>8}"
+            f"{_fmt(ev.pct_post_meal_hypo):>8}{_fmt(ev.pct_post_meal_dip):>7}"
+            f"{ev.n_clean_meals:>8}"
         )
+    lines.append(f"  {L['hypo_event_legend'].format(depth=int(config.hypo_event_min_depth), dur=int(config.hypo_event_min_dur_min), low=int(config.tir_low))}")
     lines.append("")
 
     # Recommendations

@@ -186,6 +186,13 @@ class Config:
     excursion_tail_h: float = 4.0
     hypo_start_h: float = 1.5          # post-meal hypo judged only from here on
                                        # (insulin tail), so early dips don't count
+    # A post-meal hypo counts as an *event* only if it is both deep and long
+    # enough. Without these gates a single reading at 69 mg/dl counted, which
+    # flagged half of all clean meals and made the flag useless as a CR signal
+    # (it is the main trigger for "raise CR" in the rule engine and the clamp).
+    hypo_event_min_depth: float = 5.0      # mg/dl below tir_low at the nadir
+    hypo_event_min_dur_min: float = 15.0   # contiguous minutes below tir_low
+    hypo_gap_tolerance_min: float = 10.0   # CGM gap that does not split an event
     cr_plausible_min: float = 1.0      # effective-CR outside [min,max] is a mis-log,
     cr_plausible_max: float = 50.0     # trimmed before aggregating (g/U)
 
@@ -324,13 +331,14 @@ class MealFeature(JsonMixin):
     delta_4h: Optional[float]
     min_0_4h: Optional[float]
     ended_in_range: Optional[bool]   # value at tail_h within [tir_low, tir_high]
-    post_meal_hypo: Optional[bool]   # min over window < tir_low
+    post_meal_hypo: Optional[bool]   # a real event: deep enough AND long enough
     clean: bool                      # no overlapping meal bolus
+    post_meal_dip: Optional[bool] = None        # any reading < tir_low (ungated)
     # Excursion shape (help tell "wrong CR" from "wrong timing / over-bolus")
     time_to_peak_min: Optional[float] = None    # minutes from meal to peak CGM
     auc_over_baseline: Optional[float] = None   # positive area over baseline (mg/dl*min)
     undershoot_depth: Optional[float] = None    # how far the nadir fell below tir_low
-    undershoot_dur_min: Optional[float] = None  # minutes below tir_low in the tail
+    undershoot_dur_min: Optional[float] = None  # longest contiguous stretch below tir_low
     rebound: Optional[float] = None             # recovery above nadir after a hypo
 
 
@@ -341,7 +349,9 @@ class MealBlockStats(JsonMixin):
     median_effective_cr: Optional[float]
     median_peak_rise: Optional[float]
     pct_in_range: Optional[float]        # % of clean meals ending in range
-    pct_post_meal_hypo: Optional[float]
+    pct_post_meal_hypo: Optional[float]  # % with a gated hypo *event*
+    pct_post_meal_dip: Optional[float] = None    # % with any reading below tir_low
+    median_hypo_dur_min: Optional[float] = None  # median length of those dips
     # Distribution of the effective-CR estimate (spread + sample the median hides)
     effective_cr_q25: Optional[float] = None
     effective_cr_q75: Optional[float] = None
@@ -519,12 +529,16 @@ class BlockEvidence(JsonMixin):
     n_clean_meals: int
     median_peak_rise: Optional[float]
     pct_in_range: Optional[float]
+    # pct_post_meal_hypo counts gated *events* (deep and long enough);
+    # pct_post_meal_dip counts any excursion below tir_low, however brief.
     pct_post_meal_hypo: Optional[float]
     tir: Optional[float]
     tbr_70: Optional[float]
     tar_180: Optional[float]
     trend_effective_cr_delta: Optional[float]
     trend_tir_delta: Optional[float]
+    pct_post_meal_dip: Optional[float] = None
+    median_hypo_dur_min: Optional[float] = None
     # Variability + data quality
     cv: Optional[float] = None
     tbr_54: Optional[float] = None

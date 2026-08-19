@@ -50,6 +50,12 @@ function RecommendSettings(snapshot_json: string) -> RecommendationSet {
           TIR OHNE Unterzuckerungen ist zu wenig Insulin unterwegs → CR-Zahl SENKEN
           (mehr Insulin pro KH). Bei häufigen Unterzuckerungen nach dem Essen
           (pct_post_meal_hypo) ist zu viel Insulin unterwegs → CR-Zahl ERHÖHEN.
+          Maßgeblich ist pct_post_meal_hypo: Anteil der Mahlzeiten mit einem echten
+          Ereignis (mindestens 15 min unter 70 mg/dl, Nadir mindestens 5 mg/dl
+          darunter). pct_post_meal_dip zählt dagegen JEDE kurze Unterschreitung und
+          ist nur Kontext, kein Grund für eine CR-Änderung. Prüfe die Plausibilität
+          immer gegen tbr_70 (verbrachte Zeit unter 70): viele "Dips" bei kleinem
+          tbr_70 bedeuten kurze Einbrüche, nicht zu viel Mahlzeit-Insulin.
         - CF (mg/dl pro E): nur bei klarer Evidenz und stets mit niedriger Sicherheit.
 
         Gehe BLOCKWEISE vor. Beurteile jeden Tagesblock einzeln anhand dieser Evidenz:
@@ -64,7 +70,10 @@ function RecommendSettings(snapshot_json: string) -> RecommendationSet {
           HARDWARE-Problem, KEIN CR-Signal → "hold" bzw. insufficient_data. Nutze
           cr_iob_filtered als bereinigte Schätzung.
         - Confounder: dawn_rise (nur Nacht/Frühstück) erklärt Morgenhochs ohne CR-Bezug.
-        - Datenqualität: coverage_pct; bei geringer Abdeckung zurückhaltend sein.
+        - Datenqualität: coverage_pct (Abdeckung des ANGEFRAGTEN Fensters),
+          window_days / days_with_data / n_missing_days sowie das Flag
+          "thin_window". Fehlen ganze Tage oder liegt die Abdeckung unter 80 %,
+          sind alle Blockwerte entsprechend unsicher → eher "hold".
         - Form der Auslenkung: median_time_to_peak_min / median_undershoot_depth
           trennen "falsches CR" von "falschem Timing / Über-Bolus".
         - Ursache-Wirkung: config_last_change (wann/worauf zuletzt geändert),
