@@ -1,7 +1,8 @@
 // Playground / CI-optional evals for the reasoning function. Run with
 //   uv run baml-cli test
-// These call the real Reasoner client (Anthropic), so they are not part of the
-// offline Python test suite; the gated tests/evals/test_llm_reco.py mirrors them.
+// These call the real Reasoner client over the network, so they are not part
+// of the offline Python test suite; the gated tests/evals/test_llm_reco.py
+// mirrors them.
 // Each supplies a curated snapshot JSON and asserts the conservative behaviour the
 // prompt promises. @@assert = hard guarantee; @@check = soft (model judgment).
 

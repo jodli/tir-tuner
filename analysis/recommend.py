@@ -2,10 +2,10 @@
 
 Turns the :class:`AnalysisSnapshot` into a :class:`RecommendationSet`. With
 ``config.use_llm`` (default) it calls the BAML ``RecommendSettings`` function
-(Anthropic); otherwise a deterministic rule engine produces the same shape so
-the pipeline runs offline and is testable without a network. Either way the raw
-output is bounded afterwards by the clamp stage (:mod:`analysis.clamp`); this
-stage never enforces numeric limits itself.
+(model configured in ``baml_src/clients.baml``); otherwise a deterministic rule
+engine produces the same shape so the pipeline runs offline and is testable
+without a network. Either way the raw output is bounded afterwards by the clamp
+stage (:mod:`analysis.clamp`); this stage never enforces numeric limits itself.
 """
 from __future__ import annotations
 

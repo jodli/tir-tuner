@@ -22,7 +22,7 @@ BG-entry is 0). So:
 ```sh
 uv sync
 uv run baml-cli generate          # regenerates baml_client/ (git-ignored)
-export ANTHROPIC_API_KEY=sk-...    # only needed for the LLM path
+export ZAI_API_KEY=...             # only needed for the LLM path
 cp settings.example.json settings.json   # then edit with your real schedules
 ```
 
@@ -67,10 +67,10 @@ IOB (defaults to 2). See `settings.example.json`. This file is git-ignored.
 ```sh
 uv run pytest                        # offline, deterministic
 ```
-LLM-path evals hit the real Anthropic API and are skipped by default. To run the
+LLM-path evals hit the real model API and are skipped by default. To run the
 rubric + safety-invariant checks on real model output:
 ```sh
-RUN_LLM_EVALS=1 ANTHROPIC_API_KEY=... uv run pytest -m llm
+RUN_LLM_EVALS=1 ZAI_API_KEY=... uv run pytest -m llm
 uv run baml-cli test                 # BAML-native prompt evals (playground)
 ```
 

@@ -3,6 +3,10 @@
 // judgment over already-computed numbers. All numeric guardrails (+/-10% cap,
 // minimum-sample gate, CF confidence cap) are enforced in code AFTER this call,
 // so the model has no arithmetic authority.
+//
+// The prompt is split explicitly into a system turn (instructions + schema) and
+// a user turn (the snapshot). Without the split BAML sends one system-only
+// message, which the chat API rejects: it wants a trailing user message.
 
 class Proposal {
     block string          @description("time-block key, e.g. \"06-11\"")
@@ -24,6 +28,7 @@ class RecommendationSet {
 function RecommendSettings(snapshot_json: string) -> RecommendationSet {
     client Reasoner
     prompt #"
+        {{ _.role("system") }}
         Du bist ein Assistent für die Analyse von Typ-1-Diabetes-Daten. Der Nutzer
         verwendet ein CamAPS-FX-Hybrid-Closed-Loop-System mit FreeStyle Libre 3 und
         mylife YpsoPump. Ziel ist es, die Time-in-Range (TIR, 70-180 mg/dl) durch
@@ -89,6 +94,7 @@ function RecommendSettings(snapshot_json: string) -> RecommendationSet {
 
         {{ ctx.output_format }}
 
+        {{ _.role("user") }}
         Analyse-Snapshot (JSON):
         {{ snapshot_json }}
     "#

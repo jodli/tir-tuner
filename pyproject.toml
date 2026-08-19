@@ -26,5 +26,5 @@ testpaths = ["tests"]
 # Run the package in place (it is not installed; see [tool.uv] package = false).
 pythonpath = ["."]
 markers = [
-    "llm: exercises the live LLM path (Anthropic API); run with RUN_LLM_EVALS=1",
+    "llm: exercises the live LLM path (real model API); run with RUN_LLM_EVALS=1",
 ]

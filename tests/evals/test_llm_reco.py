@@ -1,7 +1,7 @@
 """LLM-path evals for the reasoning step (recommend._llm -> BAML RecommendSettings).
 
-These hit the real Anthropic API, so they are OFF by default and skipped unless
-both ``RUN_LLM_EVALS=1`` and ``ANTHROPIC_API_KEY`` are set. Normal ``pytest`` /
+These hit the real model API, so they are OFF by default and skipped unless
+both ``RUN_LLM_EVALS=1`` and ``ZAI_API_KEY`` are set. Normal ``pytest`` /
 CI stays offline and deterministic.
 
 Two things are checked on the real model output:
@@ -20,10 +20,10 @@ import pytest
 from analysis import clamp, recommend
 from analysis.contracts import AnalysisSnapshot, BlockEvidence, Config, CorrectionEvidence
 
-RUN = os.environ.get("RUN_LLM_EVALS") == "1" and bool(os.environ.get("ANTHROPIC_API_KEY"))
+RUN = os.environ.get("RUN_LLM_EVALS") == "1" and bool(os.environ.get("ZAI_API_KEY"))
 pytestmark = [
     pytest.mark.llm,
-    pytest.mark.skipif(not RUN, reason="set RUN_LLM_EVALS=1 and ANTHROPIC_API_KEY to run LLM evals"),
+    pytest.mark.skipif(not RUN, reason="set RUN_LLM_EVALS=1 and ZAI_API_KEY to run LLM evals"),
 ]
 
 CONFIG = Config()
