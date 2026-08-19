@@ -28,6 +28,7 @@ from . import (
     iob,
     loaders,
     meals,
+    patch,
     recommend,
     report,
     settings,
@@ -92,6 +93,7 @@ def cmd_run(args) -> int:
     written_charts: list[str] = []
     if config.make_charts:
         written_charts = charts.render(state, config)
+    patch.write(state, config)
 
     report.print_summary(state, config)
     print(f"\n{L['result_written']}: {os.path.join(config.out_dir, as_of, 'result.json')}")

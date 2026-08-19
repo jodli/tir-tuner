@@ -53,7 +53,12 @@ uv run python -m analysis run --no-llm
 uv run python -m analysis run --as-of 2026-07-30 --weeks 4
 ```
 Outputs per run under `runs/<as_of>/`: `result.json` (full record), `stages/*.json`
-(per-stage artifacts), `charts/*.png`. Cross-run history is `runs/history.json`.
+(per-stage artifacts), `charts/*.png`, and `settings_patch.json` when a change is
+proposed. Cross-run history is `runs/history.json`.
+
+The patch expresses the run's proposals in your *pump's* schedule blocks, so it is
+both what to type into the pump and what to append to `settings.json` afterwards
+(the next run's backtest uses it to tell whether the advice was applied).
 
 ## Stages and isolation
 `load → window → glycemic → meals → corrections → settings → iob → confounders →

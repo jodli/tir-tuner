@@ -7,8 +7,11 @@ not mutate state.
 """
 from __future__ import annotations
 
+import json
+import os
 from typing import Optional
 
+from . import patch
 from .contracts import Config, PipelineState
 from .strings import BLOCK_DE, CAVEATS, L
 
@@ -107,6 +110,22 @@ def _loss_section(state: PipelineState, config: Config) -> list[str]:
     return lines
 
 
+def _patch_section(state: PipelineState, config: Config) -> list[str]:
+    """The settings.json entry to append once the change is entered in the pump."""
+    patch_data, conflicts = patch.build(state, config)
+    if not patch_data and not conflicts:
+        return []
+    lines = [f"{L['patch_title']}:"]
+    if patch_data:
+        for line in json.dumps(patch_data, ensure_ascii=False, indent=2).splitlines():
+            lines.append(f"  {line}")
+        lines.append(f"  {L['patch_hint'].format(path=os.path.join(config.out_dir, state.window.as_of, 'settings_patch.json'))}")
+    for c in conflicts:
+        lines.append(f"  ! {c}")
+    lines.append("")
+    return lines
+
+
 def format_summary(state: PipelineState, config: Config) -> str:
     lines: list[str] = []
     w = state.window
@@ -159,20 +178,30 @@ def format_summary(state: PipelineState, config: Config) -> str:
     # Where the TIR is actually lost, and a verdict for every block
     lines.extend(_loss_section(state, config))
 
-    # Recommendations
+    # Recommendations, changes first: a run's one actionable item must not be
+    # buried among the "hold" proposals it is printed next to.
     rec = state.recommendation
     mode = L["mode_llm"] if config.use_llm else L["mode_rules"]
     lines.append(f"{L['recommendations']} ({mode}):")
     if rec.overall_narrative:
         lines.append(f"  {rec.overall_narrative}")
-    if not rec.proposals:
+    changes = [p for p in rec.proposals if p.direction in ("up", "down")]
+    holds = [p for p in rec.proposals if p.direction not in ("up", "down")]
+    if not changes:
         lines.append(f"  {L['no_recommendations']}")
-    for p in rec.proposals:
-        lines.extend(_proposal_lines(p, config))
+    else:
+        lines.append(f"  {L['apply_now']}:")
+        for p in changes:
+            lines.extend(_proposal_lines(p, config))
+    if holds:
+        lines.append(f"  {L['watch_only']}:")
+        for p in holds:
+            lines.extend(_proposal_lines(p, config))
     if rec.insufficient_data_blocks:
         blocks = ", ".join(_block_de(config, k) for k in rec.insufficient_data_blocks)
         lines.append(f"  {L['insufficient']}: {blocks}")
     lines.append("")
+    lines.extend(_patch_section(state, config))
 
     # Trend vs prior run
     prior = _prior(state)
