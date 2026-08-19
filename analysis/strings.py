@@ -19,6 +19,8 @@ L = {
     "dupes_dropped": "doppelte Zeilen entfernt",
     "missing_days": "Tage ohne Daten",
     "partial_days": "unvollständige Tage",
+    "last_day_partial": ("Letzter Tag nur bis {time} erfasst (Export mitten am Tag gezogen): "
+                         "Tageswerte für diesen Tag entsprechend unvollständig."),
     "thin_window": ("Abdeckung unter 80 %: alle Kennzahlen und Vorschläge sind entsprechend "
                     "unsicher. Fehlende Wochen als weiteren Export in ingest/ ergänzen."),
     "overall": "Gesamtwerte",

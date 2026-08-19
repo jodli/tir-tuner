@@ -69,6 +69,9 @@ re-run from a saved artifact:
 uv run python -m analysis stage glycemic --in runs/2026-07-30/stages/window.json
 uv run python -m analysis stage report   --in runs/2026-07-30/stages/clamp.json
 ```
+Only `load.json` and `window.json` carry the raw CGM series; later artifacts drop
+it and `stage` restores it from `window.json` in the same directory. Pass
+`--full-artifacts` to write it everywhere (about 7x the disk).
 
 ## settings.json
 Dated history of your configured schedules; latest `effective_from <= as_of`

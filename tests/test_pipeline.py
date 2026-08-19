@@ -79,3 +79,30 @@ def test_full_state_round_trips_through_json(sample_dir):
     assert back.snapshot.as_of == st.snapshot.as_of
     assert len(back.glycemic.per_block) == len(st.glycemic.per_block)
     assert [c.time for c in back.corrections.corrections] == [c.time for c in st.corrections.corrections]
+
+
+def test_stage_artifacts_skip_the_raw_dataset_but_stay_usable(tmp_path, sample_dir):
+    """The CGM series is stored twice, not 16 times, and `stage` still works."""
+    out = tmp_path / "runs"
+    main(["run", "--data", sample_dir, "--out", str(out),
+          "--settings", MISSING_SETTINGS, "--no-llm", "--no-charts"])
+    stages = out / "2026-07-30" / "stages"
+    assert json.loads((stages / "window.json").read_text())["dataset"] is not None
+    assert json.loads((stages / "clamp.json").read_text())["dataset"] is None
+    # No raw frames anywhere in the later artifact (the fixture is too small for a
+    # size comparison to mean anything; on real data this is 50 MB -> 8 MB a run).
+    assert "__dataframe__" not in (stages / "clamp.json").read_text()
+    # A later stage re-run still gets the dataset (restored from window.json).
+    rc = main(["stage", "glycemic", "--in", str(stages / "clamp.json"),
+               "--out", str(tmp_path / "gly.json"), "--run-dir", str(out)])
+    assert rc == 0
+    iso = PipelineState.from_json(json.loads((tmp_path / "gly.json").read_text()))
+    assert iso.glycemic.overall.n_readings > 0
+
+
+def test_full_artifacts_flag_keeps_the_dataset_everywhere(tmp_path, sample_dir):
+    out = tmp_path / "runs"
+    main(["run", "--data", sample_dir, "--out", str(out), "--settings", MISSING_SETTINGS,
+          "--no-llm", "--no-charts", "--full-artifacts"])
+    payload = json.loads((out / "2026-07-30" / "stages" / "clamp.json").read_text())
+    assert payload["dataset"] is not None

@@ -34,6 +34,15 @@ def _abbrev(items: list[str], limit: int = 4) -> str:
     return ", ".join(items[:limit]) + f" (+{len(items) - limit})"
 
 
+def _last_reading(state: PipelineState):
+    """Timestamp of the last CGM reading on the as_of day, if any."""
+    ds, w = state.dataset, state.window
+    if ds is None or w is None or len(ds.cgm) == 0:
+        return None
+    same_day = ds.cgm.loc[ds.cgm["time"].dt.date.astype(str) == w.as_of, "time"]
+    return same_day.max() if len(same_day) else None
+
+
 def _data_quality(state: PipelineState, config: Config) -> list[str]:
     """Coverage against the requested window, missing/partial days, provenance."""
     gly = state.glycemic
@@ -51,6 +60,11 @@ def _data_quality(state: PipelineState, config: Config) -> list[str]:
         lines.append(f"! {L['missing_days']} ({len(gly.missing_days)}): {_abbrev(gly.missing_days)}")
     if gly.partial_days:
         lines.append(f"! {L['partial_days']} ({len(gly.partial_days)}): {_abbrev(gly.partial_days)}")
+    # The export is usually taken mid-day, so the last day of the window is short
+    # and drags its per-day numbers down without saying so.
+    last = _last_reading(state)
+    if last is not None and last.strftime("%H:%M") < "23:00":
+        lines.append(f"! {L['last_day_partial'].format(time=last.strftime('%H:%M'))}")
     if cov is not None and cov < config.min_coverage_pct:
         lines.append(f"! {L['thin_window']}")
     amb = state.settings.ambiguous_blocks if state.settings else []

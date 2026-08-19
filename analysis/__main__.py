@@ -75,13 +75,23 @@ def _config_from_args(args) -> Config:
     )
 
 
+# The dataset (the raw CGM series) dominates a serialized state, so writing it
+# in all 16 artifacts stored the same ~40k readings 16 times: 50 MB per run of
+# de-identified health data. It is kept in the two artifacts that own it, and
+# `stage` restores it from window.json when a later artifact needs it.
+_DATASET_STAGES = ("load", "window")
+
+
 def cmd_run(args) -> int:
     config = _config_from_args(args)
     state = PipelineState()
     artifacts: list[tuple[str, dict]] = []
     for name, fn in STAGES:
         state = fn(state, config)
-        artifacts.append((name, state.to_json()))
+        payload = state.to_json()
+        if name not in _DATASET_STAGES and not args.full_artifacts:
+            payload = {**payload, "dataset": None}
+        artifacts.append((name, payload))
 
     as_of = state.window.as_of
     stages_dir = os.path.join(config.out_dir, as_of, "stages")
@@ -102,6 +112,18 @@ def cmd_run(args) -> int:
     return 0
 
 
+def _load_state(path: str) -> PipelineState:
+    """Read a stage artifact, restoring the dataset from window.json if slimmed."""
+    with open(path, encoding="utf-8") as f:
+        state = PipelineState.from_json(json.load(f))
+    if state.dataset is None:
+        sibling = os.path.join(os.path.dirname(path) or ".", "window.json")
+        if os.path.exists(sibling) and os.path.abspath(sibling) != os.path.abspath(path):
+            with open(sibling, encoding="utf-8") as f:
+                state.dataset = PipelineState.from_json(json.load(f)).dataset
+    return state
+
+
 def cmd_stage(args) -> int:
     config = _config_from_args(args)
     name = args.name
@@ -110,8 +132,7 @@ def cmd_stage(args) -> int:
         if not args.infile:
             print("stage report/charts requires --in", file=sys.stderr)
             return 2
-        with open(args.infile, encoding="utf-8") as f:
-            state = PipelineState.from_json(json.load(f))
+        state = _load_state(args.infile)
         if name == "report":
             report.print_summary(state, config)
         else:
@@ -129,8 +150,7 @@ def cmd_stage(args) -> int:
         if not args.infile:
             print(f"stage '{name}' requires --in <artifact.json>", file=sys.stderr)
             return 2
-        with open(args.infile, encoding="utf-8") as f:
-            state = PipelineState.from_json(json.load(f))
+        state = _load_state(args.infile)
 
     state = STAGE_MAP[name](state, config)
 
@@ -152,6 +172,8 @@ def _add_common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--weeks", type=int, default=4, help="rolling window length in weeks")
     p.add_argument("--no-llm", action="store_true", help="use the deterministic rule engine instead of BAML")
     p.add_argument("--no-charts", action="store_true", help="skip chart rendering")
+    p.add_argument("--full-artifacts", action="store_true",
+                   help="write the raw dataset into every stage artifact (large)")
 
 
 def build_parser() -> argparse.ArgumentParser:
