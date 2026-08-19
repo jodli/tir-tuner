@@ -36,28 +36,26 @@ def _repeat_streak(state: PipelineState, block_key: str,
     """(consecutive earlier runs proposing a CR change here, still unapplied).
 
     Walking back from the most recent run stops at the first run that did not
-    propose a change, so this counts a *standing* recommendation. "Unapplied"
-    means the configured CR has not moved since the oldest run in that streak,
-    which is what turned the breakfast advice into the same proposal four runs
-    running without anyone noticing it was the same one.
+    propose a change *and* at the run where the configured value last differed: a
+    setting change ends the story, so the count means "times proposed since the
+    last actual change". Everything counted therefore sits under today's setting,
+    which is what makes it standing, unapplied advice.
     """
     if state.trends is None:
         return 0, False
     streak = 0
-    oldest_configured: Optional[float] = None
     for ref in reversed(state.trends.prior):
+        ref_configured = ref.per_block_configured_cr.get(block_key)
+        if (configured_cr is not None and ref_configured is not None
+                and abs(ref_configured - configured_cr) > 1e-9):
+            break
         match = next((pr for pr in ref.proposals
                       if pr.block == block_key and pr.parameter == "CR"
                       and pr.direction in ("up", "down")), None)
         if match is None:
             break
         streak += 1
-        oldest_configured = ref.per_block_configured_cr.get(block_key, oldest_configured)
-    if not streak:
-        return 0, False
-    unapplied = (configured_cr is not None and oldest_configured is not None
-                 and abs(configured_cr - oldest_configured) < 1e-9)
-    return streak, unapplied
+    return streak, streak > 0 and configured_cr is not None
 
 
 def _gap_pct(effective: Optional[float], configured: Optional[float]) -> Optional[float]:

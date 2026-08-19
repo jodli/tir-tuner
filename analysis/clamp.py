@@ -91,9 +91,17 @@ def apply(raw: RecommendationSet, snapshot: AnalysisSnapshot, config: Config,
     demoted: set[str] = set()
     kept: list[Proposal] = []
 
+    known_blocks = {b.key for b in config.blocks}
     for p in raw.proposals:
         param = _norm_param(p.parameter)
         confidence = _norm_conf(p.confidence)
+        # The model occasionally answers with a *schedule* key (e.g. "00-24") or
+        # some other invented block. Those match no evidence, so drop them here
+        # rather than letting them surface as an unknown "block" in the report.
+        if p.block not in known_blocks:
+            audit.append(ClampAudit(p.block, param, "dropped", str(p.proposed_value), "–",
+                                    "unbekannter Analyse-Block"))
+            continue
         ev = ev_by_block.get(p.block)
         ce = corr_by_block.get(p.block)
         # The pump-schedule mapping is per parameter: CR and CF are programmed
@@ -172,7 +180,8 @@ def apply(raw: RecommendationSet, snapshot: AnalysisSnapshot, config: Config,
         ))
 
     kept_blocks = {p.block for p in kept}
-    insufficient = sorted((set(raw.insufficient_data_blocks) | demoted) - kept_blocks)
+    insufficient = sorted(((set(raw.insufficient_data_blocks) & known_blocks) | demoted)
+                          - kept_blocks)
     clamped = RecommendationSet(proposals=kept, overall_narrative=raw.overall_narrative,
                                 insufficient_data_blocks=insufficient)
     return clamped, audit

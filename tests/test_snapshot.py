@@ -139,8 +139,9 @@ def test_repeat_streak_counts_standing_advice_and_notices_it_is_unapplied():
                           current=ref("2026-08-26", 11.0))
     streak, unapplied = snapshot._repeat_streak(state, "06-11", 11.0)
     assert (streak, unapplied) == (2, True)
-    # Once the configured value moves, the streak is no longer "unapplied".
+    # Once the configured value moves, the earlier runs belong to the old setting:
+    # the count restarts instead of claiming the advice is still standing.
     streak, unapplied = snapshot._repeat_streak(state, "06-11", 12.0)
-    assert (streak, unapplied) == (2, False)
+    assert (streak, unapplied) == (0, False)
     # A block that was never proposed has no streak.
     assert snapshot._repeat_streak(state, "18-22", 11.0) == (0, False)

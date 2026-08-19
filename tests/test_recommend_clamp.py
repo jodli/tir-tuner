@@ -180,3 +180,17 @@ def test_clamp_attaches_the_pump_schedule_block_per_parameter():
     assert by_param["CR"].also_affects == ["22-24"]
     assert by_param["CF"].schedule_block == "00-24"
     assert by_param["CF"].also_affects == ["00-06", "06-11"]
+
+
+def test_unknown_block_keys_never_reach_the_report():
+    """The model sometimes answers with a schedule key such as "00-24"."""
+    snap = _snapshot([_block(block="06-11", configured_cr=10.0, n_clean_meals=10,
+                             pct_post_meal_hypo=60.0)])
+    raw = RecommendationSet(
+        proposals=[Proposal(block="00-24", parameter="CF", direction="up", current_value=75.0,
+                            proposed_value=80.0, confidence="low", rationale="", caveats="")],
+        overall_narrative="", insufficient_data_blocks=["00-24", "06-11"])
+    clamped, audit = clamp.apply(raw, snap, Config())
+    assert clamped.proposals == []
+    assert clamped.insufficient_data_blocks == ["06-11"]      # "00-24" filtered out
+    assert any(a.reason == "unbekannter Analyse-Block" for a in audit)
