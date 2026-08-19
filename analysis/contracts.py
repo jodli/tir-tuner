@@ -557,6 +557,10 @@ class BlockEvidence(JsonMixin):
     schedule_block: Optional[str] = None       # configured schedule key
     schedule_shared_with: list[str] = field(default_factory=list)   # other blocks it covers
     configured_cr_ambiguous: bool = False      # block straddles two schedule values
+    # Repeated advice: consecutive earlier runs that proposed the same CR change
+    # for this block, and whether the configured value stayed put through them.
+    n_times_proposed_before: int = 0
+    unapplied_streak: bool = False
     # Variability + data quality
     cv: Optional[float] = None
     tbr_54: Optional[float] = None
@@ -694,6 +698,15 @@ class BlockVerdict(JsonMixin):
 # Stage 11: history / trends
 # ---------------------------------------------------------------------------
 @dataclass
+class ProposalRef(JsonMixin):
+    """What a run proposed, compact enough to keep in history.json."""
+    block: str
+    parameter: str
+    direction: str
+    proposed_value: Optional[float] = None
+
+
+@dataclass
 class RunRef(JsonMixin):
     """Compact per-run record kept in runs/history.json (aggregate only, no raw CGM)."""
     as_of: str
@@ -703,6 +716,9 @@ class RunRef(JsonMixin):
     # Configured CR in effect at this run, so the multi-run series can show the
     # setting alongside its effect. Defaulted for backward-compatible history.json.
     per_block_configured_cr: dict[str, float] = field(default_factory=dict)
+    # What this run proposed, so a later run can see advice that keeps being
+    # repeated and never applied instead of re-deriving it as if it were new.
+    proposals: list[ProposalRef] = field(default_factory=list)
 
 
 @dataclass

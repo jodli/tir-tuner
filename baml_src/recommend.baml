@@ -83,6 +83,11 @@ function RecommendSettings(snapshot_json: string) -> RecommendationSet {
           das in caveats. configured_cr_ambiguous heißt: der Block liegt in zwei
           Pumpenblöcken mit unterschiedlichem CR, es gibt dort kein eindeutiges
           konfiguriertes CR.
+        - Wiederholung: n_times_proposed_before zählt aufeinanderfolgende frühere
+          Läufe mit demselben CR-Vorschlag für diesen Block; unapplied_streak
+          heißt, dass die konfigurierte Zahl in dieser Zeit unverändert blieb. Dann
+          ist der Vorschlag NICHT neu: wiederhole ihn unverändert (nicht weiter
+          hochschrauben) und weise darauf hin, dass er noch offen ist.
         - Ursache-Wirkung: config_last_change (wann/worauf zuletzt geändert),
           backtest_outcome (hat die letzte Empfehlung geholfen?) und prior_runs
           (Mehr-Lauf-Verlauf), um auf frühere Änderungen zu reagieren.

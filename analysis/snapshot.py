@@ -31,6 +31,35 @@ UNAVAILABLE_SIGNALS = [
 ]
 
 
+def _repeat_streak(state: PipelineState, block_key: str,
+                   configured_cr: Optional[float]) -> tuple[int, bool]:
+    """(consecutive earlier runs proposing a CR change here, still unapplied).
+
+    Walking back from the most recent run stops at the first run that did not
+    propose a change, so this counts a *standing* recommendation. "Unapplied"
+    means the configured CR has not moved since the oldest run in that streak,
+    which is what turned the breakfast advice into the same proposal four runs
+    running without anyone noticing it was the same one.
+    """
+    if state.trends is None:
+        return 0, False
+    streak = 0
+    oldest_configured: Optional[float] = None
+    for ref in reversed(state.trends.prior):
+        match = next((pr for pr in ref.proposals
+                      if pr.block == block_key and pr.parameter == "CR"
+                      and pr.direction in ("up", "down")), None)
+        if match is None:
+            break
+        streak += 1
+        oldest_configured = ref.per_block_configured_cr.get(block_key, oldest_configured)
+    if not streak:
+        return 0, False
+    unapplied = (configured_cr is not None and oldest_configured is not None
+                 and abs(configured_cr - oldest_configured) < 1e-9)
+    return streak, unapplied
+
+
 def _gap_pct(effective: Optional[float], configured: Optional[float]) -> Optional[float]:
     if effective is None or configured in (None, 0):
         return None
@@ -79,6 +108,7 @@ def build_snapshot(state: PipelineState, config: Config, prior) -> AnalysisSnaps
         bt = backtest_by_block.get(b.key)
         # Dawn only sensibly applies to overnight / early-morning blocks.
         dawn_here = dawn if (dawn is not None and b.start_hour < 11) else None
+        streak, unapplied = _repeat_streak(state, b.key, configured_cr)
 
         blocks.append(BlockEvidence(
             block=b.key,
@@ -96,6 +126,8 @@ def build_snapshot(state: PipelineState, config: Config, prior) -> AnalysisSnaps
             schedule_shared_with=[k for k in settings.schedule_shared_with.get(
                 settings.schedule_block.get(b.key, ""), []) if k != b.key],
             configured_cr_ambiguous=b.key in settings.ambiguous_blocks,
+            n_times_proposed_before=streak,
+            unapplied_streak=unapplied,
             tir=gb.tir,
             tbr_70=gb.tbr_70,
             tar_180=gb.tar_180,

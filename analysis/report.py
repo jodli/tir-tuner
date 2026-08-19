@@ -64,12 +64,17 @@ _VERDICT_ARROW = {"change": "→ ändern", "watch": "beobachten",
                   "no_cr_lever": "kein CR-Hebel", "ok": "ok"}
 
 
-def _proposal_lines(p, config: Config) -> list[str]:
+def _proposal_lines(p, config: Config, ev=None) -> list[str]:
     """One proposal: the change, where to enter it, the reasoning, the caveat."""
     arrow = {"up": "↑", "down": "↓", "hold": "→"}.get(p.direction, "→")
+    repeat = ""
+    if ev is not None and ev.n_times_proposed_before and p.direction in ("up", "down"):
+        nth = ev.n_times_proposed_before + 1
+        repeat = f"  [{L['nth_time'].format(n=nth)}"
+        repeat += f", {L['still_unapplied']}]" if ev.unapplied_streak else "]"
     out = [f"  • [{p.parameter} {_block_de(config, p.block)}] "
            f"{_fmt(p.current_value)} {arrow} {_fmt(p.proposed_value)}  "
-           f"({L['confidence']}: {p.confidence})"]
+           f"({L['confidence']}: {p.confidence}){repeat}"]
     if p.schedule_block and p.direction in ("up", "down"):
         where = f"      {L['enter_in']}: {p.schedule_block}"
         if p.also_affects:
@@ -192,11 +197,11 @@ def format_summary(state: PipelineState, config: Config) -> str:
     else:
         lines.append(f"  {L['apply_now']}:")
         for p in changes:
-            lines.extend(_proposal_lines(p, config))
+            lines.extend(_proposal_lines(p, config, ev_by_block.get(p.block)))
     if holds:
         lines.append(f"  {L['watch_only']}:")
         for p in holds:
-            lines.extend(_proposal_lines(p, config))
+            lines.extend(_proposal_lines(p, config, ev_by_block.get(p.block)))
     if rec.insufficient_data_blocks:
         blocks = ", ".join(_block_de(config, k) for k in rec.insufficient_data_blocks)
         lines.append(f"  {L['insufficient']}: {blocks}")

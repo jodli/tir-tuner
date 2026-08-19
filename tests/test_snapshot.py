@@ -20,6 +20,7 @@ from analysis.contracts import (
     Trends,
     WindowInfo,
 )
+from analysis import snapshot
 from analysis.snapshot import build_snapshot
 
 
@@ -118,3 +119,28 @@ def test_snapshot_joins_robust_confounder_and_backtest_evidence():
     assert any(f.startswith("no_delivery:06-11=") for f in snap.active_flags)
     assert "exercise" in snap.unavailable_signals
     assert [r.as_of for r in snap.prior_runs] == ["2026-07-16", "2026-07-23"]
+
+
+def test_repeat_streak_counts_standing_advice_and_notices_it_is_unapplied():
+    """Same CR proposal in the last two runs, configured value never moved."""
+    from analysis.contracts import ProposalRef, RunRef, Trends
+
+    def ref(as_of, configured, direction=None):
+        props = ([ProposalRef(block="06-11", parameter="CR", direction=direction,
+                              proposed_value=12.0)] if direction else [])
+        return RunRef(as_of=as_of, overall_tir=70.0, per_block_effective_cr={},
+                      per_block_tir={}, per_block_configured_cr={"06-11": configured},
+                      proposals=props)
+
+    state = PipelineState()
+    state.trends = Trends(prior=[ref("2026-08-05", 11.0),                 # no proposal
+                                 ref("2026-08-12", 11.0, "up"),
+                                 ref("2026-08-19", 11.0, "up")],
+                          current=ref("2026-08-26", 11.0))
+    streak, unapplied = snapshot._repeat_streak(state, "06-11", 11.0)
+    assert (streak, unapplied) == (2, True)
+    # Once the configured value moves, the streak is no longer "unapplied".
+    streak, unapplied = snapshot._repeat_streak(state, "06-11", 12.0)
+    assert (streak, unapplied) == (2, False)
+    # A block that was never proposed has no streak.
+    assert snapshot._repeat_streak(state, "18-22", 11.0) == (0, False)

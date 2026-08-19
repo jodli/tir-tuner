@@ -59,6 +59,8 @@ L = {
     "dom_low": "tief",
     "dom_mixed": "beides",
     "recommendations": "Empfehlungen",
+    "nth_time": "{n}. Mal vorgeschlagen",
+    "still_unapplied": "bisher nicht umgesetzt",
     "apply_now": "Jetzt umsetzen",
     "watch_only": "Nur beobachten (keine Änderung)",
     "patch_title": "settings.json ergänzen (nach dem Eintragen in der Pumpe)",

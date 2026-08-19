@@ -19,6 +19,7 @@ from typing import Optional
 from .contracts import (
     Config,
     PipelineState,
+    ProposalRef,
     RunRef,
     to_jsonable,
 )
@@ -45,6 +46,16 @@ def persist_run(state: PipelineState, config: Config, generated_at: Optional[str
         raise ValueError("persist_run requires state.trends and state.window")
     as_of = state.window.as_of
     generated_at = generated_at or dt.datetime.now().isoformat(timespec="seconds")
+
+    # Record what this run proposed on its own ref, so a later run can tell
+    # repeated advice from a fresh finding. The recommendation only exists this
+    # late in the pipeline, hence the assignment here rather than in `trends`.
+    if state.recommendation is not None:
+        state.trends.current.proposals = [
+            ProposalRef(block=p.block, parameter=p.parameter, direction=p.direction,
+                        proposed_value=p.proposed_value)
+            for p in state.recommendation.proposals
+        ]
 
     # Update the compact history: replace any existing entry for this as_of.
     refs = [r for r in load_refs(config) if r.as_of != as_of]
