@@ -10,6 +10,7 @@ stage (:mod:`analysis.clamp`); this stage never enforces numeric limits itself.
 from __future__ import annotations
 
 import json
+import os
 
 from .contracts import (
     AnalysisSnapshot,
@@ -27,6 +28,11 @@ def recommend(snapshot: AnalysisSnapshot, config: Config) -> RecommendationSet:
 
 # --- LLM path ------------------------------------------------------------
 def _llm(snapshot: AnalysisSnapshot) -> RecommendationSet:
+    # BAML logs at INFO by default, which prints the whole prompt, the whole
+    # snapshot (i.e. the health data) and the raw reply to stdout: ~215 lines
+    # ahead of the report, and a copy of the data in every terminal log. Quiet by
+    # default; export BAML_LOG=info to get the trace back for debugging.
+    os.environ.setdefault("BAML_LOG", "warn")
     from baml_client.sync_client import b  # imported lazily: needs generated client + network
 
     res = b.RecommendSettings(json.dumps(snapshot.to_json(), ensure_ascii=False))
