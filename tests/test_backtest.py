@@ -68,3 +68,32 @@ def test_backtest_run_reads_prior_result_from_disk(tmp_path):
     st = backtest.run(st, Config(out_dir=str(out)))
     assert st.backtest.prior_run_date == "2026-07-23"
     assert st.backtest.per_block["06-11"].outcome == "improved"
+
+
+def test_hold_proposals_are_not_backtested():
+    """Nothing was advised, so a TIR move is not an outcome of advice."""
+    prior = {
+        "recommendation": {"proposals": [
+            {"block": "06-11", "parameter": "CR", "direction": "hold"},
+            {"block": "18-22", "parameter": "CR", "direction": "up"},
+        ]},
+        "snapshot": {"blocks": [{"block": "06-11", "tir": 70.0}, {"block": "18-22", "tir": 80.0}]},
+        "settings": {"available": True, "carb_ratio": {"06-11": 10.0, "18-22": 10.0}},
+    }
+    res = backtest.analyze(prior, "2026-07-23", _gly({"06-11": 60.0, "18-22": 84.0}),
+                           _settings({"06-11": 10.0, "18-22": 11.0}), Config())
+    assert set(res.per_block) == {"18-22"}
+
+
+def test_cf_application_is_resolved_from_the_cf_schedule():
+    prior = {
+        "recommendation": {"proposals": [
+            {"block": "00-06", "parameter": "CF", "direction": "up"}]},
+        "snapshot": {"blocks": [{"block": "00-06", "tir": 80.0}]},
+        "settings": {"available": True, "carb_ratio": {"00-06": 17.0},
+                     "correction_factor": {"00-24": 75.0}},
+    }
+    settings = _settings({"00-06": 17.0})
+    settings.correction_factor = {"00-24": 82.5}
+    res = backtest.analyze(prior, "2026-07-23", _gly({"00-06": 85.0}), settings, Config())
+    assert res.per_block["00-06"].applied is True       # was None before: CR only

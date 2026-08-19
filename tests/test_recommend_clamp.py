@@ -138,7 +138,7 @@ def test_clamp_caps_confidence_when_rule_disagrees():
     clamped, audit = clamp.apply(raw, snap, Config(), rule)
     p = clamped.proposals[0]
     assert p.confidence == "low"
-    assert any(a.field == "confidence" and a.reason.startswith("rule-engine") for a in audit)
+    assert any(a.field == "confidence" and a.reason.startswith("Gegenprüfung") for a in audit)
 
 
 def test_clamp_keeps_confidence_when_rule_agrees():

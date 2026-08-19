@@ -113,13 +113,17 @@ def apply(raw: RecommendationSet, snapshot: AnalysisSnapshot, config: Config,
 
         if n < gate:
             demoted.add(p.block)
-            audit.append(ClampAudit(p.block, param, "dropped", str(p.proposed_value), "None",
-                                    f"sample n={n} below gate {gate}"))
+            # Show what was dropped, not "None -> None": the audit line is the
+            # only place the discarded number is visible.
+            original = (f"{p.current_value} → {p.proposed_value}"
+                        if p.proposed_value is not None else str(p.direction))
+            audit.append(ClampAudit(p.block, param, "dropped", original, "–",
+                                    f"Stichprobe n={n} unter Grenze {gate}"))
             continue
 
         if param == "CF" and confidence == "high":
             audit.append(ClampAudit(p.block, param, "confidence", "high", "medium",
-                                    "CF is low-confidence on a closed loop"))
+                                    "CF ist im Closed Loop grundsätzlich unsicher"))
             confidence = "medium"
 
         current = p.current_value if p.current_value is not None else base
@@ -133,7 +137,7 @@ def apply(raw: RecommendationSet, snapshot: AnalysisSnapshot, config: Config,
             if abs(clamped - proposed) > _EPS:
                 audit.append(ClampAudit(p.block, param, "proposed_value", str(round(proposed, 3)),
                                         str(round(clamped, 3)),
-                                        f"exceeded +/-{int(config.max_change_pct * 100)}%"))
+                                        f"über der Grenze von +/-{int(config.max_change_pct * 100)} %"))
             proposed = clamped
 
         current = round(current, 2) if current is not None else None
@@ -146,7 +150,7 @@ def apply(raw: RecommendationSet, snapshot: AnalysisSnapshot, config: Config,
             expected = _expected_direction(ev, config)
             if expected is not None and direction != expected:
                 audit.append(ClampAudit(p.block, param, "direction", direction, "hold",
-                                        "contradicts evidence (post-meal hypo / peak pattern)"))
+                                        "widerspricht der Evidenz (Hypo-Ereignisse / Anstiegsmuster)"))
                 proposed, direction = current, "hold"
 
         # (4) Rule cross-check: cap confidence when the deterministic engine disagrees.
@@ -154,7 +158,7 @@ def apply(raw: RecommendationSet, snapshot: AnalysisSnapshot, config: Config,
         disagrees = (rdir != direction) if rdir is not None else (direction != "hold")
         if rule is not None and disagrees and confidence != "low":
             audit.append(ClampAudit(p.block, param, "confidence", confidence, "low",
-                                    "rule-engine cross-check disagreed"))
+                                    "Gegenprüfung durch das Regelwerk widerspricht"))
             confidence = "low"
 
         kept.append(Proposal(

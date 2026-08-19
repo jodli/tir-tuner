@@ -244,7 +244,9 @@ def format_summary(state: PipelineState, config: Config) -> str:
     if state.clamp_audit:
         lines.append(f"{L['clamp_note']}:")
         for a in state.clamp_audit:
-            lines.append(f"  - [{a.parameter} {a.block}] {a.field}: {a.original} → {a.adjusted} ({a.reason})")
+            lines.append(f"  - [{a.parameter} {_block_de(config, a.block)}] "
+                         f"{L.get('clamp_' + a.field, a.field)}: "
+                         f"{a.original} → {a.adjusted} ({a.reason})")
         lines.append("")
 
     # Caveats

@@ -2,10 +2,14 @@
 
 Reads the most recent prior ``runs/<date>/result.json`` (which already stores the
 clamped recommendation, the snapshot the model saw, and the resolved settings) and,
-per block that had a CR/CF proposal, reports whether the configured value actually
-moved that way (``applied``) and whether block TIR improved since
+per block that had an actual CR/CF *change* proposed, reports whether the
+configured value moved that way (``applied``) and whether block TIR improved since
 (``outcome``). This closes the loop: the reasoning step can see that its last
 advice helped, did nothing, or was never applied, and escalate / hold / reverse.
+
+Blocks whose last proposal was a ``hold`` are skipped: nothing was advised there,
+so a TIR change is not an outcome of advice and reporting it as "worsened" only
+looked like a failed recommendation.
 
 Outcome is suggestive, not causal: everything the confounder stages flag still
 applies. Runs before the snapshot so the result becomes evidence in it.
@@ -28,16 +32,21 @@ from .settings import value_for_block
 from .trends import most_recent_prior
 
 
+_SCHEDULE_KEY = {"CR": "carb_ratio", "CF": "correction_factor"}
+
+
 def _applied(param, direction, block_key, prior_settings: dict, settings: ResolvedSettings, config: Config):
-    if param != "CR" or direction not in ("up", "down"):
+    """Did the configured value actually move the proposed way? CR *and* CF."""
+    key = _SCHEDULE_KEY.get(param)
+    if key is None or direction not in ("up", "down"):
         return None
     if not prior_settings.get("available") or not settings.available:
         return None
     tb = next((b for b in config.blocks if b.key == block_key), None)
     if tb is None:
         return None
-    prev = value_for_block(prior_settings.get("carb_ratio", {}), tb)
-    cur = value_for_block(settings.carb_ratio, tb)
+    prev = value_for_block(prior_settings.get(key, {}), tb)
+    cur = value_for_block(getattr(settings, key), tb)
     if prev is None or cur is None:
         return None
     return cur < prev - 1e-9 if direction == "down" else cur > prev + 1e-9
@@ -65,7 +74,15 @@ def analyze(prior_result: Optional[dict], prior_date: Optional[str],
 
     per_block: dict[str, BlockBacktest] = {}
     for p in proposals:
+        # A "hold" was not advice, so its block TIR moving is not an outcome of
+        # anything: reporting it as "worsened" read like a failed recommendation.
+        if p.get("direction") not in ("up", "down"):
+            continue
         key = p.get("block")
+        # One entry per block: a CR change is the stronger lever, so it wins when
+        # the same block also carried a CF change.
+        if key in per_block and per_block[key].parameter == "CR":
+            continue
         tir_before = (prior_blocks.get(key) or {}).get("tir")
         tir_after = glycemic.per_block[key].tir if key in glycemic.per_block else None
         per_block[key] = BlockBacktest(
