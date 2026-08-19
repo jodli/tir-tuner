@@ -71,6 +71,7 @@ def persist_run(state: PipelineState, config: Config, generated_at: Optional[str
         "recommendation_raw": to_jsonable(state.recommendation_raw),
         "recommendation": to_jsonable(state.recommendation),
         "clamp_audit": to_jsonable(state.clamp_audit),
+        "verdicts": to_jsonable(state.verdicts),
         "trends": to_jsonable(state.trends),
     }
     run_dir = os.path.join(config.out_dir, as_of)

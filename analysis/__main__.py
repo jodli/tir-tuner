@@ -34,6 +34,7 @@ from . import (
     snapshot,
     stats,
     trends,
+    verdicts,
     window,
 )
 from .contracts import Config, PipelineState
@@ -55,6 +56,7 @@ STAGES = [
     ("snapshot", snapshot.run),
     ("recommend", recommend.run),
     ("clamp", clamp.run),
+    ("verdicts", verdicts.run),
     ("history", history.run),
 ]
 STAGE_MAP = dict(STAGES)

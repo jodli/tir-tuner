@@ -53,6 +53,38 @@ def _data_quality(state: PipelineState, config: Config) -> list[str]:
     return lines
 
 
+_VERDICT_ARROW = {"change": "→ ändern", "watch": "beobachten",
+                  "no_cr_lever": "kein CR-Hebel", "ok": "ok"}
+
+
+def _loss_section(state: PipelineState, config: Config) -> list[str]:
+    """TIR loss per block, worst first, each with its verdict."""
+    if not state.verdicts:
+        return []
+    lines = [f"{L['loss_title']}:"]
+    header = (f"  {L['col_block']:<12}{L['col_share']:>8}{L['col_tir']:>7}"
+              f"{L['col_loss_pp']:>9}{L['col_loss_share']:>9}{L['col_dominant']:>9}"
+              f"  {L['col_verdict']}")
+    lines.append(header)
+    lines.append("  " + "-" * (len(header) - 2))
+    dominant_de = {"high": L["dom_high"], "low": L["dom_low"], "mixed": L["dom_mixed"]}
+    ranked = sorted(state.verdicts, key=lambda v: v.loss_pp or 0.0, reverse=True)
+    for v in ranked:
+        lines.append(
+            f"  {v.label:<12}{_fmt(v.share_pct, ' %'):>8}{_fmt(v.tir):>7}"
+            f"{_fmt(v.loss_pp):>9}{_fmt(v.loss_share_pct, ' %'):>9}"
+            f"{dominant_de.get(v.dominant or '', '–'):>9}"
+            f"  {_VERDICT_ARROW.get(v.verdict, v.verdict)}"
+        )
+    # "change" blocks are spelled out under Empfehlungen right below, so only the
+    # blocks that would otherwise produce no output at all get a line here.
+    for v in ranked:
+        if v.verdict in ("watch", "no_cr_lever"):
+            lines.append(f"  • {v.label}: {v.note}")
+    lines.append("")
+    return lines
+
+
 def format_summary(state: PipelineState, config: Config) -> str:
     lines: list[str] = []
     w = state.window
@@ -101,6 +133,9 @@ def format_summary(state: PipelineState, config: Config) -> str:
         )
     lines.append(f"  {L['hypo_event_legend'].format(depth=int(config.hypo_event_min_depth), dur=int(config.hypo_event_min_dur_min), low=int(config.tir_low))}")
     lines.append("")
+
+    # Where the TIR is actually lost, and a verdict for every block
+    lines.extend(_loss_section(state, config))
 
     # Recommendations
     rec = state.recommendation

@@ -223,6 +223,9 @@ class Config:
     bootstrap_seed: int = 0            # fixed -> deterministic / testable
     min_ci_samples: int = 3
 
+    # Per-block verdicts
+    tir_target_pct: float = 70.0       # a block at or above this counts as fine
+
     # History / backtest
     history_series_len: int = 6        # prior runs surfaced to the reasoning step
     backtest_tir_epsilon: float = 3.0  # pp change counted as improved/worsened
@@ -635,7 +638,36 @@ class ClampAudit(JsonMixin):
 
 
 # ---------------------------------------------------------------------------
-# Stage 10: history / trends
+# Stage 10: per-block verdicts + TIR-loss attribution
+# ---------------------------------------------------------------------------
+@dataclass
+class BlockVerdict(JsonMixin):
+    """Where a block's TIR loss sits, and what (if anything) to do about it.
+
+    ``loss_pp`` is the block's contribution to the *overall* TIR shortfall:
+    time share of the window times its out-of-range share. Ranking by it stops a
+    2-hour block from looking as important as a 6-hour one, and it is what makes
+    "the worst block got no advice at all" visible.
+    """
+    block: str
+    label: str                          # German block name
+    share_pct: Optional[float]          # share of window readings
+    tir: Optional[float]
+    tbr_70: Optional[float]
+    tar_180: Optional[float]
+    loss_pp: Optional[float]            # pp of overall TIR lost in this block
+    loss_share_pct: Optional[float]     # share of the total loss
+    dominant: Optional[str]             # "high" | "low" | "mixed"
+    verdict: str                        # "change" | "watch" | "no_cr_lever" | "ok"
+    note: str                           # GERMAN, one line
+    parameter: Optional[str] = None     # set when a proposal exists
+    direction: Optional[str] = None
+    current_value: Optional[float] = None
+    proposed_value: Optional[float] = None
+
+
+# ---------------------------------------------------------------------------
+# Stage 11: history / trends
 # ---------------------------------------------------------------------------
 @dataclass
 class RunRef(JsonMixin):
@@ -675,4 +707,5 @@ class PipelineState(JsonMixin):
     recommendation_rule: Optional[RecommendationSet] = None   # rule-engine cross-check for the clamp
     recommendation: Optional[RecommendationSet] = None       # after clamp
     clamp_audit: list[ClampAudit] = field(default_factory=list)
+    verdicts: list[BlockVerdict] = field(default_factory=list)   # after verdicts
     trends: Optional[Trends] = None                      # after history
