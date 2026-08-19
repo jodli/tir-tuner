@@ -249,6 +249,10 @@ class Dataset(JsonMixin):
     daily_totals: pd.DataFrame
     manual_bg: pd.DataFrame
     source_range: str = ""
+    # Every CSV that was read, relative to the data dir. A weekly export cadence
+    # means many overlapping files, so the count is part of the run's provenance.
+    source_files: list[str] = field(default_factory=list)
+    n_duplicate_rows: int = 0     # rows dropped because two exports carried them
 
 
 @dataclass

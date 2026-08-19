@@ -28,10 +28,18 @@ cp settings.example.json settings.json   # then edit with your real schedules
 
 ## De-identify first
 The raw export contains your name. Strip it into `ingest/` (analysis only reads
-from there):
+from there). Use one subdirectory per export, named after its end date:
 ```sh
-python strip_pii.py path/to/raw_export.zip ingest
+python strip_pii.py path/to/raw_export.zip ingest/2026-08-19
 ```
+
+Glooko lets you export at most two weeks at a time, and it splits tables over
+20000 rows into `cgm_data_2.csv`, `_3.csv`, ... The loader therefore reads *every*
+matching CSV at any depth under the data dir and merges them, de-duplicating rows
+that several exports carry. So the recommended cadence is: export two weeks every
+week (one week of overlap), drop each into its own `ingest/<end-date>/`, and a
+4-week window is assembled from them automatically. Where two exports disagree on
+a timestamp, the newer export wins.
 
 ## Run
 ```sh

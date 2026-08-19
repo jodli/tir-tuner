@@ -1,9 +1,14 @@
 import math
+import os
 
 import pandas as pd
 
 from analysis import loaders
 from analysis.contracts import Config
+
+from conftest import FIXTURES
+
+WEEKLY = os.path.join(FIXTURES, "weekly_exports")
 
 
 def test_source_range_from_banner(sample_config):
@@ -59,6 +64,29 @@ def test_empty_and_missing_files_yield_typed_empty_frames(empty_dir):
     assert list(ds.cgm.columns) == ["time", "mg_dl"]
     assert "total_units" in ds.bolus.columns
     assert "delivered_u" in ds.basal.columns
+
+
+def test_split_files_and_overlapping_exports_are_merged():
+    """Glooko's ``_2`` split file is read, and weekly exports merge + de-duplicate."""
+    ds = loaders.load_dataset(Config(data_dir=WEEKLY))
+    times = [t.isoformat(sep=" ") for t in ds.cgm["time"]]
+    # 14.07 comes only from cgm_data_2.csv; 16.07 only from the later export.
+    assert times == ["2026-07-14 08:00:00", "2026-07-14 08:01:00",
+                     "2026-07-15 08:00:00", "2026-07-15 08:01:00",
+                     "2026-07-16 08:00:00"]
+    # The overlapping week is not double counted, and where the two exports
+    # disagree on a timestamp the newer export wins (131, not 121).
+    assert list(ds.cgm["mg_dl"]) == [100.0, 101.0, 120.0, 131.0, 140.0]
+    assert ds.n_duplicate_rows == 4          # 2 CGM rows + 2 bolus rows
+    assert len(ds.source_files) == 5          # 3 CGM files + 2 bolus files
+    assert ds.source_range == "14.07.2026 - 16.07.2026 (2 Exporte)"
+
+
+def test_two_boluses_in_the_same_minute_both_survive_dedupe():
+    ds = loaders.load_dataset(Config(data_dir=WEEKLY))
+    same_minute = ds.bolus[ds.bolus["time"] == pd.Timestamp("2026-07-15 08:00")]
+    assert sorted(same_minute["kind"]) == ["correction", "meal"]
+    assert len(ds.bolus) == 3
 
 
 def test_dataset_round_trips_through_json(sample_config):
