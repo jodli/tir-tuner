@@ -62,8 +62,8 @@ both what to type into the pump and what to append to `settings.json` afterwards
 
 ## Stages and isolation
 `load → window → glycemic → meals → corrections → settings → iob → confounders →
-trends → stats → backtest → snapshot → recommend → clamp → history`, then report
-+ charts. Each stage is a pure `run(state, config) -> state`, so any stage can be
+trends → stats → backtest → snapshot → recommend → clamp → verdicts → history`,
+then report + charts. Each stage is a pure `run(state, config) -> state`, so any stage can be
 re-run from a saved artifact:
 ```sh
 uv run python -m analysis stage glycemic --in runs/2026-07-30/stages/window.json
@@ -78,6 +78,27 @@ Dated history of your configured schedules; latest `effective_from <= as_of`
 wins. Block keys are `HH-HH` (or coarse like `00-24`). CR = g/unit, CF = mg/dl
 per unit. Optional `insulin_action_hours` sets the duration of insulin action for
 IOB (defaults to 2). See `settings.example.json`. This file is git-ignored.
+
+Keep the block boundaries aligned with the analysis blocks (`00-06`, `06-11`,
+`11-15`, `15-18`, `18-22`, `22-24`). An analysis block that straddles two
+schedule entries with different values has no single configured value: the report
+says so and drops the comparison for that block rather than picking one. Where a
+schedule entry spans several analysis blocks, the report names the other blocks a
+change would also affect.
+
+## Reading the report
+- `Datenabdeckung` is measured against the *requested* window, and missing or
+  partial days are listed. A thin window makes every number below it weaker.
+- `Hypo-E.` counts meals with a real hypo event (at least 15 min below 70, nadir
+  at least 5 mg/dl under); `Dips` counts any brief excursion. Compare both with
+  the `<70` column: many dips at a low TBR means short excursions, not too much
+  meal insulin.
+- `Wo TIR verloren geht` weights each block's out-of-range share by its time
+  share, so it ranks blocks by pp of the overall shortfall. Every block gets a
+  verdict, including "problem block, no CR lever" with the lever to check instead.
+- Recommendations are split into `Jetzt umsetzen` and `Nur beobachten`, each
+  saying which pump block to enter it in, and a standing proposal is marked with
+  how many runs it has been open.
 
 ## Tests
 ```sh
