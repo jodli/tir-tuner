@@ -1,3 +1,5 @@
+import dataclasses
+
 import pandas as pd
 
 from analysis.contracts import Config
@@ -27,6 +29,14 @@ def test_as_of_defaults_to_last_cgm_day():
     ]))
     _, info = apply_window(ds, Config(as_of=None, weeks=4))
     assert info.as_of == "2026-07-30"
+
+
+def test_provenance_survives_the_window():
+    ds = make_dataset(cgm_df([("2026-07-30 08:00", 100)]))
+    ds = dataclasses.replace(ds, source_files=["2026-07-30/cgm_data_1.csv"], n_duplicate_rows=7)
+    windowed, _ = apply_window(ds, Config(as_of="2026-07-30", weeks=4))
+    assert windowed.source_files == ["2026-07-30/cgm_data_1.csv"]
+    assert windowed.n_duplicate_rows == 7
 
 
 def test_empty_dataset_without_as_of_raises():

@@ -40,6 +40,9 @@ def apply_window(ds: Dataset, config: Config) -> tuple[Dataset, WindowInfo]:
         daily_totals=_filter(ds.daily_totals, start, end),
         manual_bg=_filter(ds.manual_bg, start, end),
         source_range=ds.source_range,
+        # Provenance describes the load, not the window, so it must survive here.
+        source_files=list(ds.source_files),
+        n_duplicate_rows=ds.n_duplicate_rows,
     )
     info = WindowInfo(
         as_of=as_of.isoformat(),
