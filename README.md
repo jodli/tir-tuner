@@ -86,6 +86,15 @@ says so and drops the comparison for that block rather than picking one. Where a
 schedule entry spans several analysis blocks, the report names the other blocks a
 change would also affect.
 
+## HTML report
+```sh
+uv run python make_html_report.py            # writes runs/report.html
+```
+One self-contained file (charts embedded as base64, no external assets, light and
+dark): the newest run in detail plus every run's metrics and LLM narrative, so the
+arc across weeks is readable. Useful for the care-team appointment. It contains
+your glucose data, so treat it like the export.
+
 ## Reading the report
 - `Datenabdeckung` is measured against the *requested* window, and missing or
   partial days are listed. A thin window makes every number below it weaker.
