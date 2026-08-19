@@ -168,6 +168,11 @@ class Config:
     as_of: Optional[str] = None        # ISO date; default = last CGM day
     weeks: int = 4
 
+    # Data quality: coverage is measured against the requested window, so these
+    # gate how loudly the report complains about a thin one.
+    min_coverage_pct: float = 80.0     # below this the window is called thin
+    partial_day_pct: float = 50.0      # a day below this share of readings is partial
+
     # Glycemic thresholds (mg/dl)
     tir_low: float = 70.0
     tir_high: float = 180.0
@@ -294,6 +299,13 @@ class GlycemicMetrics(JsonMixin):
     overall: GlycemicBand
     per_block: dict[str, GlycemicBand]
     per_day: list[DayStat]
+    # Data quality against the *requested* window, not against the days that
+    # happen to carry data: a window half of which is missing must not report
+    # near-100% coverage.
+    window_days: Optional[int] = None
+    days_with_data: int = 0
+    missing_days: list[str] = field(default_factory=list)     # zero readings
+    partial_days: list[str] = field(default_factory=list)     # some, but too few
 
 
 # ---------------------------------------------------------------------------
@@ -568,6 +580,12 @@ class AnalysisSnapshot(JsonMixin):
     # Honesty ledger: what cannot be observed, and which derived flags fired
     unavailable_signals: list[str] = field(default_factory=list)
     active_flags: list[str] = field(default_factory=list)
+    # Window data quality (see GlycemicMetrics): a thin window weakens every
+    # number below it, so the reasoning step gets it explicitly.
+    coverage_pct: Optional[float] = None
+    window_days: Optional[int] = None
+    days_with_data: int = 0
+    n_missing_days: int = 0
 
 
 # ---------------------------------------------------------------------------

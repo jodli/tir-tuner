@@ -1,9 +1,13 @@
 import numpy as np
 import pytest
 
-from analysis.contracts import Config
+from analysis.contracts import Config, WindowInfo
 from analysis.glycemic import compute
 from conftest import cgm_df
+
+
+def window(start: str, as_of: str, weeks: int = 4) -> WindowInfo:
+    return WindowInfo(as_of=as_of, weeks=weeks, start=f"{start}T00:00:00", end=f"{as_of}T00:00:00")
 
 
 def test_overall_band_hand_computed():
@@ -73,3 +77,24 @@ def test_coverage_pct_reflects_missing_readings():
     assert m.per_block["06-11"].coverage_pct == 1.0                  # 3 / 300
     assert m.per_block["11-15"].coverage_pct == 0.0                  # no readings
     assert m.overall.coverage_pct == round(100 * 3 / 1440, 1)        # 3 over 24h * 1 day
+
+
+def test_coverage_uses_the_requested_window_not_the_observed_span():
+    # Two fully covered days inside a 4-day window: coverage must be ~50%, not ~100%.
+    pairs = [(f"2026-07-29 {h:02d}:{m:02d}", 100) for h in range(24) for m in range(60)]
+    pairs += [(f"2026-07-30 {h:02d}:{m:02d}", 100) for h in range(24) for m in range(60)]
+    m = compute(cgm_df(pairs), Config(), window("2026-07-28", "2026-07-31"))
+    assert m.window_days == 4
+    assert m.days_with_data == 2
+    assert m.overall.coverage_pct == 50.0
+    assert m.per_block["06-11"].coverage_pct == 50.0
+    assert m.missing_days == ["2026-07-28", "2026-07-31"]
+
+
+def test_partial_day_is_flagged():
+    # One full day and one day cut off after two hours (as the last export day is).
+    pairs = [(f"2026-07-29 {h:02d}:{m:02d}", 100) for h in range(24) for m in range(60)]
+    pairs += [(f"2026-07-30 {h:02d}:{m:02d}", 100) for h in range(2) for m in range(60)]
+    m = compute(cgm_df(pairs), Config(), window("2026-07-29", "2026-07-30"))
+    assert m.missing_days == []
+    assert m.partial_days == ["2026-07-30"]

@@ -145,7 +145,11 @@ def build_snapshot(state: PipelineState, config: Config, prior) -> AnalysisSnaps
         prior_run_date=prior.as_of if prior else None,
         prior_runs=_prior_series(state, config),
         unavailable_signals=list(UNAVAILABLE_SIGNALS),
-        active_flags=_active_flags(state, stats_by_block, dawn),
+        active_flags=_active_flags(state, stats_by_block, dawn, config),
+        coverage_pct=o.coverage_pct,
+        window_days=gly.window_days,
+        days_with_data=gly.days_with_data,
+        n_missing_days=len(gly.missing_days),
     )
 
 
@@ -157,12 +161,20 @@ def _prior_series(state: PipelineState, config: Config) -> list[RunRef]:
     return earlier[-config.history_series_len:]
 
 
-def _active_flags(state: PipelineState, stats_by_block: dict, dawn: Optional[bool]) -> list[str]:
+def _active_flags(state: PipelineState, stats_by_block: dict, dawn: Optional[bool],
+                  config: Config) -> list[str]:
     flags: list[str] = []
     if state.iob is not None and state.iob.available:
         flags.append("iob_available")
     if dawn:
         flags.append("dawn_rise")
+    gly = state.glycemic
+    if gly is not None:
+        cov = gly.overall.coverage_pct
+        if cov is not None and cov < config.min_coverage_pct:
+            flags.append(f"thin_window:coverage={cov}%")
+        if gly.missing_days:
+            flags.append(f"missing_days={len(gly.missing_days)}")
     for key, rs in stats_by_block.items():
         if rs.n_suspected_no_delivery:
             flags.append(f"no_delivery:{key}={rs.n_suspected_no_delivery}")

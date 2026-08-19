@@ -24,6 +24,35 @@ def _block_de(config: Config, key: str) -> str:
     return key
 
 
+def _abbrev(items: list[str], limit: int = 4) -> str:
+    """Comma-joined list, truncated so a long gap does not flood the report."""
+    if len(items) <= limit:
+        return ", ".join(items)
+    return ", ".join(items[:limit]) + f" (+{len(items) - limit})"
+
+
+def _data_quality(state: PipelineState, config: Config) -> list[str]:
+    """Coverage against the requested window, missing/partial days, provenance."""
+    gly = state.glycemic
+    lines: list[str] = []
+    cov = gly.overall.coverage_pct
+    if gly.window_days:
+        lines.append(f"{L['coverage']}: {_fmt(cov, ' %')}  "
+                     f"({gly.days_with_data} {L['of_days']} {gly.window_days} {L['days']})")
+    ds = state.dataset
+    if ds is not None and ds.source_files:
+        lines.append(f"{L['sources']}: {len(ds.source_files)} {L['files']}"
+                     f"{f' ({ds.source_range})' if ds.source_range else ''}, "
+                     f"{ds.n_duplicate_rows} {L['dupes_dropped']}")
+    if gly.missing_days:
+        lines.append(f"! {L['missing_days']} ({len(gly.missing_days)}): {_abbrev(gly.missing_days)}")
+    if gly.partial_days:
+        lines.append(f"! {L['partial_days']} ({len(gly.partial_days)}): {_abbrev(gly.partial_days)}")
+    if cov is not None and cov < config.min_coverage_pct:
+        lines.append(f"! {L['thin_window']}")
+    return lines
+
+
 def format_summary(state: PipelineState, config: Config) -> str:
     lines: list[str] = []
     w = state.window
@@ -33,6 +62,7 @@ def format_summary(state: PipelineState, config: Config) -> str:
     lines.append("=" * 64)
     lines.append(f"{L['window']}: {w.start[:10]} – {w.as_of}  ({w.weeks} {L['weeks']}, "
                  f"{o.n_readings} {L['readings']})")
+    lines.extend(_data_quality(state, config))
     if not state.settings.available:
         lines.append(f"! {L['inference_only']}")
     if state.settings.insulin_action_hours is not None:
