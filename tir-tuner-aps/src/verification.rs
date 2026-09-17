@@ -25,10 +25,10 @@
 //!    of the mode-aware dose calculator.
 //! 5. NMPC proofs (`verify_nmpc_candidate_rates_in_bounds`,
 //!    `verify_nmpc_cost_finite_nonneg`,
-//!    `verify_nmpc_selection_minimal_cost`) - the one-step NMPC dose
-//!    selector of the section 5.1 cost
+//!    `verify_nmpc_selection_minimal_cost`) - the NMPC dose selector of
+//!    the section 5.1 cost
 //!    `J(u) = (g_IG(u) - w)^2 + lambda (u - u_operating)^2`: candidate
-//!    rates lie in `[0, u_max]`, the one-step cost is finite and
+//!    rates lie in `[0, u_max]`, a roll-out of the cost is finite and
 //!    non-negative, and the position chosen by `best_grid_candidate_index`
 //!    attains the minimal cost over the grid.
 //! 6. `verify_imm_probability_normalization` - normalizing a
@@ -57,10 +57,12 @@
 //!   test checks.
 //!
 //! Out of scope (future work): the bayesian real-time adaptation of the
-//! six individual dynamic parameters (section 3) and a multi-step /
-//! full-horizon NMPC solver (section 5.1). Both would require a
+//! six individual dynamic parameters (section 3) and a full-horizon NMPC
+//! solver beyond the grid roll-out (section 5.1). Both would require a
 //! tractable linearization or stubbing of the nonlinear model; the
-//! one-step grid selector is the largest NMPC slice kept here.
+//! grid roll-out selector is the largest NMPC slice kept here, and the
+//! 60-minute horizon the simulation drives is covered by the native
+//! `proptest` walk in `controller.rs`.
 
 use crate::controller::{
     best_grid_candidate_index, compute_nmpc_dose, compute_nmpc_dose_mode, nmpc_cost, DosingMode,
@@ -201,7 +203,7 @@ pub fn verify_mode_specific_dosing_invariants() {
 }
 
 /// Proof 6a: every candidate rate `k / NMPC_GRID_STEPS * u_max` of the
-/// one-step NMPC grid lies in `[0, u_max]`, hence so does the selected
+/// NMPC grid lies in `[0, u_max]`, hence so does the selected
 /// dose. Pure rate arithmetic, deliberately separate from the cost
 /// model so this stays cheap.
 #[kani::proof]
@@ -220,14 +222,18 @@ pub fn verify_nmpc_candidate_rates_in_bounds() {
     }
 }
 
-/// Proof 6b: one model step of the section 5.1 NMPC cost is finite and
+/// Proof 6b: one roll-out of the section 5.1 NMPC cost is finite and
 /// non-negative. The state is sliced to the glucose compartments (`q1`,
 /// `q2`, `q3`, with the insulin/gut depots at zero) plus the cost tuning
-/// knobs; this keeps the symbolic circuit for the single prediction step
+/// knobs; this keeps the symbolic circuit for the prediction roll-out
 /// tractable while still exercising the real model, EGP and the sum-of-
-/// squares cost. Finiteness of the wider model is covered by the EGP
-/// proof, the wiring proof `verify_step_compartment_non_negativity` and
-/// the native `proptest` walk in `hovorka.rs`.
+/// squares cost. The horizon here is 15 minutes (three 5-minute steps):
+/// the full 60-minute roll-out that the closed-loop simulation uses is
+/// covered by the native `proptest` walk in `controller.rs` (the
+/// property is the same finiteness/non-negativity). Finiteness of the
+/// wider model is covered by the EGP proof, the wiring proof
+/// `verify_step_compartment_non_negativity` and the native `proptest`
+/// walk in `hovorka.rs`.
 #[kani::proof]
 pub fn verify_nmpc_cost_finite_nonneg() {
     let q1: f64 = kani::any();
@@ -260,7 +266,7 @@ pub fn verify_nmpc_cost_finite_nonneg() {
     };
     let params = HovorkaParams::default();
 
-    let cost = nmpc_cost(&params, state, u, u_operating, target_w, lambda);
+    let cost = nmpc_cost(&params, state, u, u_operating, target_w, lambda, 15.0, 5.0);
 
     kani::assert(!cost.is_nan(), "NMPC cost is never NaN");
     kani::assert(!cost.is_infinite(), "NMPC cost is never infinite");

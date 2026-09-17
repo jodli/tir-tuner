@@ -80,9 +80,17 @@ pub fn compute_nmpc_dose(ig_reading: f64, max_delivery_rate: f64) -> f64 {
     compute_nmpc_dose_mode(ig_reading, max_delivery_rate, DosingMode::Standard)
 }
 
-/// One-step NMPC cost of delivering `u` (U/h) for the next minute,
-/// `J(u) = (g_IG(u) - w)^2 + lambda (u - u_operating)^2` (section 5.1,
-/// prediction horizon one sample with the terminal reference `w`).
+/// NMPC cost of holding rate `u` (U/h) for the next `horizon_min`
+/// minutes, `J(u) = (g_IG(u) - w)^2 + lambda (u - u_operating)^2` over
+/// the section 5.1 quadratic objective, with `g_IG(u)` the interstitial
+/// glucose at the end of a `horizon_min` rollout.
+///
+/// The roll-out steps the prediction model forward in `step_min` chunks
+/// under the candidate rate and no future meal or bolus; the horizon has
+/// to span the slow insulin action timescale (the effort term only
+/// prices the candidate rate meaningfully once the prediction can see
+/// the resulting glucose trajectory), so the simulation drives it with a
+/// multi-sample horizon and a control-period step.
 pub fn nmpc_cost(
     params: &HovorkaParams,
     state: HovorkaState,
@@ -90,8 +98,15 @@ pub fn nmpc_cost(
     u_operating: f64,
     target_w: f64,
     lambda: f64,
+    horizon_min: f64,
+    step_min: f64,
 ) -> f64 {
-    let pred = state.step(params, u, 0.0, 0.0, 1.0).interstitial_glucose(params);
+    let steps = (horizon_min / step_min).round() as usize;
+    let mut predict = state;
+    for _ in 0..steps {
+        predict = predict.step(params, u, 0.0, 0.0, step_min);
+    }
+    let pred = predict.interstitial_glucose(params);
     let glucose_err = pred - target_w;
     let effort_err = u - u_operating;
     glucose_err * glucose_err + lambda * effort_err * effort_err
@@ -114,16 +129,19 @@ pub fn best_grid_candidate_index(costs: &[f64; NMPC_GRID_POINTS]) -> usize {
     best_index
 }
 
-/// One-step NMPC dose selector: the argument of the minimum of
+/// NMPC dose selector: the argument of the minimum of
 /// `J(u) = (g_IG(u) - w)^2 + lambda (u - u_operating)^2` over the
-/// candidate grid `{ k / NMPC_GRID_STEPS * u_max : k = 0..=N }`.
+/// candidate grid `{ k / NMPC_GRID_STEPS * u_max : k = 0..=N }`, where
+/// the glucose term comes from a `horizon_min` roll-out of the model at
+/// `step_min` resolution under the candidate rate. The candidate rates
+/// all lie in `[0, u_max]`.
 ///
-/// The candidate rates (all in `[0, u_max]`) and their one-step costs
-/// are computed first, and the argument of the minimum is picked by
-/// [`best_grid_candidate_index`]. The Kani suite proves the two layers
-/// separately: the candidate rates stay within `[0, u_max]`, the NMPC
-/// cost is finite and non-negative, and the position selected by
-/// `best_grid_candidate_index` attains the minimal cost.
+/// The candidate rates and their costs are computed first, and the
+/// argument of the minimum is picked by [`best_grid_candidate_index`].
+/// The Kani suite proves the two layers separately: the candidate rates
+/// stay within `[0, u_max]`, the NMPC cost is finite and non-negative,
+/// and the position selected by `best_grid_candidate_index` attains the
+/// minimal cost.
 pub fn nmpc_grid_dose(
     params: &HovorkaParams,
     state: HovorkaState,
@@ -131,13 +149,15 @@ pub fn nmpc_grid_dose(
     u_operating: f64,
     target_w: f64,
     lambda: f64,
+    horizon_min: f64,
+    step_min: f64,
 ) -> f64 {
     let mut rates = [0.0; NMPC_GRID_POINTS];
     let mut costs = [0.0; NMPC_GRID_POINTS];
     for k in 0..=NMPC_GRID_STEPS {
         let u = u_max * (k as f64 / NMPC_GRID_STEPS as f64);
         rates[k] = u;
-        costs[k] = nmpc_cost(params, state, u, u_operating, target_w, lambda);
+        costs[k] = nmpc_cost(params, state, u, u_operating, target_w, lambda, horizon_min, step_min);
     }
     rates[best_grid_candidate_index(&costs)]
 }
@@ -194,9 +214,20 @@ mod tests {
             u_operating in 0.0..20.0f64,
             target_w in 4.0..12.0f64,
             lambda in 0.0..10.0f64,
+            horizon_min in 5.0..90.0f64,
+            step_min in 1.0..15.0f64,
         ) {
             let params = HovorkaParams::default();
-            let dose = nmpc_grid_dose(&params, state, u_max, u_operating, target_w, lambda);
+            let dose = nmpc_grid_dose(
+                &params,
+                state,
+                u_max,
+                u_operating,
+                target_w,
+                lambda,
+                horizon_min,
+                step_min,
+            );
 
             prop_assert!(dose >= 0.0 && dose <= u_max, "dose out of bounds: {dose}");
 
@@ -205,7 +236,16 @@ mod tests {
             for k in 0..=NMPC_GRID_STEPS {
                 let u = u_max * (k as f64 / NMPC_GRID_STEPS as f64);
                 rates[k] = u;
-                costs[k] = nmpc_cost(&params, state, u, u_operating, target_w, lambda);
+                costs[k] = nmpc_cost(
+                    &params,
+                    state,
+                    u,
+                    u_operating,
+                    target_w,
+                    lambda,
+                    horizon_min,
+                    step_min,
+                );
             }
 
             let best = best_grid_candidate_index(&costs);
@@ -222,9 +262,20 @@ mod tests {
             u_operating in 0.0..20.0f64,
             target_w in 4.0..12.0f64,
             lambda in 0.0..10.0f64,
+            horizon_min in 5.0..90.0f64,
+            step_min in 1.0..15.0f64,
         ) {
             let params = HovorkaParams::default();
-            let cost = nmpc_cost(&params, state, u, u_operating, target_w, lambda);
+            let cost = nmpc_cost(
+                &params,
+                state,
+                u,
+                u_operating,
+                target_w,
+                lambda,
+                horizon_min,
+                step_min,
+            );
             prop_assert!(cost.is_finite(), "cost is not finite: {cost}");
             prop_assert!(cost >= 0.0, "cost is negative: {cost}");
         }
@@ -246,7 +297,16 @@ mod tests {
             lambda in 0.0..10.0f64,
         ) {
             let params = HovorkaParams::default();
-            let grid_dose = nmpc_grid_dose(&params, state, u_max, u_operating, target_w, lambda);
+            let grid_dose = nmpc_grid_dose(
+                &params,
+                state,
+                u_max,
+                u_operating,
+                target_w,
+                lambda,
+                60.0,
+                5.0,
+            );
             let delivered = if is_hypoglycemic(ig_reading) {
                 0.0
             } else {
