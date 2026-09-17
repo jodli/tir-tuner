@@ -1,0 +1,32 @@
+[package]
+name = "camaps-fx-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+
+[dependencies.camaps-fx]
+path = ".."
+
+[[bin]]
+name = "hovorka_step"
+path = "fuzz_targets/hovorka_step.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "nmpc_grid_dose"
+path = "fuzz_targets/nmpc_grid_dose.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
+members = ["."]
