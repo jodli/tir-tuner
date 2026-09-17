@@ -154,7 +154,7 @@ The dose calculator optimizes the vector of future inputs $u^+ = (v, u)^T$ over 
 $$J(u^+) = J_1 + J_2$$
 $$J_1 = \sum_{j=1}^{N_2} \left( g_{IG}(t+j) - w(t+j) \right)^2$$
 $$J_2 = \lambda \sum_{j=1}^{N_2} \left( u(t+j) - u_{operating} \right)^2$$
-*Where $w(t)$ is the target glucose setpoint trajectory, $u_{operating}$ is the baseline basal rate, and $\lambda$ is the penalty parameter on control action effort. Note the cost uses the interstitial/sensor glucose $g_{IG}$ (section 3.2E), not the plasma value $g_P$: the closed loop is driven by the CGM reading, which is what the implemented one-step `nmpc_cost` (`(g_IG(u) - w)^2 + lambda (u - u_operating)^2`) minimizes over the candidate grid.*
+*Where $w(t)$ is the target glucose setpoint trajectory, $u_{operating}$ is the baseline basal rate, and $\lambda$ is the penalty parameter on control action effort. Note the cost uses the interstitial/sensor glucose $g_{IG}$ (section 3.2E), not the plasma value $g_P$: the closed loop is driven by the CGM reading. The realized `nmpc_cost` evaluates this sum by rolling the model forward under a constant candidate rate `u`, summing the squared glucose deviation at every sample over the horizon (`horizon_min`, sampled at `step_min`) plus `lambda` times the summed squared deviation from `u_operating`. The horizon has to be long enough for the prediction to see the effect of the candidate rate: a single-sample horizon leaves predicted glucose identical across the candidate grid (insulin action acts over tens of minutes), so the argument of the minimum collapses to `u_operating` and the loop degenerates to fixed basal. This is the effective upper bound for the realized `lambda` / horizon / step values; the majority weight sits on the glucose term.*
 
 ### 5.2 Operating Modes & Safety Boundaries
 
@@ -195,7 +195,7 @@ the native `proptest` / exhaustive suite plus the `fuzz/` targets.
 | `verify_mode_specific_dosing_invariants` | Ease-off suspension, Boost `>=` Standard, `[0, u_max]` per mode |
 | `verify_no_floating_point_panics` | EGP submodel is NaN/infinity free and non-negative |
 | `verify_nmpc_candidate_rates_in_bounds` | every grid candidate lies in `[0, u_max]` |
-| `verify_nmpc_cost_finite_nonneg` | one-step NMPC cost is finite and non-negative |
+| `verify_nmpc_cost_finite_nonneg` | a short roll-out slice of the NMPC cost is finite and non-negative |
 | `verify_nmpc_selection_minimal_cost` | the selected index attains the minimal cost |
 | `verify_imm_probability_normalization` | normalized mode probabilities stay non-negative |
 
@@ -209,6 +209,7 @@ past 30 minutes. These claims are covered natively instead:
 * IMM sum-to-one, mixing and Bayesian-update distributions: exhaustive divisor-16 lattice plus `proptest` (`src/imm.rs`).
 * Full-state wired non-negativity / finiteness of the model: exhaustive compartment slices plus a `proptest` random walk (`src/hovorka.rs`).
 * `nmpc_grid_dose` realized-cost composition: `proptest` (`src/controller.rs`).
+* The full 60-minute roll-out instance the simulation drives (the Kani cost harness covers a short slice only, because CBMC bit-blasts the symbolic `f64` trajectory into an intractable circuit): `proptest` (`src/controller.rs`).
 
 `nmpc_grid_dose` is deliberately a pure cost minimizer and does not see
 the CGM reading: the delivered pump rate must pass through the
@@ -220,8 +221,7 @@ proved separately there.
 
 ### 6.4 Out of scope
 
-* Full 10-state IMM extended Kalman filter (state/covariance mixing, predict, update, likelihood): not implemented; the crate covers mode-probability bookkeeping only.
-* Multi-step / full-horizon NMPC (`J1 + J2` over `N_2`): only the one-step grid selector is implemented.
+* Full 10-state IMM extended Kalman filter (state/covariance mixing, predict, update, likelihood): not implemented; the crate covers mode-probability bookkeeping only. The simulation re-anchors the belief on the sensor reading instead (the state-estimation layer of the loop).
 * The process-noise state `u_S` of section 3.2F is reserved; the deterministic core carries it through unchanged and the stochastic increment is injected externally.
 
 ---

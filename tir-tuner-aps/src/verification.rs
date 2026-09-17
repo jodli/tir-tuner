@@ -27,10 +27,11 @@
 //!    `verify_nmpc_cost_finite_nonneg`,
 //!    `verify_nmpc_selection_minimal_cost`) - the NMPC dose selector of
 //!    the section 5.1 cost
-//!    `J(u) = (g_IG(u) - w)^2 + lambda (u - u_operating)^2`: candidate
-//!    rates lie in `[0, u_max]`, a roll-out of the cost is finite and
-//!    non-negative, and the position chosen by `best_grid_candidate_index`
-//!    attains the minimal cost over the grid.
+//!    `J(u) = sum_{j=1}^{N2} ((g_IG(t+j) - w)^2 + lambda (u - u_operating)^2)`:
+//!    candidate rates lie in `[0, u_max]`, a short roll-out slice of the
+//!    cost is finite and non-negative, and the position chosen by
+//!    `best_grid_candidate_index` attains the minimal cost over the
+//!    grid.
 //! 6. `verify_imm_probability_normalization` - normalizing a
 //!    non-negative mode-probability mixture keeps every entry
 //!    non-negative.
@@ -39,30 +40,30 @@
 //!
 //! CBMC bit-blasts full-`f64` multiply/divide chains with symbolic
 //! mantissas into circuits no current backend discharges in reasonable
-//! time; transcendental-heavy expressions and multi-step model unrolling
-//! compound this. The historical effort to quantify the full `f64`
-//! domain pushed the suite past 30 minutes. Those claims therefore live
-//! in the native suite:
+//! time; transcendental-heavy expressions and long multi-step model
+//! unrolling compound this. The historical effort to quantify the full
+//! `f64` domain pushed the suite past 30 minutes. Those claims therefore
+//! live in the native suite:
 //!
 //! * the rounding-dependent IMM sum-to-one and mixing/update identities
 //!   (`proptest` plus the exhaustive divisor-16 lattice in `imm.rs`),
 //! * the full-state wired non-negativity and finiteness of the model
 //!   (exhaustive slices plus a `proptest` random walk in `hovorka.rs`),
-//! * `nmpc_grid_dose`'s realized-cost composition and the composition
-//!   of the grid result with the hypoglycemia guard (native `proptest`
-//!   in `controller.rs`). `nmpc_grid_dose` is deliberately a pure cost
-//!   minimizer: it does not see the CGM reading, so the delivered pump
-//!   rate must pass through the cutoff guard (`is_hypoglycemic` /
-//!   `compute_nmpc_dose_mode`), and that composition is what the native
-//!   test checks.
+//! * the full 60-minute roll-out instance the simulation drives
+//!   (`proptest` in `controller.rs`; the Kani cost harness only covers a
+//!   short slice), `nmpc_grid_dose`'s realized-cost composition and the
+//!   composition of the grid result with the hypoglycemia guard (native
+//!   `proptest` in `controller.rs`). `nmpc_grid_dose` is deliberately a
+//!   pure cost minimizer: it does not see the CGM reading, so the
+//!   delivered pump rate must pass through the cutoff guard
+//!   (`is_hypoglycemic` / `compute_nmpc_dose_mode`), and that
+//!   composition is what the native test checks.
 //!
 //! Out of scope (future work): the bayesian real-time adaptation of the
-//! six individual dynamic parameters (section 3) and a full-horizon NMPC
-//! solver beyond the grid roll-out (section 5.1). Both would require a
-//! tractable linearization or stubbing of the nonlinear model; the
-//! grid roll-out selector is the largest NMPC slice kept here, and the
-//! 60-minute horizon the simulation drives is covered by the native
-//! `proptest` walk in `controller.rs`.
+//! six individual dynamic parameters (section 3) and the process-noise
+//! state of section 3.2F. Both would require a tractable linearization
+//! or stubbing of the nonlinear model; the grid roll-out selector is the
+//! largest NMPC slice kept here.
 
 use crate::controller::{
     best_grid_candidate_index, compute_nmpc_dose, compute_nmpc_dose_mode, nmpc_cost, DosingMode,
@@ -203,7 +204,7 @@ pub fn verify_mode_specific_dosing_invariants() {
 }
 
 /// Proof 6a: every candidate rate `k / NMPC_GRID_STEPS * u_max` of the
-/// NMPC grid lies in `[0, u_max]`, hence so does the selected
+/// one-step NMPC grid lies in `[0, u_max]`, hence so does the selected
 /// dose. Pure rate arithmetic, deliberately separate from the cost
 /// model so this stays cheap.
 #[kani::proof]
@@ -222,18 +223,18 @@ pub fn verify_nmpc_candidate_rates_in_bounds() {
     }
 }
 
-/// Proof 6b: one roll-out of the section 5.1 NMPC cost is finite and
-/// non-negative. The state is sliced to the glucose compartments (`q1`,
-/// `q2`, `q3`, with the insulin/gut depots at zero) plus the cost tuning
-/// knobs; this keeps the symbolic circuit for the prediction roll-out
-/// tractable while still exercising the real model, EGP and the sum-of-
-/// squares cost. The horizon here is 15 minutes (three 5-minute steps):
-/// the full 60-minute roll-out that the closed-loop simulation uses is
-/// covered by the native `proptest` walk in `controller.rs` (the
-/// property is the same finiteness/non-negativity). Finiteness of the
-/// wider model is covered by the EGP proof, the wiring proof
-/// `verify_step_compartment_non_negativity` and the native `proptest`
-/// walk in `hovorka.rs`.
+/// Proof 6b: a short roll-out slice of the section 5.1 NMPC cost is
+/// finite and non-negative. The state is sliced to the glucose
+/// compartments (`q1`, `q2`, `q3`, with the insulin/gut depots at zero)
+/// plus the cost tuning knobs, and the roll-out is cut to three
+/// five-minute steps (CBMC bit-blasts a long symbolic `f64` roll-out
+/// into an intractable circuit); this keeps the symbolic circuit for the
+/// prediction tractable while still exercising the real model, the EGP
+/// and the sum-of-squares cost. Finiteness of the wider model and of the
+/// full 60-minute instance the simulation drives are covered by the EGP
+/// proof, the wiring proof `verify_step_compartment_non_negativity`, the
+/// native `proptest` walk in `hovorka.rs` and the `proptest` cost test in
+/// `controller.rs`.
 #[kani::proof]
 pub fn verify_nmpc_cost_finite_nonneg() {
     let q1: f64 = kani::any();

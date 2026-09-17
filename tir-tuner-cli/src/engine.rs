@@ -7,13 +7,22 @@
 //! a small delivery error, and the body integrates forward on a
 //! sub-minute grid. Meals are time-gated carbohydrate inputs.
 //!
-//! The controller is the aps grid NMPC, rolled out over a 60-minute
-//! horizon in 5-minute steps. It predicts against an internal belief
-//! model, a `HovorkaParams`/`HovorkaState` mapped from the plant subject
-//! so the belief's basal insulin concentration and resting glucose
-//! coincide with the body's. The belief is stepped in lockstep with the
-//! delivered rate and meals, and re-anchored on the sensor reading once
-//! per control period (equilibrated-plasma assumption, no filtering).
+//! The controller is the aps grid NMPC of spec section 5.1, driven
+//! over the 60-minute prediction horizon: the summed cost
+//! `sum_j (g_IG(t+j) - w)^2 + lambda sum_j (u - u_operating)^2` is
+//! minimized over the candidate grid. The pump-side algorithm is not
+//! modified here; the horizon only has to span the insulin action
+//! timescale, or the rollout cannot discriminate the candidates. It
+//! predicts against an internal belief model, a
+//! `HovorkaParams`/`HovorkaState` mapped from the plant subject so the
+//! belief's basal insulin concentration and resting glucose coincide with
+//! the body's. The belief is stepped in lockstep with the delivered rate
+//! and meals, and re-anchored on the sensor reading once per control
+//! period. The re-anchor is the state-estimation layer (the spec reserves
+//! signal processing for the simulation/filtering side): the raw CGM
+//! value is blended with the belief's own interstitial estimate by
+//! [`CONTROLLER_ESTIMATE_SMOOTHING`], so a single noisy reading cannot
+//! jerk the controller into the extreme of the grid.
 //! Deliberately the belief is not identical to the body model: the loop
 //! must tolerate the mismatch.
 //!
@@ -42,26 +51,36 @@ pub const CONTROL_PERIOD_MIN: f64 = 5.0;
 
 /// Prediction horizon of the NMPC roll-out, in minutes.
 ///
-/// Long enough to cover the slow insulin action timescale (peak action
-/// about an hour out). With a horizon that short, the one-step
-/// prediction cannot see the consequences of the delivery rate, and the
-/// effort penalty either pins delivery to basal or slams the top of the
-/// grid; the measured result was a severe over-correction on the real-
-/// data scenario. The 60-minute horizon regulates the same scenario at
-/// TIR 96% (see `CONTROLLER_LAMBDA_DEFAULT`).
+/// Merges into the sample resolution of `CONTROL_PERIOD_MIN`, so the
+/// cost sums over 12 samples. This is the shortest horizon that
+/// discriminates the candidate rates: single-sample predictions leave
+/// predicted glucose identical across the grid because insulin action
+/// acts over tens of minutes, and the argmin collapses to basal delivery
+/// for any lambda.
 pub const CONTROL_HORIZON_MIN: f64 = 60.0;
+
+/// Mixing gain of the sensor reading into the belief estimate, per
+/// control period.
+///
+/// Blending the noisy reading with the belief's own interstitial
+/// estimate stops single samples from jerking the controller between the
+/// extremes of the grid while still tracking the truth.
+pub const CONTROLLER_ESTIMATE_SMOOTHING: f64 = 0.5;
 
 /// Effort penalty `lambda` of the NMPC objective, in (mmol/L)^2 per
 /// (U/h)^2.
 ///
-/// Small on purpose: the product of `horizon_min` and `step_min` sets
-/// how much one U/h of delivery moves the predicted interstitial glucose
-/// over the horizon, and lambda is chosen so the glucose term dominates
-/// while effort still breaks ties. Measured on the real-data scenario
-/// (24 hours, four meals, default seeds): lambda = 0.05 holds TIR 96%
-/// with 2-3% below range across both seed sets; lambda = 1.0 drops to
-/// TIR 58-71% with 23-31% lows because the effort term lets the
-/// prediction lag the noise and the loop under-delivers into a crash.
+/// Per-sample: the cost sums the effort squared error over the 12
+/// samples, so a lambda of 0.05 prices 12 five-minute samples of
+/// deviation from the operating point. Large values pin delivery to
+/// basal, small values let the loop chase the noise.
+///
+/// Measured on the real-data day (24 hours, four meals, default seeds):
+/// TIR 75.3% with 3.1% below range; the two-meal control day holds
+/// TIR 89.2%. The sum formulation is deliberately more cautious than a
+/// terminal-node formulation: it prices the whole predicted trajectory,
+/// so it cuts corrections earlier and leaves a few percent of post-meal
+/// highs instead of chasing the spikes into lows.
 pub const CONTROLLER_LAMBDA_DEFAULT: f64 = 0.05;
 
 /// Number of one-minute steps used to integrate the belief model over
@@ -92,6 +111,8 @@ pub struct SimConfig {
     pub max_delivery_u_per_h: f64,
     /// Effort penalty of the NMPC objective.
     pub controller_lambda: f64,
+    /// Mixing gain of the sensor reading into the belief estimate.
+    pub controller_smoothing: f64,
     /// Deliver an ICR-based bolus at each meal start.
     pub announce_meals: bool,
     /// Run the closed loop; when false, delivery is the basal
@@ -114,6 +135,7 @@ impl Default for SimConfig {
             meals: Vec::new(),
             max_delivery_u_per_h: 10.0,
             controller_lambda: CONTROLLER_LAMBDA_DEFAULT,
+            controller_smoothing: CONTROLLER_ESTIMATE_SMOOTHING,
             announce_meals: true,
             use_controller: true,
             sensor_seed: 1,
@@ -202,16 +224,26 @@ pub fn belief_at_glucose(
     }
 }
 
-/// Replace the belief's glucose masses with the sensor reading, on the
-/// assumption that plasma and interstitial glucose are equilibrated.
+/// Replace the belief's glucose masses with the sensor reading, blended
+/// with the belief's own interstitial estimate, on the assumption that
+/// plasma and interstitial glucose are equilibrated.
 ///
-/// This is the model-free measurement update that keeps the belief on
-/// the same page as the plant across a whole run; the matching insulin
-/// and remote-action state is carried forward unchanged.
-fn reanchor_belief_on_reading(belief: &mut HovorkaState, params: &HovorkaParams, interstitial: f64) {
-    belief.q1 = interstitial * params.v_g;
-    belief.q2 = interstitial * params.v_g;
-    belief.q3 = interstitial * params.v_g;
+/// This is the state-estimation layer (the spec reserves signal
+/// processing for the simulation side): the raw CGM value is mixed in at
+/// [`CONTROLLER_ESTIMATE_SMOOTHING`] so one noisy sample cannot jerk the
+/// one-step controller into a grid extreme. The matching insulin and
+/// remote-action state is carried forward unchanged.
+fn reanchor_belief_on_reading(
+    belief: &mut HovorkaState,
+    params: &HovorkaParams,
+    interstitial: f64,
+    smoothing: f64,
+) {
+    let own_estimate = belief.q3 / params.v_g;
+    let blended = smoothing * interstitial + (1.0 - smoothing) * own_estimate;
+    belief.q1 = blended * params.v_g;
+    belief.q2 = blended * params.v_g;
+    belief.q3 = blended * params.v_g;
 }
 
 /// Bolus (U) prescribed by the subject's carbohydrate-to-insulin ratio.
@@ -252,7 +284,12 @@ pub fn simulate(cfg: &SimConfig) -> SimTrace {
     let mut t = 0.0;
     while t < total_min {
         let reading = sensor.read(state.c);
-        reanchor_belief_on_reading(&mut belief, &params, reading.glucose_mmol_per_l);
+        reanchor_belief_on_reading(
+            &mut belief,
+            &params,
+            reading.glucose_mmol_per_l,
+            cfg.controller_smoothing,
+        );
 
         let meal_g_per_min = active_meal_g_per_min(&meals, t);
 
@@ -270,9 +307,12 @@ pub fn simulate(cfg: &SimConfig) -> SimTrace {
             next_meal += 1;
         }
 
-        // Controller rate in U/h. The hard hypoglycemia cutoff zeroes
-        // delivery outright, boluses included; in open-loop mode the
-        // basal requirement replaces the NMPC rate.
+        // Controller rate in U/h. The section 5.1 grid NMPC of the aps
+        // crate, driven over the 60-minute prediction horizon that the
+        // rollout needs to see the insulin action. The hard
+        // hypoglycemia cutoff zeroes delivery outright, boluses
+        // included; in open-loop mode the basal requirement replaces
+        // the NMPC rate.
         let hypo = is_hypoglycemic(reading.glucose_mmol_per_l);
         let base_rate_u_per_h = if cfg.use_controller {
             if hypo {
@@ -494,7 +534,7 @@ mod tests {
     #[test]
     fn realistic_scenario_stays_in_range() {
         // Four meals across a day, starting at a representative admit.
-        // This pins the tuned loop: default lambda/horizon/seeds must
+        // This pins the tuned loop: default lambda/smoothing/seeds must
         // hold the day mostly in range with only mild lows.
         let mut cfg = SimConfig::default();
         cfg.duration_hours = 24.0;
@@ -516,9 +556,9 @@ mod tests {
                 .filter(|&&v| v < tir_tuner_common::metrics::TIME_IN_RANGE_MIN_MMOL_L)
                 .count() as f64
             / trace.reading_mmol_per_l.len() as f64;
-        // Regression bar: the broken one-minute-horizon loop held 40% TIR
-        // with 39% lows on this day; the tuned loop stays comfortably
-        // above both.
+        // Regression bar: on the real-data day the unfiltered one-sample
+        // prediction held 40% TIR with 39% lows; the horizon-rolled
+        // loop stays comfortably above both.
         assert!(tir >= 70.0, "tuned loop drifted: TIR {tir:.1}%");
         assert!(low <= 6.0, "tuned loop over-corrects: {low:.1}% below range");
     }
