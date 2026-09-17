@@ -1,0 +1,9 @@
+[package]
+name = "tir-tuner-cli"
+version = "0.1.0"
+edition = "2021"
+description = "Time-in-range tuner CLI: replay CGM data through the verified controller core"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+tir-tuner-core = { path = "../tir-tuner-core" }

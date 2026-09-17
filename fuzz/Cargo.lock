@@ -12,19 +12,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "camaps-fx"
-version = "0.1.0"
-
-[[package]]
-name = "camaps-fx-fuzz"
-version = "0.0.0"
-dependencies = [
- "arbitrary",
- "camaps-fx",
- "libfuzzer-sys",
-]
-
-[[package]]
 name = "cc"
 version = "1.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -135,6 +122,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "tir-tuner-core"
+version = "0.1.0"
+
+[[package]]
+name = "tir-tuner-fuzz"
+version = "0.0.0"
+dependencies = [
+ "arbitrary",
+ "libfuzzer-sys",
+ "tir-tuner-core",
 ]
 
 [[package]]

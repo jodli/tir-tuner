@@ -3,10 +3,10 @@
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 
-use camaps_fx::controller::{
+use tir_tuner_core::controller::{
     best_grid_candidate_index, nmpc_cost, nmpc_grid_dose, NMPC_GRID_POINTS, NMPC_GRID_STEPS,
 };
-use camaps_fx::hovorka::{HovorkaParams, HovorkaState};
+use tir_tuner_core::hovorka::{HovorkaParams, HovorkaState};
 
 #[derive(Arbitrary, Debug)]
 struct Input {

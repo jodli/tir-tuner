@@ -55,12 +55,12 @@ pub const SENSOR_NOISE_SD_MMOL_L: f64 = 0.5;
 pub(crate) mod test_support {
     use proptest::prelude::ProptestConfig;
 
-    /// Property-test configuration. `CAMAPS_SOAK_ITERS` raises the case
+    /// Property-test configuration. `TIR_TUNER_SOAK_ITERS` raises the case
     /// count for the opt-in soak run; the default keeps `cargo test`
     /// well under the fast budget.
     pub fn config() -> ProptestConfig {
         let mut config = ProptestConfig::default();
-        if let Ok(value) = std::env::var("CAMAPS_SOAK_ITERS") {
+        if let Ok(value) = std::env::var("TIR_TUNER_SOAK_ITERS") {
             if let Ok(cases) = value.parse::<u32>() {
                 config.cases = cases;
             }

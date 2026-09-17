@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate docs/verification_report.html from the camaps-fx sources.
+"""Generate docs/verification_report.html from the tir-tuner-core sources.
 
 The report documents what the verification suite checks and where each
 claim traces back to the literature and the patent. It is extracted
@@ -15,10 +15,15 @@ import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-SRC = REPO / "src"
+SRC = REPO / "tir-tuner-core" / "src"
 OUT = REPO / "docs" / "verification_report.html"
 
-CANONICAL_ORDER = ["src/lib.rs", "src/hovorka.rs", "src/controller.rs", "src/imm.rs"]
+CANONICAL_ORDER = [
+    "tir-tuner-core/src/lib.rs",
+    "tir-tuner-core/src/hovorka.rs",
+    "tir-tuner-core/src/controller.rs",
+    "tir-tuner-core/src/imm.rs",
+]
 
 
 def esc(text: str) -> str:
@@ -294,7 +299,7 @@ def build_harness_cards(ver_items, claims) -> list[str]:
         )
         cards.append(
             f"""<details id="harness-{h['name']}" open class="harness">
-  <summary><code>{h['name']}</code><span class="src">{src_link('src/verification.rs', h['line'])}</span></summary>
+  <summary><code>{h['name']}</code><span class="src">{src_link('tir-tuner-core/src/verification.rs', h['line'])}</span></summary>
   {doc_html}
   <div class="cols">
     <div><h4>Input domain</h4><ul>{domain}</ul></div>
@@ -358,7 +363,9 @@ def render():
 
     ver_items = parse_rust(SRC / "verification.rs")
     ver_module = next((it for it in ver_items if it["kind"] == "module"), None)
-    library_mod = next((it for it in all_items["src/lib.rs"] if it["kind"] == "module"), None)
+    library_mod = next(
+        (it for it in all_items["tir-tuner-core/src/lib.rs"] if it["kind"] == "module"), None
+    )
     claims = harness_claims(SRC / "verification.rs")
 
     harness_cards = build_harness_cards(ver_items, claims)
@@ -396,9 +403,9 @@ def render():
         "# whole Kani suite (budget: 90s wall, 30s per harness)",
         "cargo kani -Z unstable-options --harness-timeout 30s -j --output-format terse",
         "",
-        "# native properties incl. proptest (opt-in soak via CAMAPS_SOAK_ITERS)",
+        "# native properties incl. proptest (opt-in soak via TIR_TUNER_SOAK_ITERS)",
         "cargo test",
-        "CAMAPS_SOAK_ITERS=50000 cargo test",
+        "TIR_TUNER_SOAK_ITERS=50000 cargo test",
         "",
         "# coverage-guided soak",
         "cargo +nightly fuzz run hovorka_step",
@@ -508,7 +515,7 @@ transition matrix (column-stochastic, diagonal-dominant).</td>
 
 <h3>Operating parameters and safety thresholds</h3>
 <p>The user-facing constants come from the Ware et al. 2022 cohort trial; the two TIR band bounds come
-from the real-world analyses. The extraction is from <code>src/lib.rs</code> and the crate modules.</p>
+from the real-world analyses. The extraction is from <code>tir-tuner-core/src/lib.rs</code> and the crate modules.</p>
 <table>
 <tr><th>Constant</th><th>Value</th><th>Meaning</th><th>Source</th></tr>
 {const_rows}
@@ -524,7 +531,7 @@ both the Kani suite and the native tests run at.</p>
 """)}
 
 {section("3. Kani formal proofs", f"""
-<p><code>src/verification.rs</code> is compiled only under <code>cargo kani</code>. Each harness below carries
+<p><code>tir-tuner-core/src/verification.rs</code> is compiled only under <code>cargo kani</code>. Each harness below carries
 its extracted doc comment, the symbolic input domain it is bounded to (<code>kani::assume</code>) and the
 assertions it discharges (<code>kani::assert</code>), pulled verbatim from the source.</p>
 {''.join(harness_cards)}
@@ -576,7 +583,7 @@ and carried through unchanged; the stochastic increment is injected externally."
 denominator plus the low-insulin-branch cap at <code>EGP_MAX_FOLD_OVER_BASAL &times; EGP_B</code>, and
 <code>F01</code> is constant (no glucose-dependent saturable elimination). This is the model the suite
 verifies, not the literal functional form of the 2004 publication; the divergence is documented in
-<code>src/hovorka.rs</code>. <code>S_ID</code> is a crate calibration chosen so the basal equilibrium sits
+<code>tir-tuner-core/src/hovorka.rs</code>. <code>S_ID</code> is a crate calibration chosen so the basal equilibrium sits
 on the 5.8 mmol/L target; it is not a published catch-all value. The IMM Markov entries are illustrative
 tuning values; the verified properties rely only on column stochasticity and non-negativity. The patent
 paragraph pointers [0102]-[0108] and [0109]-[0116] used in the blueprint could not be cross-checked
@@ -592,8 +599,8 @@ against the flattened patent text and are unverified.</p>
 """)}
 
 <footer>
-Generated from <code>src/lib.rs</code>, <code>src/hovorka.rs</code>, <code>src/controller.rs</code>,
-<code>src/imm.rs</code>, <code>src/verification.rs</code> and <code>fuzz/fuzz_targets/</code>.
+Generated from <code>tir-tuner-core/src/lib.rs</code>, <code>tir-tuner-core/src/hovorka.rs</code>, <code>tir-tuner-core/src/controller.rs</code>,
+<code>tir-tuner-core/src/imm.rs</code>, <code>tir-tuner-core/src/verification.rs</code> and <code>fuzz/fuzz_targets/</code>.
 Regenerate with <code>python3 tools/gen_verification_report.py</code>. This catalog reflects source
 structure, not verification results. The plain-language companion with diagrams is
 <code>docs/verification_summary.html</code>.

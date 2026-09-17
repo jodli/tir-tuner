@@ -2,7 +2,7 @@
 """Generate docs/verification_summary.html, the plain-language algorithm page.
 
 A simple page that explains how the algorithm works and how its parts connect,
-with mermaid diagrams. The recurring numbers are still extracted from src/, so
+with mermaid diagrams. The recurring numbers are still extracted from tir-tuner-core/src/, so
 the page cannot drift quietly from the constants the code actually uses.
 
 Usage: python3 tools/gen_summary_report.py

@@ -1,5 +1,5 @@
 [package]
-name = "camaps-fx-fuzz"
+name = "tir-tuner-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2021"
@@ -11,8 +11,8 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 arbitrary = { version = "1", features = ["derive"] }
 
-[dependencies.camaps-fx]
-path = ".."
+[dependencies.tir-tuner-core]
+path = "../tir-tuner-core"
 
 [[bin]]
 name = "hovorka_step"
