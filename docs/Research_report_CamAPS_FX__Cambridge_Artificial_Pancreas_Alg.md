@@ -8,20 +8,20 @@
    - **URL:** https://pubmed.ncbi.nlm.nih.gov/15382830/
    - **Summary:** Das fundamentale Paper von Roman Hovorka zum Cambridge-Regelalgorithmus. Es beschreibt das physiologische 9-Kompartiment-Modell (Glukose-Kinetik, Insulin-Absorption von Lispro/Aspart, Darm-Absorption) sowie die mathematische Formulierung der nichtlinearen Modellprädiktiven Regelung (NMPC) mit bayesscher Parameterschätzung zur Echtzeit-Adaption der Insulinempfindlichkeit.
 
-2. **Simulation Environment for In Silico Testing of Closed-Loop Insulin Delivery Systems in Type 1 Diabetes**
-   - **Authors:** Malgorzata E. Wilinska, Ludovic J. Chassin, Roman Hovorka, et al.
+2. **Simulation Environment to Evaluate Closed-Loop Insulin Delivery Systems in Type 1 Diabetes**
+   - **Authors:** Malgorzata E. Wilinska, Ludovic J. Chassin, Carlo L. Acerini, Janet M. Allen, David B. Dunger, Roman Hovorka, et al.
    - **Publication:** Journal of Diabetes Science and Technology, 2010 (Vol. 4, No. 1, pp. 132–144)
-   - **URL:** https://pmc.ncbi.nlm.nih.gov/articles/PMC2825639/
+   - **URL:** https://pmc.ncbi.nlm.nih.gov/articles/PMC2825634/
    - **Summary:** Beschreibung der Simulationsumgebung und des virtuellen Patientenkohorten-Modells (Cambridge In-Silico Simulator). Essentiell für den Software-Nachbau, da hier Parametersätze, stochastische Variationen der Insulinempfindlichkeit und Mahlzeiten-Resorption mathematisch definiert sind.
 
 3. **Algorithms for a Closed-Loop Artificial Pancreas: The Case for Model Predictive Control**
-   - **Authors:** Roman Hovorka et al.
-   - **Publication:** Journal of Diabetes Science and Technology / PMC
+   - **Authors:** B. Wayne Bequette
+   - **Publication:** Journal of Diabetes Science and Technology, 2013 (Vol. 7, No. 6, pp. 1632–1643)
    - **URL:** https://pmc.ncbi.nlm.nih.gov/articles/PMC3876342/
-   - **Summary:** Systematische Analyse der mathematischen Struktur des Cambridge MPC-Algorithmus im Vergleich zu anderen AP-Konzepten (PID, Zone-MPC). Detailliert die zeitvariablen Parameter (6 geschätzte Parameter) und das bayessche Update-Verfahren über variierende Zeitfenster.
+   - **Summary:** Analyse der relativen Vorzüge von Model Predictive Control (MPC) gegenüber Proportional-Integral-Derivative (PID) für den künstlichen Pankreas. Betont, dass beide Ansätze keine Einzelalgorithmen sind, sondern Strategien, und dass MPC explizite Insulin-Begrenzungen (Constraints), Meals und andere Störungen über einen allgemeinen Rahmen einbeziehen kann.
 
-4. **Glucose Monitoring and Control Using Multi-Model Approach**
-   - **Authors:** Roman Hovorka, Malgorzata E. Wilinska (University of Cambridge / CamDiab)
+4. **Substance Monitoring and Control in Human or Animal Bodies** (the Cambridge multi-model algorithm; the US family member is titled *Glucose Monitoring and Control Using Multi-Model Approach*)
+   - **Authors:** Roman Hovorka (inventor), assigned to Cambridge Enterprise Ltd
    - **Patent:** CA2702345C / US9402953B2
    - **URL:** https://patents.google.com/patent/CA2702345C/en
    - **Summary:** Patentdokumentation des multi-modell-basierten Algorithmus, der in CamAPS FX zum Einsatz kommt. Enthält exakte Steuerungs- und Vorhersagealgorithmen, Gewichtigungsverfahren für Multi-Modell-Prädiktoren und Sicherheitsgrenzen für die Dosierung.

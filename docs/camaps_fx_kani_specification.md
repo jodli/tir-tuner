@@ -91,7 +91,7 @@ $$g_P(t) = \frac{q_1(t)}{V_G}$$
 **Endogenous Glucose Production (EGP)**:
 $$EGP(t) = EGP_B \cdot \exp\left(-\frac{r_E(t) - BIC}{1/2 \text{ increment}} \cdot \ln 2\right)$$
 $$BIC = \frac{1000 \cdot BIR}{60 \cdot MCR_I \cdot W}$$
-*Where $EGP_B$ is basal EGP ($\text{mmol/kg/min}$), $BIR$ is basal insulin requirement ($\text{U/h}$), and $BIC$ is basal plasma insulin concentration ($\text{mU/L}$).*
+*Where $EGP_B$ is basal EGP ($\text{mmol/kg/min}$), $BIR$ is basal insulin requirement ($\text{U/h}$), and $BIC$ is basal plasma insulin concentration ($\text{mU/L}$). The exponential form halves basal EGP for every $0.5\text{ mU/L}$ the remote EGP action rises above $BIC$ and grows as the remote action drops below it; since the low-insulin branch grows without bound, the implemented model caps it at $3 \cdot EGP_B$ (`EGP_MAX_FOLD_OVER_BASAL` in `src/hovorka.rs`). The cap preserves the basal identity $EGP(BIC) = EGP_B$ and leaves the verified properties (non-negativity, finiteness, basal steady state) unchanged.*
 
 #### E. Interstitial Glucose Kinetics Submodel
 $$\frac{dq_3(t)}{dt} = k_{31} \left(q_1(t) - q_3(t)\right)$$
@@ -237,7 +237,7 @@ For the Data Science team using this engine to improve the Time in Range (TIR) t
    * **Exercise Events**: Simulate 45-minute bouts of aerobic exercise by doubling $S_{ID}$ and activating Ease-off mode ($7.0\text{ mmol/L}$ target).
    * **Sensor Noise & Dropouts**: Inject Gaussian noise ($\sigma_Z = 0.5\text{ mmol/L}$) and 30-minute sensor loss periods.
 3. **Metric Targets**:
-   * **Time in Range ($3.9\text{–}10.0\text{ mmol/L}$)**: Target $> 70\%$ (matching real-world CamAPS FX benchmark of $72.6\%$ [Boughton 2026]).
+   * **Time in Range ($3.9\text{–}10.0\text{ mmol/L}$)**: Target $> 70\%$. The Boughton et al. (2026) real-world cohort (35,714 users, 19 countries) reaches a median TIR of $69.6\%$; the earlier Alwan et al. (2023) analysis (N = 1,805) reported a mean TIR of $72.6\%$.
    * **Time Below Range ($< 3.9\text{ mmol/L}$)**: Target $< 2.5\%$.
    * **Severe Hypo ($< 3.0\text{ mmol/L}$)**: Target $< 1.0\%$.
 

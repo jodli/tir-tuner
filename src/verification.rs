@@ -21,7 +21,8 @@
 //! 3. `verify_hypo_cutoff_and_dosing_bounds` - the pump dose honors the
 //!    hard hypoglycemia cutoff and the `[0, u_max]` delivery bounds.
 //! 4. `verify_no_floating_point_panics` - the EGP submodel never emits
-//!    NaN, infinities or negative values.
+//!    NaN, infinities or negative values and stays within the
+//!    low-insulin-branch cap.
 //! 5. `verify_mode_specific_dosing_invariants` - the Ease-off suspension
 //!    rule and Boost's `+35%` intensification honor the safety envelope
 //!    of the mode-aware dose calculator.
@@ -68,7 +69,7 @@ use crate::controller::{
     best_grid_candidate_index, compute_nmpc_dose, compute_nmpc_dose_mode, nmpc_cost, DosingMode,
     NMPC_GRID_POINTS, NMPC_GRID_STEPS,
 };
-use crate::hovorka::{egp, HovorkaParams, HovorkaState};
+use crate::hovorka::{egp, EGP_MAX_FOLD_OVER_BASAL, HovorkaParams, HovorkaState};
 use crate::imm::normalize_imm_probabilities;
 use crate::{EASE_OFF_TARGET_MMOL_L, HARD_HYPO_CUTOFF_MMOL_L, TARGET_RANGE_MAX_MMOL_L};
 
@@ -160,9 +161,10 @@ pub fn verify_imm_probability_normalization() {
     kani::assert(mu[2] >= 0.0, "mu[2] stays non-negative");
 }
 
-/// Proof 4: the EGP submodel is NaN/infinity free and non-negative over
-/// the physiological remote-insulin-action domain, operating at the
-/// default configuration's basal insulin concentration.
+/// Proof 4: the EGP submodel is NaN/infinity free, non-negative and
+/// capped at `EGP_MAX_FOLD_OVER_BASAL` times the basal EGP over the
+/// physiological remote-insulin-action domain, operating at the default
+/// configuration's basal insulin concentration.
 #[kani::proof]
 pub fn verify_no_floating_point_panics() {
     let r_e: f64 = kani::any();
@@ -176,6 +178,10 @@ pub fn verify_no_floating_point_panics() {
     kani::assert(!egp.is_nan(), "EGP is never NaN");
     kani::assert(!egp.is_infinite(), "EGP is never infinite");
     kani::assert(egp >= 0.0, "EGP is never negative");
+    kani::assert(
+        egp <= EGP_MAX_FOLD_OVER_BASAL * egp_b,
+        "EGP stays within the cap on the low-insulin branch",
+    );
 }
 
 /// Proof 5: the mode-aware dose calculator keeps every operating mode

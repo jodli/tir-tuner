@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CamAPS FX controller core: verification suite catalog</title>
+<style>
+:root { color-scheme: light dark; --line: #8888; }
+* { box-sizing: border-box; }
+body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+       line-height: 1.55; margin: 0; color: #1a1a1a; background: #fff; }
+main { max-width: 52rem; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+h1 { font-size: 1.6rem; margin: 0 0 .2rem; }
+h2 { font-size: 1.25rem; margin: 2.2rem 0 .6rem; border-bottom: 1px solid var(--line); padding-bottom: .3rem; }
+h3 { font-size: 1.05rem; margin: 1.4rem 0 .4rem; }
+h4 { font-size: .85rem; margin: .4rem 0; text-transform: uppercase; letter-spacing: .04em; }
+p { margin: .5rem 0; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+       font-size: .86em; background: #f1f1f1; padding: .1em .3em; border-radius: 3px; }
+pre { background: #f6f6f6; padding: .8rem 1rem; overflow-x: auto; border-radius: 6px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; width: 100%; margin: .8rem 0; font-size: .92rem; }
+th, td { text-align: left; vertical-align: top; border: 1px solid var(--line);
+         padding: .45rem .6rem; }
+th { background: #f4f4f4; }
+blockquote { margin: .8rem 0; padding: .2rem 1rem; border-left: 3px solid var(--line); color: #444; }
+a { color: #1a56db; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.summary { font-size: .95rem; color: #444; }
+.refs { white-space: nowrap; font-size: .85em; }
+.src { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .78em; color: #666; }
+.harness { border: 1px solid var(--line); border-radius: 6px; margin: .7rem 0; padding: .4rem .8rem; }
+.harness summary { cursor: pointer; font-weight: 600; }
+.harness summary .src { margin-left: .6em; font-weight: 400; }
+.cols { display: flex; gap: 1.2rem; flex-wrap: wrap; }
+.cols > div { flex: 1 1 46%; min-width: 15rem; }
+ul.tests, ul { margin: .4rem 0 .8rem; padding-left: 1.2rem; }
+.tests li { margin: .4rem 0; }
+.test-name { font-weight: 600; }
+.moddoc { font-size: .92rem; color: #333; }
+.lint { background: #fdf3f3; border: 1px solid #ecc; border-radius: 6px; padding: .6rem 1rem; }
+footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: .82rem; color: #666; }
+@media print { body { font-size: 11pt; } a { color: inherit; } }
+</style>
+</head>
+<body>
+<main>
+<h1>CamAPS FX controller core: verification suite catalog</h1>
+<p class="summary">What the formal verification suite checks and which tool checks it: Kani proofs, native
+property tests, and coverage-guided fuzzing, each tied to the source paper or the patent it implements.
+Generated from the Rust sources by <code>tools/gen_verification_report.py</code>. This document describes the
+current state of the suite, not a test run; it contains no pass/fail results.</p>
+
+<section><h2>1. Scope and tool split</h2>
+<p>Three tools share the workload, chosen by what each is good at. <strong>Kani</strong> proves universal
+statements over bounded symbolic inputs whose operations are comparisons, clamps, additions and
+multiplications by constants. <strong>Native Rust tests</strong> (exhaustive lattice sweeps, <code>proptest</code>
+randomized cases) cover the rounding-level claims: sum-to-one identities, dense sweeps, the wired
+behaviour of the full model. <strong>Coverage-guided fuzzing</strong> soaks the actual numerical code paths.
+The split is documented in <a href="#ref-W04">the blueprint</a> and repeated in the module docs the
+report is extracted from.</p>
+<p>CamAPS FX style hybrid closed-loop controller core.  This crate implements a minimal, deterministic version of the Cambridge hybrid closed-loop algorithm building blocks:  * [<code>hovorka</code>] - the 10-dimensional glucoregulatory state model, subcutaneous insulin / gut absorption kinetics, EGP and interstitial glucose dynamics. * [<code>controller</code>] - the NMPC style dosing calculator for the insulin pump including the hard hypoglycemia cutoff and maximum delivery limits. * [<code>imm</code>] - the interacting multiple model mode-probability bookkeeping.  The Kani formal verification suite lives in [<code>verification</code>] and is only compiled when <code>cfg(kani)</code> is set (i.e. under <code>cargo kani</code>).</p>
+<div class="moddoc"></div>
+</section>
+
+
+<section><h2>2. What the model is and where it comes from</h2>
+<p>The crate implements a deterministic core of the Cambridge hybrid closed-loop algorithm: the
+10-dimensional extended Hovorka glucoregulatory state, subcutaneous insulin and gut absorption
+submodels, endogenous glucose production (EGP), the interstitial (CGM) compartment, an NMPC-style
+dose calculator with Ease-off / Boost modes, and interacting-multiple-model (IMM) mode-probability
+bookkeeping.</p>
+<table>
+<tr><th>Submodel</th><th>Contents</th><th>Source</th></tr>
+<tr><td>10-dimensional state</td><td>Two subcutaneous insulin depots (<code>i1</code>, <code>i2</code>),
+two remote insulin actions (<code>r_d</code>, <code>r_e</code>), two gut depots (<code>a1</code>,
+<code>a2</code>), glucose masses in the accessible, non-accessible and interstitial compartments
+(<code>q1</code>, <code>q2</code>, <code>q3</code>), and the process-noise state <code>u_s</code>.</td>
+<td><span class="refs"><a href="#ref-CA2345">[CA2345]</a></span> claim 33; <span class="refs"><a href="#ref-W04">[W04]</a></span></td></tr>
+<tr><td>Insulin absorption</td><td>Two-depot subcutaneous chain with time-to-peak <code>t_max,I</code>
+and clearance <code>MCR_I &middot; W</code>; basal/bolus inputs converted to the mU mass convention.</td>
+<td><span class="refs"><a href="#ref-CA2345">[CA2345]</a></span><span class="refs"><a href="#ref-W04">[W04]</a></span></td></tr>
+<tr><td>Glucose kinetics</td><td>Two-compartment transfer (<code>k12</code>, <code>k21</code>), constant
+non-insulin utilization <code>F01</code>, insulin disposal <code>S_ID &middot; r_d</code>, EGP, gut
+absorption, and interstitial kinetics driving the sensor value <code>g_IG</code>.</td>
+<td><span class="refs"><a href="#ref-CA2345">[CA2345]</a></span><span class="refs"><a href="#ref-W04">[W04]</a></span></td></tr>
+<tr><td>EGP</td><td>Exponential suppression halving EGP for every 0.5 mU/L the remote EGP action rises
+above <code>BIC</code>, capped at <code>EGP_MAX_FOLD_OVER_BASAL &times; EGP_B</code> on the low-insulin branch
+(see <a href="#caveats">caveats</a>).</td>
+<td>spec &sect;3.2D; <span class="refs"><a href="#ref-W04">[W04]</a></span></td></tr>
+<tr><td>NMPC dose calculator</td><td>One-step quadratic cost
+<code>J(u) = (g_IG(u) - w)&sup2; + &lambda; (u - u_operating)&sup2;</code> minimized over a candidate grid,
+with the hard hypoglycemia cutoff and <code>[0, u_max]</code> delivery bounds.</td>
+<td>spec &sect;5.1; <span class="refs"><a href="#ref-BQ13">[BQ13]</a></span></td></tr>
+<tr><td>Operating modes</td><td>Standard, Ease-off (exercise, elevated target and suspension below it),
+Boost (temporary +35% intensification).</td>
+<td><span class="refs"><a href="#ref-W22">[W22]</a></span><span class="refs"><a href="#ref-W22B">[W22B]</a></span></td></tr>
+<tr><td>IMM bookkeeping</td><td>Bayesian mode-probability update, mixing of per-mode estimates, Markov
+transition matrix (column-stochastic, diagonal-dominant).</td>
+<td><span class="refs"><a href="#ref-CA2345">[CA2345]</a></span> &sect;4.1</td></tr>
+</table>
+
+<h3>Operating parameters and safety thresholds</h3>
+<p>The user-facing constants come from the Ware et al. 2022 cohort trial; the two TIR band bounds come
+from the real-world analyses. The extraction is from <code>src/lib.rs</code> and the crate modules.</p>
+<table>
+<tr><th>Constant</th><th>Value</th><th>Meaning</th><th>Source</th></tr>
+<tr><td><code>TARGET_GLUCOSE_MMOL_L</code></td><td><code>5.8</code></td><td>Default glucose target (mmol/L). Ware et al. 2022. Default glucose target; also the basal-equilibrium anchor tuned in hovorka.rs. <span class="refs"><a href="#ref-W22">[W22]</a></span></td><td class="src">src/lib.rs#L25</td></tr><tr><td><code>TARGET_RANGE_MIN_MMOL_L</code></td><td><code>4.4</code></td><td>Lower end of the user-adjustable target range (mmol/L). User-adjustable target range. <span class="refs"><a href="#ref-W22">[W22]</a></span></td><td class="src">src/lib.rs#L27</td></tr><tr><td><code>TARGET_RANGE_MAX_MMOL_L</code></td><td><code>11.0</code></td><td>Upper end of the user-adjustable target range (mmol/L). User-adjustable target range; also the upper bound of the Kani dose-domain slice. <span class="refs"><a href="#ref-W22">[W22]</a></span></td><td class="src">src/lib.rs#L29</td></tr><tr><td><code>HARD_HYPO_CUTOFF_MMOL_L</code></td><td><code>4.4</code></td><td>Hard hypoglycemia cutoff: mandatory zero delivery below this interstitial glucose reading (mmol/L). Engineering safety invariant: mandatory zero delivery below this reading. </td><td class="src">src/lib.rs#L32</td></tr><tr><td><code>EASE_OFF_TARGET_MMOL_L</code></td><td><code>7.0</code></td><td>Ease-off (exercise) target (mmol/L). Ease-off exercise target and suspension threshold. <span class="refs"><a href="#ref-W22">[W22]</a></span></td><td class="src">src/lib.rs#L34</td></tr><tr><td><code>BOOST_DELIVERY_FACTOR</code></td><td><code>1.35</code></td><td>Boost mode insulin intensification factor (Ware et al. 2022). User-initiated intensification factor. <span class="refs"><a href="#ref-W22">[W22]</a><a href="#ref-W22B">[W22B]</a></span></td><td class="src">src/lib.rs#L36</td></tr><tr><td><code>DOSE_GAIN_U_H_PER_MMOL_L</code></td><td><code>0.5</code></td><td>Proportional dose gain used by the mode-aware controller (U/h per mmol/L above target).  Illustrative internal constant: a closed-loop proportional stand-in for the one-step grid NMPC, not a published CamAPS parameter (the papers specify the NMPC cost, section 5.1, not a fixed gain). Illustrative internal stand-in for the one-step grid NMPC (spec section 5.1); not a published CamAPS parameter. </td><td class="src">src/lib.rs#L43</td></tr><tr><td><code>TIME_IN_RANGE_MIN_MMOL_L</code></td><td><code>3.9</code></td><td>Time in range band: lower bound (mmol/L). TIR band lower bound (3.9 mmol/L). <span class="refs"><a href="#ref-B26">[B26]</a><a href="#ref-A23">[A23]</a></span></td><td class="src">src/lib.rs#L46</td></tr><tr><td><code>TIME_IN_RANGE_MAX_MMOL_L</code></td><td><code>10.0</code></td><td>Time in range band: upper bound (mmol/L). TIR band upper bound (10.0 mmol/L). <span class="refs"><a href="#ref-B26">[B26]</a><a href="#ref-A23">[A23]</a></span></td><td class="src">src/lib.rs#L48</td></tr><tr><td><code>SENSOR_NOISE_SD_MMOL_L</code></td><td><code>0.5</code></td><td>Sensor measurement noise standard deviation (mmol/L) used in in-silico scenarios. In-silico scenario noise. <span class="refs"><a href="#ref-W10">[W10]</a></span></td><td class="src">src/lib.rs#L51</td></tr><tr><td><code>MU_PER_UNIT</code></td><td><code>1000.0</code></td><td>Glucoregulatory model: the 10-dimensional extended Hovorka state, continuous-time equations discretized with a forward Euler step, and the endogenous glucose production (EGP) submodel.  The step applies a physiological saturation at zero to every mass / concentration compartment, which enforces the non-negativity safety invariant that the Kani suite verifies.  Units follow Hovorka et al. 2004: subcutaneous insulin masses <code>i1</code>, <code>i2</code> are in millie-units (mU), plasma concentrations (<code>insulin_conc</code>, <code>BIC</code>, remote actions <code>r_d</code>, <code>r_e</code>) in mU/L. The dosing inputs <code>u_basal</code> (U/h) and <code>u_bolus</code> (U) are converted to the mU mass state internally, and meal carbohydrate ingestion is accepted as a rate <code>meal_g_per_min</code> (g/min) feeding the gut depot <code>a1</code> (section 3.2C). Millie-units per insulin unit, the <code>i1</code>/<code>i2</code> mass-state convention (Hovorka et al. 2004). mU-per-U convention of the insulin mass state. <span class="refs"><a href="#ref-W04">[W04]</a></span></td><td class="src">src/hovorka.rs#L18</td></tr><tr><td><code>EGP_MAX_FOLD_OVER_BASAL</code></td><td><code>3.0</code></td><td>Upper bound on the EGP response, as a multiple of basal EGP. The exponential suppression model rises without bound when the remote EGP action drops below the basal insulin concentration, so the low-insulin branch is capped here (about 0.048 mmol/kg/min at the default basal EGP of 0.0161). The cap preserves the basal identity <code>egp(bic) == egp_b</code> and therefore every verified property (non-negativity, finiteness, the basal steady state anchor). Crate safety cap on the low-insulin EGP branch; documented in spec section 3.2D. </td><td class="src">src/hovorka.rs#L33</td></tr><tr><td><code>NMPC_GRID_STEPS</code></td><td><code>6</code></td><td>Grid resolution of the one-step NMPC dose selector: candidate rates <code>k / NMPC_GRID_STEPS * u_max</code> for <code>k in 0..=NMPC_GRID_STEPS</code>. Internal grid resolution, spec section 5.1. </td><td class="src">src/controller.rs#L19</td></tr><tr><td><code>NMPC_GRID_POINTS</code></td><td><code>NMPC_GRID_STEPS + 1</code></td><td>Number of candidate rates on the NMPC grid (<code>NMPC_GRID_STEPS + 1</code>, including the zero rate). Internal: STEPS + 1, including the zero rate. </td><td class="src">src/controller.rs#L23</td></tr><tr><td><code>IMM_MODE_COUNT</code></td><td><code>3</code></td><td>Interacting Multiple Model (IMM) mode-probability bookkeeping.  <code>N</code> parallel filters (modes) each carry a mix probability <code>mu</code>.  The native lattice sweeps and <code>proptest</code> cases verify that normalization keeps the mixture a well-formed probability distribution: each mode probability remains in <code>[0, 1]</code> and the mixture sums to <code>1.0</code> within floating-point tolerance. The Kani suite in <code>verification.rs</code> proves only the non-negativity of the normalized entries (the rounding dependent upper bound and sum-to-one identity are native-only, per section 6.3 of the specification). Number of parallel filter modes. Number of parallel modes (N = 3). <span class="refs"><a href="#ref-CA2345">[CA2345]</a></span></td><td class="src">src/imm.rs#L13</td></tr><tr><td><code>IMM_PROBABILITY_SUM_TOLERANCE</code></td><td><code>1e-6</code></td><td>Accepted deviation of the normalized mode-probability sum from 1.0. Accepted deviation of the normalized mixture sum from 1.0. </td><td class="src">src/imm.rs#L16</td></tr><tr><td><code>IMM_MARKOV_TRANSITION</code></td><td><code>[[0.95, 0.05, 0.05], [0.03, 0.90, 0.05], [0.02, 0.05, 0.90]]</code></td><td>Markov transition matrix <code>p[j][i]</code> of the IMM model, the probability of being in mode <code>j</code> at the current step given mode <code>i</code> at the previous step. Column-stochastic: every column sums to one.  The matrix **structure** (one diagonal-dominant column-stochastic matrix, mixing equations per section 4.1.1) follows patent CA2702345C [102-108]; the concrete entries are illustrative tuning values, not published algorithm internals, and may be treated as tunable for the in-silico work. The verification properties only rely on column stochasticity and non-negativity, not on the specific entries. Matrix structure (column-stochastic, diagonal-dominant) from the patent; entries are illustrative tuning values. <span class="refs"><a href="#ref-CA2345">[CA2345]</a></span></td><td class="src">src/imm.rs#L54</td></tr>
+</table>
+
+<h3>Model parameter defaults</h3>
+<p>Defaults of <code>HovorkaParams</code> (<code>HovorkaParams::default()</code>), the operating point
+both the Kani suite and the native tests run at.</p>
+<table>
+<tr><th>Parameter</th><th>Value</th><th>Unit</th><th>Notes</th></tr>
+<tr><td><code>t_max, I</code></td><td><code>55.0</code></td><td>min</td><td>Time-to-peak subcutaneous insulin absorption. <span class="refs"><a href="#ref-W04">[W04]</a></span></td></tr><tr><td><code>t_max, G</code></td><td><code>40.0</code></td><td>min</td><td>Time-to-peak gut glucose absorption. <span class="refs"><a href="#ref-W04">[W04]</a></span></td></tr><tr><td><code>MCR_I</code></td><td><code>0.021</code></td><td>L/kg/min</td><td>Metabolic clearance rate of insulin. <span class="refs"><a href="#ref-W04">[W04]</a></span></td></tr><tr><td><code>weight</code></td><td><code>70</code></td><td>kg</td><td>Adult reference body weight. </td></tr><tr><td><code>p2_D</code></td><td><code>0.02</code></td><td>/min</td><td>Fractional disappearance of remote disposal action. <span class="refs"><a href="#ref-W04">[W04]</a></span></td></tr><tr><td><code>p2_E</code></td><td><code>0.011</code></td><td>/min</td><td>Fractional disappearance of remote EGP action. <span class="refs"><a href="#ref-W04">[W04]</a></span></td></tr><tr><td><code>k12 = k21</code></td><td><code>0.066</code></td><td>/min</td><td>Inter-compartmental glucose transfer. <span class="refs"><a href="#ref-W04">[W04]</a></span></td></tr><tr><td><code>k31</code></td><td><code>0.01</code></td><td>/min</td><td>Interstitial transport to the CGM compartment. <span class="refs"><a href="#ref-W04">[W04]</a></span></td></tr><tr><td><code>V_G</code></td><td><code>0.16</code></td><td>L/kg</td><td>Glucose distribution volume. <span class="refs"><a href="#ref-W04">[W04]</a></span></td></tr><tr><td><code>F01</code></td><td><code>0.01</code></td><td>mmol/kg/min</td><td>Non-insulin dependent utilization; constant, no saturable elimination in the verified model (spec 3.2D). <span class="refs"><a href="#ref-W04">[W04]</a></span></td></tr><tr><td><code>S_ID</code></td><td><code>5.8e-4</code></td><td>/min per mU/L</td><td>Tuned so the basal equilibrium sits on the 5.8 target; not a published catch-all value. </td></tr><tr><td><code>EGP_B</code></td><td><code>0.0161</code></td><td>mmol/kg/min</td><td>Basal endogenous glucose production. <span class="refs"><a href="#ref-W04">[W04]</a></span></td></tr><tr><td><code>BIR</code></td><td><code>1.0</code></td><td>U/h</td><td>Basal insulin requirement of the default configuration. </td></tr>
+</table>
+</section>
+
+
+<section><h2>3. Kani formal proofs</h2>
+<p><code>src/verification.rs</code> is compiled only under <code>cargo kani</code>. Each harness below carries
+its extracted doc comment, the symbolic input domain it is bounded to (<code>kani::assume</code>) and the
+assertions it discharges (<code>kani::assert</code>), pulled verbatim from the source.</p>
+<details id="harness-verify_physiological_non_negativity" open class="harness">
+  <summary><code>verify_physiological_non_negativity</code><span class="src">src/verification.rs#L98</span></summary>
+  <p><code>clamped_forward_euler</code>, the saturation primitive <code>(prev + dt * rate).max(0.0)</code>, is non-negative for a bounded finite range of <code>prev</code> / <code>rate</code>. The full <code>f64</code> domain property is an algebraic fact about IEEE <code>max</code> (it returns the non-NaN operand when the other is NaN and <code>+inf</code> stays <code>+inf</code>) rather than a solver result, deliberately out of scope for Kani's expensive <code>f64</code> reasoning. The wiring of <code>HovorkaState::step</code> is covered by <code>verify_step_compartment_non_negativity</code> below and the native <code>proptest</code> walk in <code>hovorka.rs</code>.</p>
+  <div class="cols">
+    <div><h4>Input domain</h4><ul><li><code class="dom">prev &gt;= -1_000.0 &amp;&amp; prev &lt;= 1_000.0</code></li><li><code class="dom">rate &gt;= -1_000.0 &amp;&amp; rate &lt;= 1_000.0</code></li></ul></div>
+    <div><h4>Proved properties</h4><ul><li>forward Euler saturation keeps compartments non-negative</li></ul></div>
+  </div>
+</details><details id="harness-verify_hypo_cutoff_and_dosing_bounds" open class="harness">
+  <summary><code>verify_hypo_cutoff_and_dosing_bounds</code><span class="src">src/verification.rs#L120</span></summary>
+  <p>Proof 2: the NMPC dose calculator never prescribes a negative rate or a rate above the user-defined maximum, and it enforces the mandatory zero delivery when the CGM reads below the hard hypo cutoff.</p>
+  <div class="cols">
+    <div><h4>Input domain</h4><ul><li><code class="dom">ig_reading &gt;= 1.0 &amp;&amp; ig_reading &lt;= TARGET_RANGE_MAX_MMOL_L + 14.0</code></li></ul></div>
+    <div><h4>Proved properties</h4><ul><li>dose is never negative</li><li>dose never exceeds u_max</li><li>hard hypo cutoff forces zero delivery</li></ul></div>
+  </div>
+</details><details id="harness-verify_imm_probability_normalization" open class="harness">
+  <summary><code>verify_imm_probability_normalization</code><span class="src">src/verification.rs#L148</span></summary>
+  <p>Normalizing an arbitrary non-negative mode-probability mixture (with positive total weight) keeps every entry non-negative, for symbolic <code>f64</code> inputs. The rounding-dependent upper bound <code>&lt;= 1.0</code> and the sum-to-one identity are covered natively by the exhaustive divisor-16 lattice and the <code>proptest</code> cases in <code>imm.rs</code>.</p>
+  <div class="cols">
+    <div><h4>Input domain</h4><ul><li><code class="dom">mu[0] &gt;= 0.0 &amp;&amp; mu[0] &lt;= 1.0</code></li><li><code class="dom">mu[1] &gt;= 0.0 &amp;&amp; mu[1] &lt;= 1.0</code></li><li><code class="dom">mu[2] &gt;= 0.0 &amp;&amp; mu[2] &lt;= 1.0</code></li><li><code class="dom">sum &gt; 0.001</code></li></ul></div>
+    <div><h4>Proved properties</h4><ul><li>mu[0] stays non-negative</li><li>mu[1] stays non-negative</li><li>mu[2] stays non-negative</li></ul></div>
+  </div>
+</details><details id="harness-verify_no_floating_point_panics" open class="harness">
+  <summary><code>verify_no_floating_point_panics</code><span class="src">src/verification.rs#L169</span></summary>
+  <p>Proof 4: the EGP submodel is NaN/infinity free, non-negative and capped at <code>EGP_MAX_FOLD_OVER_BASAL</code> times the basal EGP over the physiological remote-insulin-action domain, operating at the default configuration's basal insulin concentration.</p>
+  <div class="cols">
+    <div><h4>Input domain</h4><ul><li><code class="dom">r_e &gt;= 0.0 &amp;&amp; r_e &lt;= 100.0</code></li></ul></div>
+    <div><h4>Proved properties</h4><ul><li>EGP is never NaN</li><li>EGP is never infinite</li><li>EGP is never negative</li><li>EGP stays within the cap on the low-insulin branch</li></ul></div>
+  </div>
+</details><details id="harness-verify_mode_specific_dosing_invariants" open class="harness">
+  <summary><code>verify_mode_specific_dosing_invariants</code><span class="src">src/verification.rs#L193</span></summary>
+  <p>Proof 5: the mode-aware dose calculator keeps every operating mode (Standard / Ease-off / Boost) inside the safety envelope: <code>[0, u_max]</code> bounds, hard hypoglycemia cutoff, Ease-off suspension below the elevated target and Boost never delivering less than Standard.</p>
+  <div class="cols">
+    <div><h4>Input domain</h4><ul><li><code class="dom">ig_reading &gt;= 0.5 &amp;&amp; ig_reading &lt;= 30.0</code></li><li><code class="dom">max_delivery_rate &gt;= 0.1 &amp;&amp; max_delivery_rate &lt;= 20.0</code></li></ul></div>
+    <div><h4>Proved properties</h4><ul><li>dose is never negative in any mode</li><li>dose never exceeds u_max in any mode</li><li>hard hypo cutoff forces zero Standard delivery</li><li>hard hypo cutoff forces zero Ease-off delivery</li><li>hard hypo cutoff forces zero Boost delivery</li><li>Ease-off suspends below the elevated target</li><li>Boost never delivers less than Standard</li></ul></div>
+  </div>
+</details><details id="harness-verify_nmpc_candidate_rates_in_bounds" open class="harness">
+  <summary><code>verify_nmpc_candidate_rates_in_bounds</code><span class="src">src/verification.rs#L239</span></summary>
+  <p>Proof 6a: every candidate rate <code>k / NMPC_GRID_STEPS * u_max</code> of the one-step NMPC grid lies in <code>[0, u_max]</code>, hence so does the selected dose. Pure rate arithmetic, deliberately separate from the cost model so this stays cheap.</p>
+  <div class="cols">
+    <div><h4>Input domain</h4><ul><li><code class="dom">u_max &gt;= 0.1 &amp;&amp; u_max &lt;= 20.0</code></li></ul></div>
+    <div><h4>Proved properties</h4><ul><li>candidate rate stays in [0, u_max]</li></ul></div>
+  </div>
+</details><details id="harness-verify_nmpc_cost_finite_nonneg" open class="harness">
+  <summary><code>verify_nmpc_cost_finite_nonneg</code><span class="src">src/verification.rs#L263</span></summary>
+  <p>Proof 6b: one model step of the section 5.1 NMPC cost is finite and non-negative. The state is sliced to the glucose compartments (<code>q1</code>, <code>q2</code>, <code>q3</code>, with the insulin/gut depots at zero) plus the cost tuning knobs; this keeps the symbolic circuit for the single prediction step tractable while still exercising the real model, EGP and the sum-of- squares cost. Finiteness of the wider model is covered by the EGP proof, the wiring proof <code>verify_step_compartment_non_negativity</code> and the native <code>proptest</code> walk in <code>hovorka.rs</code>.</p>
+  <div class="cols">
+    <div><h4>Input domain</h4><ul><li><code class="dom">q1 &gt;= MIN_GLUCOSE_MASS_MMOL_PER_KG &amp;&amp; q1 &lt;= MAX_GLUCOSE_MASS_MMOL_PER_KG</code></li><li><code class="dom">q2 &gt;= MIN_GLUCOSE_MASS_MMOL_PER_KG &amp;&amp; q2 &lt;= MAX_GLUCOSE_MASS_MMOL_PER_KG</code></li><li><code class="dom">q3 &gt;= MIN_GLUCOSE_MASS_MMOL_PER_KG &amp;&amp; q3 &lt;= MAX_GLUCOSE_MASS_MMOL_PER_KG</code></li><li><code class="dom">u &gt;= 0.0 &amp;&amp; u &lt;= 25.0</code></li><li><code class="dom">u_operating &gt;= 0.0 &amp;&amp; u_operating &lt;= 20.0</code></li><li><code class="dom">target_w &gt;= 4.0 &amp;&amp; target_w &lt;= 12.0</code></li><li><code class="dom">lambda &gt;= 0.0 &amp;&amp; lambda &lt;= 10.0</code></li></ul></div>
+    <div><h4>Proved properties</h4><ul><li>NMPC cost is never NaN</li><li>NMPC cost is never infinite</li><li>NMPC cost is never negative</li></ul></div>
+  </div>
+</details><details id="harness-verify_nmpc_selection_minimal_cost" open class="harness">
+  <summary><code>verify_nmpc_selection_minimal_cost</code><span class="src">src/verification.rs#L307</span></summary>
+  <p>Proof 6c: <code>best_grid_candidate_index</code> returns the position of the minimal cost among the candidates. The costs are abstracted with <code>kani::any()</code> so the proof is pure selection logic over a bounded <code>f64</code> array and stays fast; it does not inline the physiological model.</p>
+  <div class="cols">
+    <div><h4>Input domain</h4><ul><li><code class="dom">costs[i] &gt;= -10.0 &amp;&amp; costs[i] &lt;= 10.0</code></li></ul></div>
+    <div><h4>Proved properties</h4><ul><li>selected candidate attains the minimal cost</li></ul></div>
+  </div>
+</details><details id="harness-verify_step_compartment_non_negativity" open class="harness">
+  <summary><code>verify_step_compartment_non_negativity</code><span class="src">src/verification.rs#L336</span></summary>
+  <p><code>HovorkaState::step</code> routes every compartment through the <code>clamped_forward_euler</code> saturation primitive, so each compartment stays non-negative for a bounded symbolic physiological state and bounded inputs (basal/bolus insulin, meal ingestion rate and the external process-noise influx <code>u_s</code>). This complements the primitive proof above with the actual wiring of the model; the unbounded state space is covered by the native <code>proptest</code> walk in <code>hovorka.rs</code>.</p>
+  <div class="cols">
+    <div><h4>Input domain</h4><ul><li><code class="dom">i1 &gt;= 0.0 &amp;&amp; i1 &lt;= 25_000.0</code></li><li><code class="dom">i2 &gt;= 0.0 &amp;&amp; i2 &lt;= 25_000.0</code></li><li><code class="dom">r_d &gt;= 0.0 &amp;&amp; r_d &lt;= 50.0</code></li><li><code class="dom">r_e &gt;= 0.0 &amp;&amp; r_e &lt;= 50.0</code></li><li><code class="dom">a1 &gt;= 0.0 &amp;&amp; a1 &lt;= 150.0</code></li><li><code class="dom">a2 &gt;= 0.0 &amp;&amp; a2 &lt;= 150.0</code></li><li><code class="dom">q1 &gt;= 0.0 &amp;&amp; q1 &lt;= 30.0</code></li><li><code class="dom">q2 &gt;= 0.0 &amp;&amp; q2 &lt;= 30.0</code></li><li><code class="dom">q3 &gt;= 0.0 &amp;&amp; q3 &lt;= 30.0</code></li><li><code class="dom">u_s &gt;= 0.0 &amp;&amp; u_s &lt;= 5.0</code></li><li><code class="dom">u_basal &gt;= 0.0 &amp;&amp; u_basal &lt;= 25.0</code></li><li><code class="dom">u_bolus &gt;= 0.0 &amp;&amp; u_bolus &lt;= 5.0</code></li><li><code class="dom">meal &gt;= 0.0 &amp;&amp; meal &lt;= 5.0</code></li></ul></div>
+    <div><h4>Proved properties</h4><ul><li>i1 stays non-negative</li><li>i2 stays non-negative</li><li>r_d stays non-negative</li><li>r_e stays non-negative</li><li>a1 stays non-negative</li><li>a2 stays non-negative</li><li>q1 stays non-negative</li><li>q2 stays non-negative</li><li>q3 stays non-negative</li></ul></div>
+  </div>
+</details>
+</section>
+
+
+<section><h2>4. Native verification coverage</h2>
+<p>Items the Kani suite deliberately does not discharge, per section 6.3 of the blueprint: the
+rounding-dependent IMM sum-to-one and mixing/update identities, the full-state wired non-negativity and
+finiteness of the model, and the NMPC realized-cost composition with the hypoglycemia guard. The
+exhaustive lattice sweeps and the <code>proptest</code> cases live in the <code>#[cfg(test)]</code> modules
+of the crate and are extracted here alongside their doc comments.</p>
+<div class="module"><h3>src/hovorka.rs</h3><div class="moddoc"></div><ul class="tests"><li><div class="test-name"><code>step_keeps_all_compartments_non_negative</code><span class="src">src/hovorka.rs#L275</span></div><p>Native fast sweep complementing the Kani saturation proof of <code>clamped_forward_euler</code>: exercises the real wiring of <code>step</code> over per-compartment lattice slices plus pseudo-random joint stresses and asserts every compartment stays non-negative and finite.</p></li><li><div class="test-name"><code>egp_is_capped_on_low_insulin_branch</code><span class="src">src/hovorka.rs#L390</span></div><p>The low-insulin EGP branch is capped at <code>EGP_MAX_FOLD_OVER_BASAL</code> times the basal EGP; the basal identity <code>EGP(BIC) = EGP_B</code> is preserved.</p></li><li><div class="test-name"><code>basal_steady_state_matches_target</code><span class="src">src/hovorka.rs#L418</span></div><p>Basal steady-state anchor (Hovorka et al. 2004): under a constant basal infusion of <code>BIR</code> U/h and no meals / boluses, the system has an equilibrium at which depot masses sit at <code>1000 * BIR / 60 * t_max_i</code> mU, the insulin concentration equals <code>BIC</code> (mU/L), the remote actions <code>r_d</code>/<code>r_e</code> settle on <code>BIC</code>, and EGP returns to its basal value <code>egp_b</code> instead of diverging. With the default parameters the equilibrium plasma glucose sits on the nominal target (5.8 mmol/L), pinning the <code>i</code>/<code>BIC</code> unit convention that the qualitative Kani proofs cannot observe.</p></li><li><div class="test-name"><code>step_keeps_all_compartments_finite_and_nonnegative</code><span class="src">src/hovorka.rs#L538</span></div></li><li><div class="test-name"><code>random_walk_stays_finite_and_nonnegative</code><span class="src">src/hovorka.rs#L551</span></div></li></ul></div><div class="module"><h3>src/controller.rs</h3><div class="moddoc"></div><ul class="tests"><li><div class="test-name"><code>grid_dose_is_min_cost_candidate</code><span class="src">src/controller.rs#L191</span></div><p>The composition link the Kani suite does not close: the rate returned by <code>nmpc_grid_dose</code> is one of the grid candidates, stays in <code>[0, u_max]</code>, and its realized cost is the minimum over the computed candidate costs.</p></li><li><div class="test-name"><code>cost_is_finite_nonnegative_over_full_state</code><span class="src">src/controller.rs#L219</span></div></li><li><div class="test-name"><code>grid_dose_composed_with_hypo_cutoff_is_safe</code><span class="src">src/controller.rs#L240</span></div><p><code>nmpc_grid_dose</code> is a pure cost minimizer: it does not itself know the CGM reading or the hard hypoglycemia cutoff (the two layers are kept separate, as in CamAPS). This closes the composition gap the Kani suite leaves open: once the grid result is passed through the hypoglycemia guard, the delivered rate honors the <code>[0, u_max]</code> bounds and the mandatory zero below the cutoff for any grid outcome and any CGM reading.</p></li></ul></div><div class="module"><h3>src/imm.rs</h3><div class="moddoc"></div><ul class="tests"><li><div class="test-name"><code>normalization_sums_to_one_on_lattice</code><span class="src">src/imm.rs#L147</span></div><p>Concrete sweep over the exact-arithmetic lattice: normalization keeps the mixture sum within <code>IMM_PROBABILITY_SUM_TOLERANCE</code> of 1.0 for every sampled point (stride 8 over <code>n in 0..=1024</code>, plus all edge weights). This complements the symbolic Kani proof, which proves only the non-negativity of the normalized entries over arbitrary mixtures; the rounding-dependent sum-to-one identity is native-only (see the module docs).</p></li><li><div class="test-name"><code>cycle_normalizes_on_lattice</code><span class="src">src/imm.rs#L197</span></div><p>Concrete sweep complementing the symbolic IMM-cycle Kani proofs: for every lattice point with positive prognostic weights the mixing probabilities over <code>i</code> sum to one per mode and the Bayesian update re-normalizes the mode probabilities.</p></li><li><div class="test-name"><code>mixture_convex_hull_and_variance_on_lattice</code><span class="src">src/imm.rs#L251</span></div><p>Combination step (section 4.1.5) on the exact-arithmetic lattice with weights summing to exactly one (<code>n0 + n1 + n2 == LAT</code>): the mixture-weighted mean stays inside the convex hull of the per-mode values and the mixture variance is never negative.</p></li><li><div class="test-name"><code>normalize_bounds_and_sums_to_one</code><span class="src">src/imm.rs#L320</span></div></li><li><div class="test-name"><code>mixing_probabilities_are_distribution</code><span class="src">src/imm.rs#L339</span></div></li><li><div class="test-name"><code>mode_update_is_distribution</code><span class="src">src/imm.rs#L362</span></div></li></ul></div>
+
+<h3>Grid-selector composition detail</h3>
+<p><code>nmpc_grid_dose</code> is deliberately a pure cost minimizer: it does not see the CGM reading. The
+delivered pump rate must pass through the hypoglycemia guard (<code>is_hypoglycemic</code> /
+<code>compute_nmpc_dose_mode</code>), and that composition is what the native
+<code>grid_dose_composed_with_hypo_cutoff_is_safe</code> case checks. It is not a single Kani harness
+because the two layers are proved separately there.</p>
+</section>
+
+
+<section><h2>5. Coverage-guided fuzz targets</h2>
+<p>Soak targets in <code>fuzz/fuzz_targets/</code> over the actual numerical code, asserting the same
+safety invariants the native suite checks.</p>
+<table>
+<tr><th>Target</th><th>Properties asserted</th><th>Source</th></tr>
+<tr><td><code>hovorka_step</code></td><td>Arbitrary bounded f64 inputs clamped to the physiological domain (NaN / infinite inputs are skipped); after one forward-Euler step every compartment stays finite and non-negative.</td><td class="src">fuzz/fuzz_targets/hovorka_step.rs</td></tr><tr><td><code>nmpc_grid_dose</code></td><td>The selected dose stays in [0, u_max]; every candidate one-step cost is finite and non-negative; the selected rate equals the min-cost candidate and its realized cost attains the minimum over the grid.</td><td class="src">fuzz/fuzz_targets/nmpc_grid_dose.rs</td></tr>
+</table>
+</section>
+
+
+<section><h2>6. Budget and tooling</h2><pre><code># whole Kani suite (budget: 90s wall, 30s per harness)
+cargo kani -Z unstable-options --harness-timeout 30s -j --output-format terse
+
+# native properties incl. proptest (opt-in soak via CAMAPS_SOAK_ITERS)
+cargo test
+CAMAPS_SOAK_ITERS=50000 cargo test
+
+# coverage-guided soak
+cargo +nightly fuzz run hovorka_step
+cargo +nightly fuzz run nmpc_grid_dose</code></pre>
+<p>Reference points from spec section 6.1: the Kani suite must finish within 90 seconds wall-clock with
+no single harness above 30 seconds; native properties run under plain <code>cargo test</code> (default
+budget about 10 seconds).</p>
+</section>
+
+
+<section><h2>7. Out of scope and future work</h2>Per the blueprint section 6.4 and the suite module docs: the full 10-state IMM extended Kalman filter
+(state/covariance mixing, predict, update, likelihood) is not implemented; the crate covers
+mode-probability bookkeeping only. Multi-step / full-horizon NMPC over the J1 + J2 sum is
+not implemented; only the one-step grid selector is. The bayesian real-time adaptation of the six
+individual dynamic parameters (section 3) is future work and would require a tractable linearization or
+stubbing of the nonlinear model before it could be verified. The process-noise state u_s is reserved
+and carried through unchanged; the stochastic increment is injected externally.</section>
+
+
+<div class="lint" id="caveats">
+<strong>Source-mapping caveats</strong>
+<p>The EGP submodel is the specification form of section 3.2D: a fixed 0.5 mU/L relative half-increment
+denominator plus the low-insulin-branch cap at <code>EGP_MAX_FOLD_OVER_BASAL &times; EGP_B</code>, and
+<code>F01</code> is constant (no glucose-dependent saturable elimination). This is the model the suite
+verifies, not the literal functional form of the 2004 publication; the divergence is documented in
+<code>src/hovorka.rs</code>. <code>S_ID</code> is a crate calibration chosen so the basal equilibrium sits
+on the 5.8 mmol/L target; it is not a published catch-all value. The IMM Markov entries are illustrative
+tuning values; the verified properties rely only on column stochasticity and non-negativity. The patent
+paragraph pointers [0102]-[0108] and [0109]-[0116] used in the blueprint could not be cross-checked
+against the flattened patent text and are unverified.</p>
+</div>
+
+<section><h2>References</h2>
+<ol>
+<li id="ref-W04"><strong>[W04]</strong> Hovorka, R., Canonico, V., Chassin, L., Haueter, U., Massi-Benedetti, M., Orsini Federici, M., Pieber, T., Schaller, H., Schaupp, L., Vering, T., Wilinska, M. E. Nonlinear model predictive control of glucose concentration in subjects with type 1 diabetes. Physiological Measurement 2004;25(4):905-920. <a href="https://pubmed.ncbi.nlm.nih.gov/15382830/">https://pubmed.ncbi.nlm.nih.gov/15382830/</a></li><li id="ref-W10"><strong>[W10]</strong> Wilinska, M. E., Chassin, L. J., Acerini, C. L., Allen, J. M., Dunger, D. B., Hovorka, R. Simulation Environment to Evaluate Closed-Loop Insulin Delivery Systems in Type 1 Diabetes. Journal of Diabetes Science and Technology 2010;4(1):132-144. PMC2825634. <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC2825634/">https://pmc.ncbi.nlm.nih.gov/articles/PMC2825634/</a></li><li id="ref-BQ13"><strong>[BQ13]</strong> Bequette, B. W. Algorithms for a Closed-Loop Artificial Pancreas: The Case for Model Predictive Control. Journal of Diabetes Science and Technology 2013;7(6):1632-1643. PMC3876342. <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC3876342/">https://pmc.ncbi.nlm.nih.gov/articles/PMC3876342/</a></li><li id="ref-W22"><strong>[W22]</strong> Ware, J., Boughton, C. K., Allen, J. M., Wilinska, M. E., Tauschmann, M., Denvir, L., Thankamony, A., Campbell, F. M., Wadwa, R. P., Buckingham, B. A., Davis, N., et al. Cambridge hybrid closed-loop algorithm in children and adolescents with type 1 diabetes: a multicentre 6-month randomised controlled trial. The Lancet Digital Health 2022;4(4):e245-e255. <a href="https://doi.org/10.1016/S2589-7500(22)00020-6">https://doi.org/10.1016/S2589-7500(22)00020-6</a></li><li id="ref-W22B"><strong>[W22B]</strong> Ware, J., Wilinska, M. E., Ruan, Y., Allen, J. M., Boughton, C. K., Hartnell, S., et al. Safety of user-initiated intensification of insulin delivery using Cambridge hybrid closed-loop algorithm. Journal of Diabetes Science and Technology 2022;16(6):1435-1440. <a href="https://doi.org/10.1177/19322968221141924">https://doi.org/10.1177/19322968221141924</a></li><li id="ref-B26"><strong>[B26]</strong> Boughton, C. K., Tong, M., Wilinska, M. E., Hartnell, S., Hovorka, R., et al. Real-world evidence on the CamAPS FX hybrid closed-loop system in people living with type 1 diabetes. Metabologia 2026;2. <a href="https://doi.org/10.1007/s44357-025-00002-2">https://doi.org/10.1007/s44357-025-00002-2</a></li><li id="ref-A23"><strong>[A23]</strong> Alwan, H., et al. Real-World Evidence Analysis of a Hybrid Closed-Loop System. Journal of Diabetes Science and Technology 2023. <a href="https://doi.org/10.1177/19322968231185348">https://doi.org/10.1177/19322968231185348</a></li><li id="ref-CA2345"><strong>[CA2345]</strong> Hovorka, R. (inventor). Substance Monitoring and Control in Human or Animal Bodies. Canadian patent CA2702345C, granted 2018, assigned to Cambridge Enterprise Ltd. (US family: US9402953B2, Glucose Monitoring and Control Using Multi-Model Approach.) <a href="https://patents.google.com/patent/CA2702345C/en">https://patents.google.com/patent/CA2702345C/en</a></li>
+</ol>
+<h3>Project documents</h3>
+<ul><li><strong>Verification blueprint</strong> (Model specification (section 3), verification suite blueprint (section 6) and data-science roadmap (section 7).): <a href="docs/camaps_fx_kani_specification.md">docs/camaps_fx_kani_specification.md</a></li><li><strong>Research report</strong> (Reading notes on the source papers and the patent, with corrections applied.): <a href="docs/Research_report_CamAPS_FX__Cambridge_Artificial_Pancreas_Alg.md">docs/Research_report_CamAPS_FX__Cambridge_Artificial_Pancreas_Alg.md</a></li></ul>
+</section>
+
+
+<footer>
+Generated from <code>src/lib.rs</code>, <code>src/hovorka.rs</code>, <code>src/controller.rs</code>,
+<code>src/imm.rs</code>, <code>src/verification.rs</code> and <code>fuzz/fuzz_targets/</code>.
+Regenerate with <code>python3 tools/gen_verification_report.py</code>. This catalog reflects source
+structure, not verification results. The plain-language companion with diagrams is
+<code>docs/verification_summary.html</code>.
+</footer>
+</main>
+</body>
+</html>

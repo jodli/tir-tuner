@@ -1,3 +1,6 @@
 /target
 /fuzz/target
 /fuzz/artifacts
+.DS_Store
+.slopless
+/tools/__pycache__

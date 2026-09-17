@@ -23,11 +23,28 @@ pub fn basal_insulin_conc(bir_u_per_h: f64, mcr_i: f64, weight_kg: f64) -> f64 {
     (1000.0 * bir_u_per_h) / (60.0 * mcr_i * weight_kg)
 }
 
+/// Upper bound on the EGP response, as a multiple of basal EGP. The
+/// exponential suppression model rises without bound when the remote
+/// EGP action drops below the basal insulin concentration, so the
+/// low-insulin branch is capped here (about 0.048 mmol/kg/min at the
+/// default basal EGP of 0.0161). The cap preserves the basal identity
+/// `egp(bic) == egp_b` and therefore every verified property
+/// (non-negativity, finiteness, the basal steady state anchor).
+pub const EGP_MAX_FOLD_OVER_BASAL: f64 = 3.0;
+
 /// EGP (mmol/kg/min) as a function of the remote insulin action on
 /// hepatic EGP suppression `r_e` (mU/L), given basal EGP and the basal
 /// insulin concentration.
+///
+/// The specification form (section 3.2D of
+/// `docs/camaps_fx_kani_specification.md`): a fixed `0.5` mmol/L-relative
+/// half-increment denominator, capped at `EGP_MAX_FOLD_OVER_BASAL`
+/// times the basal EGP. This is the model the Kani suite and the native
+/// tests verify, not the literal functional form of the 2004
+/// publication.
 pub fn egp(r_e: f64, bic: f64, egp_b: f64) -> f64 {
-    egp_b * (-((r_e - bic) / 0.5) * std::f64::consts::LN_2).exp()
+    let uncapped = egp_b * (-((r_e - bic) / 0.5) * std::f64::consts::LN_2).exp();
+    uncapped.min(EGP_MAX_FOLD_OVER_BASAL * egp_b)
 }
 
 /// Subcutaneous insulin absorption parameters (Hovorka et al. 2004).
@@ -54,6 +71,10 @@ pub struct HovorkaParams {
     /// Glucose distribution volume (L/kg).
     pub v_g: f64,
     /// Non-insulin dependent glucose utilization (mmol/kg/min).
+    ///
+    /// Constant per the specification (section 3.2D); the 2004
+    /// publication's glucose-dependent saturable elimination is not part
+    /// of the verified model.
     pub f_01: f64,
     /// Peripheral insulin sensitivity (/min per mU/L).
     ///
@@ -360,6 +381,28 @@ mod tests {
                 0.5 + next_f() * 3.0,
             );
         }
+    }
+
+    /// The low-insulin EGP branch is capped at
+    /// `EGP_MAX_FOLD_OVER_BASAL` times the basal EGP; the basal identity
+    /// `EGP(BIC) = EGP_B` is preserved.
+    #[test]
+    fn egp_is_capped_on_low_insulin_branch() {
+        let params = HovorkaParams::default();
+        let bic = params.basal_insulin_conc();
+        let cap = EGP_MAX_FOLD_OVER_BASAL * params.egp_b;
+
+        for r_e in [0.0, 1.0, 5.0, bic - 1.0, bic - 0.5, bic, 20.0, 100.0] {
+            let v = params.egp(r_e);
+            assert!(
+                v >= 0.0 && v <= cap,
+                "EGP escaped the cap at r_e={r_e}: {v} not in [0, {cap}]"
+            );
+        }
+        assert!(
+            (params.egp(bic) - params.egp_b).abs() < 1e-12,
+            "basal identity lost by the cap"
+        );
     }
 
     /// Basal steady-state anchor (Hovorka et al. 2004): under a constant

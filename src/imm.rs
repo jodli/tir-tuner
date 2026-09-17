@@ -1,9 +1,13 @@
 //! Interacting Multiple Model (IMM) mode-probability bookkeeping.
 //!
 //! `N` parallel filters (modes) each carry a mix probability `mu`.  The
-//! suite verifies that normalization keeps the mixture a well-formed
-//! probability distribution: each mode probability remains in `[0, 1]`
-//! and the mixture sums to `1.0` within floating-point tolerance.
+//! native lattice sweeps and `proptest` cases verify that normalization
+//! keeps the mixture a well-formed probability distribution: each mode
+//! probability remains in `[0, 1]` and the mixture sums to `1.0` within
+//! floating-point tolerance. The Kani suite in `verification.rs` proves
+//! only the non-negativity of the normalized entries (the rounding
+//! dependent upper bound and sum-to-one identity are native-only, per
+//! section 6.3 of the specification).
 
 /// Number of parallel filter modes.
 pub const IMM_MODE_COUNT: usize = 3;
@@ -17,7 +21,9 @@ pub const IMM_PROBABILITY_SUM_TOLERANCE: f64 = 1e-6;
 /// When the input mixture has non-positive total weight the mixture is
 /// left untouched. For a positive-weight, non-negative input every entry
 /// lands in `[0, 1]` and the mixture sums to one up to floating-point
-/// rounding, which the Kani suite verifies.
+/// rounding; both are covered by the native lattice and `proptest` cases,
+/// while the Kani harness `verify_imm_probability_normalization` proves
+/// only the non-negativity sign property.
 pub fn normalize_imm_probabilities(mu: &mut [f64; IMM_MODE_COUNT]) {
     let sum = mu[0] + mu[1] + mu[2];
     if sum > 0.0 {
@@ -51,8 +57,8 @@ pub const IMM_MARKOV_TRANSITION: [[f64; IMM_MODE_COUNT]; IMM_MODE_COUNT] =
 ///
 /// With a column-stochastic transition matrix and a non-negative
 /// normalized `mu` the weights are between 0 and 1 and sum to one over
-/// `j`; the Kani suite proves normalization of the mixing probabilities
-/// derived from them.
+/// `j`; the native lattice and `proptest` cases verify normalization and
+/// the mixing probabilities derived from them.
 pub fn imm_prognostic_weights(mu: &[f64; IMM_MODE_COUNT]) -> [f64; IMM_MODE_COUNT] {
     let mut c = [0.0; IMM_MODE_COUNT];
     for j in 0..IMM_MODE_COUNT {
@@ -67,7 +73,7 @@ pub fn imm_prognostic_weights(mu: &[f64; IMM_MODE_COUNT]) -> [f64; IMM_MODE_COUN
 ///
 /// Only valid when `c[j] > 0.0`; otherwise any mixing is undefined and
 /// zero is returned. For a fixed `j` the mixing probabilities sum to one
-/// over `i`, which the Kani suite proves.
+/// over `i`, which the native lattice test verifies.
 pub fn imm_mixing_probability(
     j: usize,
     i: usize,
@@ -84,7 +90,8 @@ pub fn imm_mixing_probability(
 /// Mixture-weighted mean of the per-mode values (section 4.1.5).
 ///
 /// For non-negative weights summing to (about) one this stays inside the
-/// convex hull of the per-mode values, which the Kani suite proves.
+/// convex hull of the per-mode values, which the native lattice test
+/// verifies.
 pub fn imm_mixture_mean(values: &[f64; IMM_MODE_COUNT], mu: &[f64; IMM_MODE_COUNT]) -> f64 {
     mu[0] * values[0] + mu[1] * values[1] + mu[2] * values[2]
 }
@@ -107,7 +114,8 @@ pub fn imm_mixture_variance(
 /// `mu_j = c_j * Lambda_j / sum_m c_m * Lambda_m`.
 ///
 /// For non-negative likelihood values with a positive normalizer the
-/// result is a valid distribution, which the Kani suite proves. When the
+/// result is a valid distribution, which the native `proptest` and
+/// lattice cases verify. When the
 /// normalizer is non-positive the posterior is left unchanged (all
 /// zero), mirroring the guard in [`normalize_imm_probabilities`].
 pub fn imm_mode_probability_update(
@@ -132,8 +140,9 @@ mod tests {
     /// keeps the mixture sum within `IMM_PROBABILITY_SUM_TOLERANCE` of
     /// 1.0 for every sampled point (stride 8 over `n in 0..=1024`, plus
     /// all edge weights). This complements the symbolic Kani proof, which
-    /// discharges the same identity over the lattice for arbitrary
-    /// symbolic mantissas.
+    /// proves only the non-negativity of the normalized entries over
+    /// arbitrary mixtures; the rounding-dependent sum-to-one identity is
+    /// native-only (see the module docs).
     #[test]
     fn normalization_sums_to_one_on_lattice() {
         let lattice = 1024u32;
