@@ -281,6 +281,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tir-tuner-cgm"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "tir-tuner-common",
+]
+
+[[package]]
 name = "tir-tuner-cli"
 version = "0.1.0"
 dependencies = [
