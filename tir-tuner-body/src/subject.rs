@@ -28,6 +28,7 @@
 //! Insulin concentrations are read in U/L; the ingestion input is grams
 //! of carbohydrate per minute.
 
+use tir_tuner_common::random::SeededRng;
 use tir_tuner_common::units::MU_PER_UNIT;
 
 /// Parameters of a virtual subject.
@@ -139,38 +140,6 @@ impl VirtualSubject {
     /// the EGP anchor.
     pub fn basale_x3(&self) -> f64 {
         self.sie_per_mu_l * self.basal_insulin_concentration()
-    }
-}
-
-/// Deterministic seeded generator for reproducible cohorts (SplitMix64).
-struct SeededRng(u64);
-
-impl SeededRng {
-    fn new(seed: u64) -> Self {
-        Self(seed)
-    }
-
-    /// Uniform in [0, 1).
-    fn next_f64(&mut self) -> f64 {
-        // SplitMix64; cast the top 53 bits to a mantissa.
-        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-        z ^= z >> 31;
-        (z >> 11) as f64 * (1.0 / (1u64 << 53) as f64)
-    }
-
-    /// Unit normal via Box-Muller.
-    fn next_normal(&mut self) -> f64 {
-        let u1 = (self.next_f64() + f64::MIN_POSITIVE).max(f64::MIN_POSITIVE);
-        let u2 = self.next_f64();
-        (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos()
-    }
-
-    /// Normal with given mean and sdev.
-    fn next_normal_mean(&mut self, mean: f64, sdev: f64) -> f64 {
-        mean + sdev * self.next_normal()
     }
 }
 

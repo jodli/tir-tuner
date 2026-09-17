@@ -8,6 +8,7 @@
 
 pub mod euler;
 pub mod metrics;
+pub mod random;
 pub mod units;
 
 #[cfg(kani)]

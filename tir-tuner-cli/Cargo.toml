@@ -2,8 +2,11 @@
 name = "tir-tuner-cli"
 version = "0.1.0"
 edition = "2021"
-description = "Time-in-range tuner CLI: replay CGM data through the verified controller core"
+description = "Time-in-range tuner CLI: replay Glooko data through the verified closed-loop stack"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
 tir-tuner-aps = { path = "../tir-tuner-aps" }
+tir-tuner-body = { path = "../tir-tuner-body" }
+tir-tuner-cgm = { path = "../tir-tuner-cgm" }
+tir-tuner-common = { path = "../tir-tuner-common" }

@@ -293,6 +293,9 @@ name = "tir-tuner-cli"
 version = "0.1.0"
 dependencies = [
  "tir-tuner-aps",
+ "tir-tuner-body",
+ "tir-tuner-cgm",
+ "tir-tuner-common",
 ]
 
 [[package]]
