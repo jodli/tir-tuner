@@ -2,7 +2,7 @@
 """Generate docs/verification_summary.html, the plain-language algorithm page.
 
 A simple page that explains how the algorithm works and how its parts connect,
-with mermaid diagrams. The recurring numbers are still extracted from tir-tuner-core/src/, so
+with mermaid diagrams. The recurring numbers are still extracted from the workspace crate sources, so
 the page cannot drift quietly from the constants the code actually uses.
 
 Usage: python3 tools/gen_summary_report.py
@@ -15,8 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from gen_verification_report import (  # noqa: E402
     CANONICAL_ORDER,
+    CRATE_FILES,
     REPO,
-    SRC,
     esc,
     parse_rust,
 )
@@ -114,7 +114,7 @@ def build_const_chips(items_by_file: dict) -> str:
 
 
 def main():
-    items = {rel: parse_rust(SRC / rel.split("/")[-1]) for rel in CANONICAL_ORDER}
+    items = {rel: parse_rust(REPO / rel) for rel in CANONICAL_ORDER}
     const_chips = build_const_chips(items)
 
     css = """

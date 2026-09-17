@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate docs/verification_report.html from the tir-tuner-core sources.
+"""Generate docs/verification_report.html from the workspace crate sources.
 
 The report documents what the verification suite checks and where each
 claim traces back to the literature and the patent. It is extracted
@@ -15,15 +15,24 @@ import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-SRC = REPO / "tir-tuner-core" / "src"
 OUT = REPO / "docs" / "verification_report.html"
 
-CANONICAL_ORDER = [
-    "tir-tuner-core/src/lib.rs",
-    "tir-tuner-core/src/hovorka.rs",
-    "tir-tuner-core/src/controller.rs",
-    "tir-tuner-core/src/imm.rs",
-]
+# Crate -> source files (relative to the crate root), display order.
+CRATE_FILES = {
+    "tir-tuner-aps": ["lib.rs", "hovorka.rs", "controller.rs", "imm.rs"],
+    "tir-tuner-common": ["lib.rs", "units.rs", "euler.rs", "metrics.rs", "random.rs"],
+    "tir-tuner-body": ["lib.rs", "subject.rs", "state.rs", "derivative.rs", "solver.rs"],
+    "tir-tuner-cgm": ["lib.rs", "device.rs"],
+}
+
+# Keys like "tir-tuner-aps/src/lib.rs", used everywhere as display and
+# source-link references.
+CANONICAL_ORDER = sorted(
+    f"{crate}/src/{f}" for crate, files in CRATE_FILES.items() for f in files
+)
+
+# The Kani suites, one verification module per crate.
+VERIFICATION_FILES = sorted(f"{crate}/src/verification.rs" for crate in CRATE_FILES)
 
 
 def esc(text: str) -> str:
@@ -283,7 +292,7 @@ def ref_keys(keys) -> str:
     return f'<span class="refs">{labels}</span>'
 
 
-def build_harness_cards(ver_items, claims) -> list[str]:
+def build_harness_cards(ver_items, claims, ver_rel) -> list[str]:
     cards = []
     for h in ver_items:
         if h["kind"] != "harness":
@@ -299,7 +308,7 @@ def build_harness_cards(ver_items, claims) -> list[str]:
         )
         cards.append(
             f"""<details id="harness-{h['name']}" open class="harness">
-  <summary><code>{h['name']}</code><span class="src">{src_link('tir-tuner-core/src/verification.rs', h['line'])}</span></summary>
+  <summary><code>{h['name']}</code><span class="src">{src_link(ver_rel, h['line'])}</span></summary>
   {doc_html}
   <div class="cols">
     <div><h4>Input domain</h4><ul>{domain}</ul></div>
@@ -359,16 +368,29 @@ def build_const_rows(all_items) -> str:
 def render():
     all_items = {}
     for rel in CANONICAL_ORDER:
-        all_items[rel] = parse_rust(SRC / rel.split("/")[-1])
+        all_items[rel] = parse_rust(REPO / rel)
 
-    ver_items = parse_rust(SRC / "verification.rs")
-    ver_module = next((it for it in ver_items if it["kind"] == "module"), None)
-    library_mod = next(
-        (it for it in all_items["tir-tuner-core/src/lib.rs"] if it["kind"] == "module"), None
-    )
-    claims = harness_claims(SRC / "verification.rs")
+    # Per-crate: verification suite items, harness claims, module docs.
+    crate_ver = {}
+    crate_lib = {}
+    for crate, files in CRATE_FILES.items():
+        lib_rel = f"{crate}/src/lib.rs"
+        ver_rel = f"{crate}/src/verification.rs"
+        ver_items = parse_rust(REPO / ver_rel)
+        claims = harness_claims(REPO / ver_rel)
+        crate_ver[crate] = {
+            "rel": ver_rel,
+            "cards": build_harness_cards(ver_items, claims, ver_rel),
+            "philosophy": inline(
+                next((it for it in ver_items if it["kind"] == "module"), {}).get("docs", "")
+            ),
+            "count": sum(1 for it in ver_items if it["kind"] == "harness"),
+        }
+        library_mod = next(
+            (it for it in all_items[lib_rel] if it["kind"] == "module"), None
+        )
+        crate_lib[crate] = inline(library_mod["docs"]) if library_mod else ""
 
-    harness_cards = build_harness_cards(ver_items, claims)
     native_groups = build_native_groups(all_items)
     const_rows = build_const_rows(all_items)
 
@@ -385,8 +407,20 @@ def render():
             f'<td class="src">{src_link(rel)}</td></tr>'
         )
 
-    ver_philosophy = inline(ver_module["docs"]) if ver_module else ""
-    library_docs = inline(library_mod["docs"]) if library_mod else ""
+    ver_philosophy = "\n".join(
+        f'<div class="moddoc"><h4>{crate}</h4>{crate_ver[crate]["philosophy"]}</div>'
+        for crate in CRATE_FILES
+    )
+    library_docs = "\n".join(
+        f'<div class="moddoc"><h4>{crate}</h4>{crate_lib[crate]}</div>'
+        for crate in CRATE_FILES
+    )
+
+    crate_harnesses = "\n".join(
+        f'<div class="module"><h3>{crate}</h3><p class="moddoc">{crate_ver[crate]["count"]} '
+        f'harness(es) in {crate_ver[crate]["rel"]}.</p>{"".join(crate_ver[crate]["cards"])}</div>'
+        for crate in CRATE_FILES
+    )
 
     references = "".join(
         f'<li id="ref-{key}"><strong>[{key}]</strong> {esc(text)} '
@@ -515,7 +549,7 @@ transition matrix (column-stochastic, diagonal-dominant).</td>
 
 <h3>Operating parameters and safety thresholds</h3>
 <p>The user-facing constants come from the Ware et al. 2022 cohort trial; the two TIR band bounds come
-from the real-world analyses. The extraction is from <code>tir-tuner-core/src/lib.rs</code> and the crate modules.</p>
+from the real-world analyses. The extraction is from the workspace crate modules.</p>
 <table>
 <tr><th>Constant</th><th>Value</th><th>Meaning</th><th>Source</th></tr>
 {const_rows}
@@ -531,10 +565,10 @@ both the Kani suite and the native tests run at.</p>
 """)}
 
 {section("3. Kani formal proofs", f"""
-<p><code>tir-tuner-core/src/verification.rs</code> is compiled only under <code>cargo kani</code>. Each harness below carries
-its extracted doc comment, the symbolic input domain it is bounded to (<code>kani::assume</code>) and the
+<p>The four crates each carry one verification module, compiled only under <code>cargo kani</code>. Each harness below
+shows its extracted doc comment, the symbolic input domain it is bounded to (<code>kani::assume</code>) and the
 assertions it discharges (<code>kani::assert</code>), pulled verbatim from the source.</p>
-{''.join(harness_cards)}
+{crate_harnesses}
 """)}
 
 {section("4. Native verification coverage", f"""
@@ -583,7 +617,7 @@ and carried through unchanged; the stochastic increment is injected externally."
 denominator plus the low-insulin-branch cap at <code>EGP_MAX_FOLD_OVER_BASAL &times; EGP_B</code>, and
 <code>F01</code> is constant (no glucose-dependent saturable elimination). This is the model the suite
 verifies, not the literal functional form of the 2004 publication; the divergence is documented in
-<code>tir-tuner-core/src/hovorka.rs</code>. <code>S_ID</code> is a crate calibration chosen so the basal equilibrium sits
+<code>tir-tuner-aps/src/hovorka.rs</code>. <code>S_ID</code> is a crate calibration chosen so the basal equilibrium sits
 on the 5.8 mmol/L target; it is not a published catch-all value. The IMM Markov entries are illustrative
 tuning values; the verified properties rely only on column stochasticity and non-negativity. The patent
 paragraph pointers [0102]-[0108] and [0109]-[0116] used in the blueprint could not be cross-checked
@@ -599,8 +633,7 @@ against the flattened patent text and are unverified.</p>
 """)}
 
 <footer>
-Generated from <code>tir-tuner-core/src/lib.rs</code>, <code>tir-tuner-core/src/hovorka.rs</code>, <code>tir-tuner-core/src/controller.rs</code>,
-<code>tir-tuner-core/src/imm.rs</code>, <code>tir-tuner-core/src/verification.rs</code> and <code>fuzz/fuzz_targets/</code>.
+Generated from the four workspace crates' <code>src/</code> directories and <code>fuzz/fuzz_targets/</code>.
 Regenerate with <code>python3 tools/gen_verification_report.py</code>. This catalog reflects source
 structure, not verification results. The plain-language companion with diagrams is
 <code>docs/verification_summary.html</code>.
