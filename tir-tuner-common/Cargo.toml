@@ -1,0 +1,15 @@
+[package]
+name = "tir-tuner-common"
+version = "0.1.0"
+edition = "2021"
+description = "Shared numerical primitives, unit conversions and clinical metrics for the tir-tuner workspace"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "tir_tuner_common"
+
+[dev-dependencies]
+proptest = "1"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }

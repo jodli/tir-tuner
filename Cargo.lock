@@ -269,6 +269,7 @@ name = "tir-tuner-aps"
 version = "0.1.0"
 dependencies = [
  "proptest",
+ "tir-tuner-common",
 ]
 
 [[package]]
@@ -276,6 +277,13 @@ name = "tir-tuner-cli"
 version = "0.1.0"
 dependencies = [
  "tir-tuner-aps",
+]
+
+[[package]]
+name = "tir-tuner-common"
+version = "0.1.0"
+dependencies = [
+ "proptest",
 ]
 
 [[package]]

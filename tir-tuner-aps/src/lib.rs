@@ -42,14 +42,6 @@ pub const BOOST_DELIVERY_FACTOR: f64 = 1.35;
 /// papers specify the NMPC cost, section 5.1, not a fixed gain).
 pub const DOSE_GAIN_U_H_PER_MMOL_L: f64 = 0.5;
 
-/// Time in range band: lower bound (mmol/L).
-pub const TIME_IN_RANGE_MIN_MMOL_L: f64 = 3.9;
-/// Time in range band: upper bound (mmol/L).
-pub const TIME_IN_RANGE_MAX_MMOL_L: f64 = 10.0;
-/// Sensor measurement noise standard deviation (mmol/L) used in
-/// in-silico scenarios.
-pub const SENSOR_NOISE_SD_MMOL_L: f64 = 0.5;
-
 /// Shared configuration for the native `proptest` property suite.
 #[cfg(test)]
 pub(crate) mod test_support {

@@ -13,9 +13,8 @@
 //! and meal carbohydrate ingestion is accepted as a rate `meal_g_per_min`
 //! (g/min) feeding the gut depot `a1` (section 3.2C).
 
-/// Millie-units per insulin unit, the `i1`/`i2` mass-state convention
-/// (Hovorka et al. 2004).
-const MU_PER_UNIT: f64 = 1000.0;
+use tir_tuner_common::euler::clamped_forward_euler;
+use tir_tuner_common::units::{MMOL_PER_GRAM_CHO, MU_PER_UNIT};
 
 /// Basal insulin concentration `BIC` (mU/L) for given basal insulin
 /// requirement, clearance and body weight.
@@ -123,20 +122,6 @@ impl Default for HovorkaParams {
     }
 }
 
-/// Forward Euler update saturated at zero: `(prev + dt * rate).max(0.0)`.
-///
-/// This is the enforcement primitive behind the physiological
-/// non-negativity invariant of [`HovorkaState::step`]. For every `f64`
-/// input the result is non-negative: IEEE `max` returns the non-NaN
-/// operand when the other is NaN (clamping NaN rates to zero) and a
-/// `+inf` rate is returned unchanged, still `>= 0.0`. Kani discharges
-/// the negation only over a bounded finite range of `prev` / `rate`;
-/// the full-domain statement is an algebraic property of IEEE `max`,
-/// not a solver result.
-pub fn clamped_forward_euler(prev: f64, rate: f64, dt: f64) -> f64 {
-    (prev + dt * rate).max(0.0)
-}
-
 /// Extended 10-dimensional glucoregulatory state.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HovorkaState {
@@ -178,7 +163,7 @@ impl HovorkaState {
 
     /// Gut carbohydrate absorption rate `u_A(t)` (mmol/kg/min).
     pub fn gut_absorption(&self, params: &HovorkaParams) -> f64 {
-        self.a2 / (params.t_max_g * params.weight_kg * 5.551)
+        self.a2 / (params.t_max_g * params.weight_kg * MMOL_PER_GRAM_CHO)
     }
 
     /// Increment of the continuous-time differential equations at the

@@ -8,6 +8,9 @@ license = "MIT OR Apache-2.0"
 [lib]
 name = "tir_tuner_aps"
 
+[dependencies]
+tir-tuner-common = { path = "../tir-tuner-common" }
+
 [dev-dependencies]
 proptest = "1"
 

@@ -11,22 +11,19 @@
 //!
 //! # What Kani proves here
 //!
-//! 1. `verify_physiological_non_negativity` - the
-//!    `clamped_forward_euler` saturation primitive
-//!    `(prev + dt * rate).max(0.0)` is non-negative over a bounded
-//!    finite range of `prev` / `rate`.
-//! 2. `verify_step_compartment_non_negativity` - `HovorkaState::step`
-//!    routes every compartment through that primitive on a narrow
-//!    symbolic physiological range.
-//! 3. `verify_hypo_cutoff_and_dosing_bounds` - the pump dose honors the
+//! 1. `verify_step_compartment_non_negativity` - `HovorkaState::step`
+//!    routes every compartment through the `clamped_forward_euler`
+//!    primitive (proved in `tir_tuner_common`) on a narrow symbolic
+//!    physiological range.
+//! 2. `verify_hypo_cutoff_and_dosing_bounds` - the pump dose honors the
 //!    hard hypoglycemia cutoff and the `[0, u_max]` delivery bounds.
-//! 4. `verify_no_floating_point_panics` - the EGP submodel never emits
+//! 3. `verify_no_floating_point_panics` - the EGP submodel never emits
 //!    NaN, infinities or negative values and stays within the
 //!    low-insulin-branch cap.
-//! 5. `verify_mode_specific_dosing_invariants` - the Ease-off suspension
+//! 4. `verify_mode_specific_dosing_invariants` - the Ease-off suspension
 //!    rule and Boost's `+35%` intensification honor the safety envelope
 //!    of the mode-aware dose calculator.
-//! 6. NMPC proofs (`verify_nmpc_candidate_rates_in_bounds`,
+//! 5. NMPC proofs (`verify_nmpc_candidate_rates_in_bounds`,
 //!    `verify_nmpc_cost_finite_nonneg`,
 //!    `verify_nmpc_selection_minimal_cost`) - the one-step NMPC dose
 //!    selector of the section 5.1 cost
@@ -34,7 +31,7 @@
 //!    rates lie in `[0, u_max]`, the one-step cost is finite and
 //!    non-negative, and the position chosen by `best_grid_candidate_index`
 //!    attains the minimal cost over the grid.
-//! 7. `verify_imm_probability_normalization` - normalizing a
+//! 6. `verify_imm_probability_normalization` - normalizing a
 //!    non-negative mode-probability mixture keeps every entry
 //!    non-negative.
 //!
@@ -84,34 +81,6 @@ const MAX_GLUCOSE_MASS_MMOL_PER_KG: f64 = 30.0;
 const REFERENCE_BIC_MU_PER_L: f64 = 1000.0 / (60.0 * 0.021 * 70.0);
 /// Basal EGP of the default parameter set (mmol/kg/min).
 const REFERENCE_EGP_B_MMOL_PER_KG_MIN: f64 = 0.0161;
-
-/// `clamped_forward_euler`, the saturation primitive
-/// `(prev + dt * rate).max(0.0)`, is non-negative for a bounded finite
-/// range of `prev` / `rate`. The full `f64` domain property is an
-/// algebraic fact about IEEE `max` (it returns the non-NaN operand when
-/// the other is NaN and `+inf` stays `+inf`) rather than a solver
-/// result, deliberately out of scope for Kani's expensive `f64`
-/// reasoning. The wiring of `HovorkaState::step` is covered by
-/// `verify_step_compartment_non_negativity` below and the native
-/// `proptest` walk in `hovorka.rs`.
-#[kani::proof]
-pub fn verify_physiological_non_negativity() {
-    let prev: f64 = kani::any();
-    let rate: f64 = kani::any();
-    let dt: f64 = 1.0; // one minute, as in the specification
-
-    // Realistic finite range (compartment masses are bounded; NaN and
-    // infinities of a symbolic rate would trip Kani's float additions).
-    kani::assume(prev >= -1_000.0 && prev <= 1_000.0);
-    kani::assume(rate >= -1_000.0 && rate <= 1_000.0);
-
-    let next = crate::hovorka::clamped_forward_euler(prev, rate, dt);
-
-    kani::assert(
-        next >= 0.0,
-        "forward Euler saturation keeps compartments non-negative",
-    );
-}
 
 /// Proof 2: the NMPC dose calculator never prescribes a negative rate or
 /// a rate above the user-defined maximum, and it enforces the mandatory

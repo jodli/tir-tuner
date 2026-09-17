@@ -125,7 +125,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "tir-tuner-core"
+name = "tir-tuner-aps"
+version = "0.1.0"
+dependencies = [
+ "tir-tuner-common",
+]
+
+[[package]]
+name = "tir-tuner-common"
 version = "0.1.0"
 
 [[package]]
@@ -134,7 +141,7 @@ version = "0.0.0"
 dependencies = [
  "arbitrary",
  "libfuzzer-sys",
- "tir-tuner-core",
+ "tir-tuner-aps",
 ]
 
 [[package]]
