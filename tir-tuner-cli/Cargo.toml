@@ -6,4 +6,4 @@ description = "Time-in-range tuner CLI: replay CGM data through the verified con
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-tir-tuner-core = { path = "../tir-tuner-core" }
+tir-tuner-aps = { path = "../tir-tuner-aps" }

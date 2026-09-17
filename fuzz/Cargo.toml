@@ -11,8 +11,8 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 arbitrary = { version = "1", features = ["derive"] }
 
-[dependencies.tir-tuner-core]
-path = "../tir-tuner-core"
+[dependencies.tir-tuner-aps]
+path = "../tir-tuner-aps"
 
 [[bin]]
 name = "hovorka_step"

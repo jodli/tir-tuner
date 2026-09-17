@@ -3,7 +3,7 @@
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 
-use tir_tuner_core::hovorka::{HovorkaParams, HovorkaState};
+use tir_tuner_aps::hovorka::{HovorkaParams, HovorkaState};
 
 #[derive(Arbitrary, Debug)]
 struct Input {

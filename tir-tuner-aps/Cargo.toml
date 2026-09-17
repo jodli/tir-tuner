@@ -1,12 +1,12 @@
 [package]
-name = "tir-tuner-core"
+name = "tir-tuner-aps"
 version = "0.1.0"
 edition = "2021"
 description = "Deterministic time-in-range glucose controller core with a Kani formal verification suite"
 license = "MIT OR Apache-2.0"
 
 [lib]
-name = "tir_tuner_core"
+name = "tir_tuner_aps"
 
 [dev-dependencies]
 proptest = "1"
