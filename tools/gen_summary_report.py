@@ -37,7 +37,7 @@ def mm_model() -> str:
     E[EGP: liver adds glucose] --> Q1
     RE -. controls .-> E
     Q1 --> RD
-    Q1 --> F01[F01: fixed drain]
+    Q1 --> F01[F01: glucose-dependent drain]
     Q1 <--> Q2[q2: tissue stores]
     Q1 --> Q3[q3 interstitial, sensor g_IG]
     Q3 --> C[CGM: the reading]
@@ -60,16 +60,16 @@ def mm_minute() -> str:
     return """sequenceDiagram
     participant CGM as Sensor g_IG
     participant C as Controller
-    participant N as NMPC grid
+    participant N as NMPC sequence
     participant G as Cutoff and clamp
     participant P as Pump
     CGM->>C: reading in mmol/L
-    C->>N: candidates, target, mode
-    N->>N: one-step cost of each candidate
-    N->>G: best rate
+    C->>N: target trajectory, candidates, mode
+    N->>N: cost of each rate sequence over the next four hours
+    N->>G: best rate u(t+1)
     G->>P: 0 below 4.4, else capped at u_max
     P-->>CGM: insulin arrives, next reading
-    Note over P,CGM: repeat every minute
+    Note over P,CGM: repeat every control period
 """
 
 
@@ -149,17 +149,18 @@ footer { margin-top:3.5rem; border-top:1px solid var(--line); padding-top:.8rem;
 <body><main>
 
 <h1>How the CamAPS FX algorithm works</h1>
-<p class="lead">CamAPS FX is a closed-loop insulin system, an artificial pancreas. Every minute it reads a
-glucose sensor, works out how much insulin the body needs, and double-checks that number before the pump
-delivers it. This page walks through that minute: how the algorithm sees the body, how it decides, and what
-it locks down before a single unit of insulin is pumped.</p>
+<p class="lead">CamAPS FX is a closed-loop insulin system, an artificial pancreas. Every control period
+it reads a glucose sensor, works out how much insulin the body is going to need over the next four hours,
+and double-checks that number before the pump delivers it. This page walks through one cycle: how the
+algorithm sees the body, how it decides, and what it locks down before a single unit of insulin is pumped.</p>
 
-<h2>Start here: one minute in the loop</h2>
-<p>Everything happens once a minute, in the same order:</p>
+<h2>Start here: one cycle in the loop</h2>
+<p>In the in-silico wire-up the loop runs on 15-minute control periods; each period it
+rolls the body model forward over the next four hours and applies the first rate of the best sequence:</p>
 <pre class="mermaid">{mm_minute()}</pre>
 <p class="caption">Sense, propose, check, deliver, repeat. The sensor reports a reading, the controller
-proposes a rate, the guard checks it and fixes anything wrong, the pump delivers. The next three sections
-introduce the actors one by one.</p>
+proposes a whole rate sequence for the next four hours, the guard checks the first rate and fixes anything
+wrong, the pump delivers. The next three sections introduce the actors one by one.</p>
 
 <h2>The body it measures insulin around</h2>
 <p>The algorithm carries a model of how glucose moves in the body. Insulin enters through two depots and
@@ -192,7 +193,7 @@ moves.</p>
 <div class="tag">the numbers at a glance</div>
 <div class="chiprow">{const_chips}</div>
 
-<p>That is the whole loop: sense, estimate, propose, guard, deliver, repeat, every minute of the day. The
+<p>That is the whole loop: sense, estimate, propose, guard, deliver, repeat, every 15 minutes of the day. The
 loop is small and fixed, which is exactly why its safety is provable. The claim-by-claim proof lives in the
 <a href="verification_report.html">verification catalogue</a>.</p>
 
