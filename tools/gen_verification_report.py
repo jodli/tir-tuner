@@ -643,8 +643,8 @@ against the flattened patent text and are unverified.</p>
 <footer>
 Generated from the four workspace crates' <code>src/</code> directories and <code>fuzz/fuzz_targets/</code>.
 Regenerate with <code>python3 tools/gen_verification_report.py</code>. This catalog reflects source
-structure, not verification results. The plain-language companion with diagrams is
-<code>docs/verification_summary.html</code>.
+structure, not verification results. For a plain-language companion see the pages under
+<code>docs/patient/</code>.
 </footer>
 </main>
 </body>
