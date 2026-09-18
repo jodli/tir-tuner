@@ -1,0 +1,6 @@
+title: The artificial pancreas project, for patients
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default

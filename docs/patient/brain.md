@@ -113,4 +113,4 @@ The headline numbers, gathered in one place:
 
 Every cycle carries the same four steps and then starts over. That is the same structure as your care team's approach, except the pump runs it every fifteen minutes, all night, without you.
 
-From here: [the loop](loop.md) shows the controller, the sensor and the body wired together and run over a real day. The formal proofs behind the watchdog live in the [verification report](../verification_report.html).
+From here: [the loop](loop.md) shows the controller, the sensor and the body wired together and run over a real day. The formal proofs behind the watchdog live in the [verification report](verification_report.html).

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ page.title | default: site.title }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1a1a1a;
+      --muted: #555;
+      --rule: #ddd;
+      --accent: #0b5cad;
+      --code-bg: #f5f5f7;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --ink: #e6e6e6;
+        --muted: #a0a0a0;
+        --rule: #333;
+        --accent: #77b1f0;
+        --code-bg: #1e1e1e;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    main { max-width: 48rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    h1, h2, h3 { line-height: 1.25; }
+    a { color: var(--accent); }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid var(--rule); padding: 0.4rem 0.6rem; text-align: left; }
+    th { background: var(--code-bg); }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.1em 0.3em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      padding: 0.75rem 1rem;
+      overflow-x: auto;
+      border-radius: 6px;
+    }
+    .mermaid { text-align: center; max-width: 100%; overflow-x: auto; }
+    .site-footer {
+      margin-top: 3rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--rule);
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    {{ content }}
+    <p class="site-footer"><a href="./">Back to the overview</a></p>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    const blocks = document.querySelectorAll("pre code.language-mermaid");
+    blocks.forEach((block) => {
+      const pre = block.parentElement;
+      const diagram = document.createElement("div");
+      diagram.className = "mermaid";
+      diagram.textContent = block.textContent;
+      pre.replaceWith(diagram);
+    });
+    mermaid.initialize({ startOnLoad: false, theme: "default" });
+    mermaid.run();
+  </script>
+</body>
+</html>

@@ -71,4 +71,4 @@ Your readings and your meals are replayed through the verified loop, and the pri
 
 The loop discards its own plan every fifteen minutes and re-asks the whole question with the newest reading. That restart is the design. The pump only has to be right about the next fifteen minutes, and it stays open to being wrong later. A day is the sum of those corrections, running all night.
 
-From here: [the numbers that matter](math-and-metrics.md) explains the report card that judges the day, and the [index](index.md) ties the whole system back together. The formal verification of the loop's safety rules lives in the [full report](../verification_report.html).
+From here: [the numbers that matter](math-and-metrics.md) explains the report card that judges the day, and the [index](index.md) ties the whole system back together. The formal verification of the loop's safety rules lives in the [full report](verification_report.html).
