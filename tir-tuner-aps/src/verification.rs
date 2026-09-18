@@ -25,13 +25,16 @@
 //!    of the mode-aware dose calculator.
 //! 5. NMPC proofs (`verify_nmpc_candidate_rates_in_bounds`,
 //!    `verify_nmpc_cost_finite_nonneg`,
-//!    `verify_nmpc_selection_minimal_cost`) - the NMPC dose selector of
-//!    the section 5.1 cost
-//!    `J(u) = sum_{j=1}^{N2} ((g_IG(t+j) - w)^2 + lambda (u - u_operating)^2)`:
+//!    `verify_nmpc_selection_minimal_cost`,
+//!    `verify_moving_target_trajectory_decline_bounded`) - the NMPC dose
+//!    selector of the section 5.1 cost
+//!    `J(u) = sum_{j=1}^{N2} ((g_IG(t+j) - w(t+j))^2
+//!            + (1/k_agr) (u(t+j) - u(t+j-1))^2)`:
 //!    candidate rates lie in `[0, u_max]`, a short roll-out slice of the
-//!    cost is finite and non-negative, and the position chosen by
+//!    sequence cost is finite and non-negative, the position chosen by
 //!    `best_grid_candidate_index` attains the minimal cost over the
-//!    grid.
+//!    grid, and the coarse-decline band of the moving target trajectory
+//!    stays finite, bounded and monotone toward the target.
 //! 6. `verify_imm_probability_normalization` - normalizing a
 //!    non-negative mode-probability mixture keeps every entry
 //!    non-negative.
@@ -49,11 +52,13 @@
 //!   (`proptest` plus the exhaustive divisor-16 lattice in `imm.rs`),
 //! * the full-state wired non-negativity and finiteness of the model
 //!   (exhaustive slices plus a `proptest` random walk in `hovorka.rs`),
-//! * the full 60-minute roll-out instance the simulation drives
-//!   (`proptest` in `controller.rs`; the Kani cost harness only covers a
-//!   short slice), `nmpc_grid_dose`'s realized-cost composition and the
-//!   composition of the grid result with the hypoglycemia guard (native
-//!   `proptest` in `controller.rs`). `nmpc_grid_dose` is deliberately a
+//! * the full 16-window 240-minute roll-out instance the simulation
+//!   drives (`proptest` in `controller.rs`; the Kani cost harness only
+//!   covers a short slice), the exponential rise and band-switch of the
+//!   moving target trajectory (transcendental `powf`, hence native),
+//!   `nmpc_sequence_dose`'s realized-cost composition and the
+//!   composition of the dose with the hypoglycemia guard (native
+//!   `proptest` in `controller.rs`). The dose selector is deliberately a
 //!   pure cost minimizer: it does not see the CGM reading, so the
 //!   delivered pump rate must pass through the cutoff guard
 //!   (`is_hypoglycemic` / `compute_nmpc_dose_mode`), and that
@@ -62,16 +67,19 @@
 //! Out of scope (future work): the bayesian real-time adaptation of the
 //! six individual dynamic parameters (section 3) and the process-noise
 //! state of section 3.2F. Both would require a tractable linearization
-//! or stubbing of the nonlinear model; the grid roll-out selector is the
-//! largest NMPC slice kept here.
+//! or stubbing of the nonlinear model; the quantized sequence solver is
+//! the largest NMPC slice kept here.
 
 use crate::controller::{
-    best_grid_candidate_index, compute_nmpc_dose, compute_nmpc_dose_mode, nmpc_cost, DosingMode,
-    NMPC_GRID_POINTS, NMPC_GRID_STEPS,
+    best_grid_candidate_index, compute_nmpc_dose, compute_nmpc_dose_mode, moving_target_trajectory,
+    nmpc_sequence_cost, DosingMode, NMPC_GRID_POINTS, NMPC_GRID_STEPS, TRAJECTORY_MAX_OFFSET_MMOL_L,
 };
 use crate::hovorka::{egp, EGP_MAX_FOLD_OVER_BASAL, HovorkaParams, HovorkaState};
 use crate::imm::normalize_imm_probabilities;
-use crate::{EASE_OFF_TARGET_MMOL_L, HARD_HYPO_CUTOFF_MMOL_L, TARGET_RANGE_MAX_MMOL_L};
+use crate::{
+    EASE_OFF_TARGET_MMOL_L, HARD_HYPO_CUTOFF_MMOL_L, TARGET_GLUCOSE_MMOL_L,
+    TARGET_RANGE_MAX_MMOL_L,
+};
 
 /// Bounds used by `verify_nmpc_cost_finite_nonneg` for the symbolic
 /// glucose-state slice, matching the specification.
@@ -84,6 +92,7 @@ const MAX_GLUCOSE_MASS_MMOL_PER_KG: f64 = 30.0;
 const REFERENCE_BIC_MU_PER_L: f64 = 1000.0 / (60.0 * 0.021 * 70.0);
 /// Basal EGP of the default parameter set (mmol/kg/min).
 const REFERENCE_EGP_B_MMOL_PER_KG_MIN: f64 = 0.0161;
+const REFERENCE_S_EGP_PER_MU_L: f64 = 0.019;
 
 /// Proof 2: the NMPC dose calculator never prescribes a negative rate or
 /// a rate above the user-defined maximum, and it enforces the mandatory
@@ -145,7 +154,7 @@ pub fn verify_no_floating_point_panics() {
 
     kani::assume(r_e >= 0.0 && r_e <= 100.0);
 
-    let egp = egp(r_e, bic, egp_b);
+    let egp = egp(r_e, bic, egp_b, REFERENCE_S_EGP_PER_MU_L);
 
     kani::assert(!egp.is_nan(), "EGP is never NaN");
     kani::assert(!egp.is_infinite(), "EGP is never infinite");
@@ -223,35 +232,42 @@ pub fn verify_nmpc_candidate_rates_in_bounds() {
     }
 }
 
-/// Proof 6b: a short roll-out slice of the section 5.1 NMPC cost is
+/// Proof 6b: a short roll-out slice of the section 5.1 sequence cost
+/// `J(u) = sum_{j=1..N} ((g_IG - w)^2 + (1/k_agr) (u_j - u_{j-1})^2)` is
 /// finite and non-negative. The state is sliced to the glucose
 /// compartments (`q1`, `q2`, `q3`, with the insulin/gut depots at zero)
-/// plus the cost tuning knobs, and the roll-out is cut to three
-/// five-minute steps (CBMC bit-blasts a long symbolic `f64` roll-out
-/// into an intractable circuit); this keeps the symbolic circuit for the
+/// plus two symbolic rate sequence steps `u` and two symbolic target
+/// steps `w` (CBMC bit-blasts a long symbolic `f64` roll-out into an
+/// intractable circuit); this keeps the symbolic circuit for the
 /// prediction tractable while still exercising the real model, the EGP
 /// and the sum-of-squares cost. Finiteness of the wider model and of the
-/// full 60-minute instance the simulation drives are covered by the EGP
-/// proof, the wiring proof `verify_step_compartment_non_negativity`, the
-/// native `proptest` walk in `hovorka.rs` and the `proptest` cost test in
-/// `controller.rs`.
+/// full 16-window 240-minute instance the simulation drives are covered
+/// by the EGP proof, the wiring proof
+/// `verify_step_compartment_non_negativity`, the native `proptest` walk
+/// in `hovorka.rs` and the `proptest` cost test in `controller.rs`.
 #[kani::proof]
 pub fn verify_nmpc_cost_finite_nonneg() {
     let q1: f64 = kani::any();
     let q2: f64 = kani::any();
     let q3: f64 = kani::any();
-    let u: f64 = kani::any();
-    let u_operating: f64 = kani::any();
-    let target_w: f64 = kani::any();
-    let lambda: f64 = kani::any();
+    let u0: f64 = kani::any();
+    let u1: f64 = kani::any();
+    let w0: f64 = kani::any();
+    let w1: f64 = kani::any();
+    let u_prev: f64 = kani::any();
+    let k_agr: f64 = kani::any();
+    let step_min: f64 = kani::any();
 
     kani::assume(q1 >= MIN_GLUCOSE_MASS_MMOL_PER_KG && q1 <= MAX_GLUCOSE_MASS_MMOL_PER_KG);
     kani::assume(q2 >= MIN_GLUCOSE_MASS_MMOL_PER_KG && q2 <= MAX_GLUCOSE_MASS_MMOL_PER_KG);
     kani::assume(q3 >= MIN_GLUCOSE_MASS_MMOL_PER_KG && q3 <= MAX_GLUCOSE_MASS_MMOL_PER_KG);
-    kani::assume(u >= 0.0 && u <= 25.0);
-    kani::assume(u_operating >= 0.0 && u_operating <= 20.0);
-    kani::assume(target_w >= 4.0 && target_w <= 12.0);
-    kani::assume(lambda >= 0.0 && lambda <= 10.0);
+    kani::assume(u0 >= 0.0 && u0 <= 25.0);
+    kani::assume(u1 >= 0.0 && u1 <= 25.0);
+    kani::assume(w0 >= 2.0 && w0 <= 15.0);
+    kani::assume(w1 >= 2.0 && w1 <= 15.0);
+    kani::assume(u_prev >= 0.0 && u_prev <= 20.0);
+    kani::assume(k_agr >= 0.5 && k_agr <= 50.0);
+    kani::assume(step_min >= 5.0 && step_min <= 20.0);
 
     let state = HovorkaState {
         i1: 0.0,
@@ -266,12 +282,46 @@ pub fn verify_nmpc_cost_finite_nonneg() {
         u_s: 0.0,
     };
     let params = HovorkaParams::default();
+    let u = [u0, u1];
+    let w = [w0, w1];
 
-    let cost = nmpc_cost(&params, state, u, u_operating, target_w, lambda, 15.0, 5.0);
+    let cost = nmpc_sequence_cost(&params, state, &u, &w, u_prev, k_agr, step_min);
 
     kani::assert(!cost.is_nan(), "NMPC cost is never NaN");
     kani::assert(!cost.is_infinite(), "NMPC cost is never infinite");
     kani::assert(cost >= 0.0, "NMPC cost is never negative");
+}
+
+/// Proof 6d: the linear decline band of the moving target trajectory
+/// (Hovorka 2004, section 3.3) stays finite, at or above the target and
+/// monotone toward it. The start is assumed at least
+/// `2 * TRAJECTORY_MAX_OFFSET_MMOL_L` above the fixed target over three
+/// steps, so the steady decline can never fall below the target and the
+/// transcendental exponential-rise branch is unreachable in this band.
+/// The band switch and the exponential rise are covered natively (see
+/// the module docs).
+#[kani::proof]
+pub fn verify_moving_target_trajectory_decline_bounded() {
+    let target = TARGET_GLUCOSE_MMOL_L;
+    let n = 3;
+    let step_min = 15.0;
+    let y_start: f64 = kani::any();
+
+    kani::assume(y_start >= target + 2.0 * TRAJECTORY_MAX_OFFSET_MMOL_L);
+    kani::assume(y_start <= 16.0);
+
+    let w = moving_target_trajectory(y_start, target, n, step_min);
+
+    let mut i = 0;
+    while i < n {
+        kani::assert(!w[i].is_nan(), "trajectory is never NaN");
+        kani::assert(!w[i].is_infinite(), "trajectory is never infinite");
+        kani::assert(w[i] >= target, "trajectory never undershoots the target");
+        if i > 0 {
+            kani::assert(w[i] <= w[i - 1], "decline band is monotone toward the target");
+        }
+        i += 1;
+    }
 }
 
 /// Proof 6c: `best_grid_candidate_index` returns the position of the

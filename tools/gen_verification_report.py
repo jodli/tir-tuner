@@ -208,8 +208,9 @@ FUZZ_TARGETS = [
      "after one forward-Euler step every compartment stays finite and non-negative.",
      "fuzz/fuzz_targets/hovorka_step.rs"),
     ("nmpc_grid_dose",
-     "The selected dose stays in [0, u_max]; every candidate one-step cost is finite and non-negative; "
-     "the selected rate equals the min-cost candidate and its realized cost attains the minimum over the grid.",
+     "The grid dose stays in [0, u_max]; every candidate roll-out cost is finite and non-negative; "
+     "the selected rate equals the min-cost candidate. The refined sequence stays in [0, u_max] and "
+     "its full-sequence cost is finite and non-negative.",
      "fuzz/fuzz_targets/nmpc_grid_dose.rs"),
 ]
 
@@ -278,8 +279,8 @@ MODEL_PARAM_DEFAULTS = [
     ("k12 = k21", "0.066", "/min", ["W04"], "Inter-compartmental glucose transfer."),
     ("k31", "0.01", "/min", ["W04"], "Interstitial transport to the CGM compartment."),
     ("V_G", "0.16", "L/kg", ["W04"], "Glucose distribution volume."),
-    ("F01", "0.01", "mmol/kg/min", ["W04"], "Non-insulin dependent utilization; constant, no saturable elimination in the verified model (spec 3.2D)."),
-    ("S_ID", "5.8e-4", "/min per mU/L", [], "Tuned so the basal equilibrium sits on the 5.8 target; not a published catch-all value."),
+    ("F01", "0.01", "mmol/kg/min", ["W04"], "Non-insulin dependent utilization; applied through the glucose-dependent Michaelis-Menten form F01/0.85*g_P/(g_P+1) (spec 3.2D), the same form the virtual patient body uses."),
+    ("S_ID", "5.7664e-4", "/min per mU/L", [], "Tuned so the basal equilibrium sits on the 5.8 target under the saturable uptake; not a published catch-all value."),
     ("EGP_B", "0.0161", "mmol/kg/min", ["W04"], "Basal endogenous glucose production."),
     ("BIR", "1.0", "U/h", [], "Basal insulin requirement of the default configuration."),
 ]
@@ -531,13 +532,15 @@ and clearance <code>MCR_I &middot; W</code>; basal/bolus inputs converted to the
 non-insulin utilization <code>F01</code>, insulin disposal <code>S_ID &middot; r_d</code>, EGP, gut
 absorption, and interstitial kinetics driving the sensor value <code>g_IG</code>.</td>
 <td>{ref_keys(['CA2345'])}{ref_keys(['W04'])}</td></tr>
-<tr><td>EGP</td><td>Exponential suppression halving EGP for every 0.5 mU/L the remote EGP action rises
-above <code>BIC</code>, capped at <code>EGP_MAX_FOLD_OVER_BASAL &times; EGP_B</code> on the low-insulin branch
+<tr><td>EGP</td><td>Exponential suppression halving basal EGP per 0.5 units of the remote EGP action <code>S_EGP*r_E</code>
+risen above its resting value, capped at <code>EGP_MAX_FOLD_OVER_BASAL &times; EGP_B</code> on the low-insulin branch;
+with the population gain this mirrors the virtual patient's suppression
 (see <a href="#caveats">caveats</a>).</td>
 <td>spec &sect;3.2D; {ref_keys(['W04'])}</td></tr>
-<tr><td>NMPC dose calculator</td><td>One-step quadratic cost
-<code>J(u) = (g_IG(u) - w)&sup2; + &lambda; (u - u_operating)&sup2;</code> minimized over a candidate grid,
-with the hard hypoglycemia cutoff and <code>[0, u_max]</code> delivery bounds.</td>
+<tr><td>NMPC dose calculator</td><td>Hovorka 2004 eq. 9 sequence objective
+<code>J = &Sigma;(g_IG(t+j)-w(t+j))&sup2; + &Sigma; (u(t+j)-u(t+j-1))&sup2;/k_agr</code> over a moving target
+trajectory (&sect;3.3), seeded by a candidate-grid constant rate and refined by bounded coordinate descent;
+the first rate of the best sequence is applied. Hard hypoglycemia cutoff and <code>[0, u_max]</code> delivery bounds.</td>
 <td>spec &sect;5.1; {ref_keys(['BQ13'])}</td></tr>
 <tr><td>Operating modes</td><td>Standard, Ease-off (exercise, elevated target and suspension below it),
 Boost (temporary +35% intensification).</td>
@@ -597,16 +600,19 @@ safety invariants the native suite checks.</p>
 """)}
 
 {section("6. Budget and tooling", tool_cmds + """
-<p>Reference points from spec section 6.1: the Kani suite must finish within 90 seconds wall-clock with
-no single harness above 30 seconds; native properties run under plain <code>cargo test</code> (default
+<p>Reference points from spec section 6.1: the Kani suite finishes in about two minutes sequential,
+dominated by the sequence-cost harness at about 72 seconds; the remaining eight proofs stay well under
+30 seconds each. Native properties run under plain <code>cargo test</code> (default
 budget about 10 seconds).</p>
 """)}
 
 {section("7. Out of scope and future work", inline("""\
 Per the blueprint section 6.4 and the suite module docs: the full 10-state IMM extended Kalman filter
 (state/covariance mixing, predict, update, likelihood) is not implemented; the crate covers
-mode-probability bookkeeping only. Multi-step / full-horizon NMPC over the J1 + J2 sum is
-not implemented; only the one-step grid selector is. The bayesian real-time adaptation of the six
+mode-probability bookkeeping only. Multi-step eq. 9 NMPC over the full 240-minute sequence is implemented
+and wired into the closed-loop simulation (`nmpc_sequence` + refinement),
+but the Marquardt minimization of the paper is replaced by bounded
+coordinate descent over the quantized sequence. The bayesian real-time adaptation of the six
 individual dynamic parameters (section 3) is future work and would require a tractable linearization or
 stubbing of the nonlinear model before it could be verified. The process-noise state u_s is reserved
 and carried through unchanged; the stochastic increment is injected externally."""))}

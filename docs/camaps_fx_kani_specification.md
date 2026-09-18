@@ -83,15 +83,20 @@ $$u_A(t) = \frac{a_2(t)}{t_{max,G} \cdot W \cdot 5.551} \quad (\text{mmol/kg/min
 *Where $v_G(t)$ is meal ingestion rate ($\text{g/min}$) and $t_{max,G}$ is gut absorption time-to-peak ($\text{min}$). The implementation accepts $v_G$ as the `meal_g_per_min` argument of `HovorkaState::step`/`derivative`, so unannounced-meal scenarios (section 7.2) can be driven through the gut submodel.*
 
 #### D. Blood Glucose Kinetics Submodel
-$$\frac{dq_1(t)}{dt} = -\left(S_{ID} r_D(t) + k_{21}\right) q_1(t) + k_{12} q_2(t) - F_{01} + EGP(t) + u_A(t) + u_S(t)$$
+$$\frac{dq_1(t)}{dt} = -\left(S_{ID} r_D(t) + k_{21}\right) q_1(t) + k_{12} q_2(t) - F_{01}^c\left(g_P(t)\right) + EGP(t) + u_A(t) + u_S(t)$$
 $$\frac{dq_2(t)}{dt} = k_{21} q_1(t) - k_{12} q_2(t)$$
 $$g_P(t) = \frac{q_1(t)}{V_G}$$
-*Where $S_{ID}$ is peripheral insulin sensitivity ($/\text{min per mU/L}$), $k_{12}, k_{21}$ are inter-compartmental transfer rates ($/\text{min}$), $F_{01}$ is non-insulin dependent glucose utilization ($\text{mmol/kg/min}$), $V_G$ is distribution volume ($\text{L/kg}$), and $g_P(t)$ is plasma glucose concentration ($\text{mmol/L}$).*
+*Where $S_{ID}$ is peripheral insulin sensitivity ($/\text{min per mU/L}$), $k_{12}, k_{21}$ are inter-compartmental transfer rates ($/\text{min}$), $F_{01}^c$ is the glucose-dependent non-insulin dependent glucose utilization ($\text{mmol/kg/min}$), $V_G$ is distribution volume ($\text{L/kg}$), and $g_P(t)$ is plasma glucose concentration ($\text{mmol/L}$).*
+
+**Non-insulin dependent glucose utilization**: carried as the published constant $F_{01}$ of Hovorka et al. 2004 and applied through the glucose-dependent Michaelis-Menten form
+$$F_{01}^c(g_P) = \frac{F_{01}}{0.85} \cdot \frac{g_P}{g_P + 1}$$
+the same form the virtual patient body uses (Wilinska Table 1). At $g_P = 5.67\text{ mmol/L}$ the applied uptake equals the published $F_{01}$; as glucose approaches zero the uptake vanishes, so the model keeps a hepatic floor instead of predicting a collapse under modest above-basal insulin over the four-hour prediction horizon. `s_id` is calibrated so the basal equilibrium of the default configuration rests on the nominal target $5.8\text{ mmol/L}$:
+$$q_1 = \frac{EGP_B - F_{01}^c(g_P)}{S_{ID} \cdot BIC} \qquad \text{at } g_P = 5.8\text{ mmol/L}$$
 
 **Endogenous Glucose Production (EGP)**:
-$$EGP(t) = EGP_B \cdot \exp\left(-\frac{r_E(t) - BIC}{1/2 \text{ increment}} \cdot \ln 2\right)$$
+$$EGP(t) = EGP_B \cdot \exp\left(-\frac{S_{EGP}\left(r_E(t) - BIC\right)}{0.5} \cdot \ln 2\right)$$
 $$BIC = \frac{1000 \cdot BIR}{60 \cdot MCR_I \cdot W}$$
-*Where $EGP_B$ is basal EGP ($\text{mmol/kg/min}$), $BIR$ is basal insulin requirement ($\text{U/h}$), and $BIC$ is basal plasma insulin concentration ($\text{mU/L}$). The exponential form halves basal EGP for every $0.5\text{ mU/L}$ the remote EGP action rises above $BIC$ and grows as the remote action drops below it; since the low-insulin branch grows without bound, the implemented model caps it at $3 \cdot EGP_B$ (`EGP_MAX_FOLD_OVER_BASAL` in `src/hovorka.rs`). The cap preserves the basal identity $EGP(BIC) = EGP_B$ and leaves the verified properties (non-negativity, finiteness, basal steady state) unchanged.*
+*Where $EGP_B$ is basal EGP ($\text{mmol/kg/min}$), $BIR$ is basal insulin requirement ($\text{U/h}$), and $S_{EGP}$ is the EGP suppression gain of the remote insulin action (action units per $\text{mU/L}$). The suppression mirrors the virtual patient body's model: the EGP action $x_3 = S_{EGP} \cdot r_E$ halves basal EGP every $0.5$ action units above its resting value $S_{EGP} \cdot BIC$ and grows as the remote action drops below it; the low-insulin branch is capped at $3 \cdot EGP_B$ (`EGP_MAX_FOLD_OVER_BASAL` in `src/hovorka.rs`; the cap preserves the basal identity $EGP(BIC) = EGP_B$). With the population gain $S_{EGP} = 0.019$ per $\text{mU/L}$, 50% higher insulin cuts EGP to about 80% of basal, a physiological suppression consistent with the 2004 publication's linear form $EGP_0[1 - x_3]$ ("insulin sensitivity of EGP $520 \times 10^{-4}$ per $\text{mU L}^{-1}$", Table 1). The earlier 0.5 $\text{mU/L}$ per halving scale collapsed EGP to near zero under any sustained above-basal delivery, which froze the four-hour NMPC prediction in closed-loop simulation; it is not the model here.*
 
 #### E. Interstitial Glucose Kinetics Submodel
 $$\frac{dq_3(t)}{dt} = k_{31} \left(q_1(t) - q_3(t)\right)$$
@@ -150,11 +155,11 @@ To handle unpredictable physiological variations (e.g., meals, stress, circadian
 ## 5. NMPC Dosing Calculator & Safety Control Rules
 
 ### 5.1 NMPC Cost Function
-The dose calculator optimizes the vector of future inputs $u^+ = (v, u)^T$ over prediction horizon $N_2$ by minimizing:
-$$J(u^+) = J_1 + J_2$$
-$$J_1 = \sum_{j=1}^{N_2} \left( g_{IG}(t+j) - w(t+j) \right)^2$$
-$$J_2 = \lambda \sum_{j=1}^{N_2} \left( u(t+j) - u_{operating} \right)^2$$
-*Where $w(t)$ is the target glucose setpoint trajectory, $u_{operating}$ is the baseline basal rate, and $\lambda$ is the penalty parameter on control action effort. Note the cost uses the interstitial/sensor glucose $g_{IG}$ (section 3.2E), not the plasma value $g_P$: the closed loop is driven by the CGM reading. The realized `nmpc_cost` evaluates this sum by rolling the model forward under a constant candidate rate `u`, summing the squared glucose deviation at every sample over the horizon (`horizon_min`, sampled at `step_min`) plus `lambda` times the summed squared deviation from `u_operating`. The horizon has to be long enough for the prediction to see the effect of the candidate rate: a single-sample horizon leaves predicted glucose identical across the candidate grid (insulin action acts over tens of minutes), so the argument of the minimum collapses to `u_operating` and the loop degenerates to fixed basal. This is the effective upper bound for the realized `lambda` / horizon / step values; the majority weight sits on the glucose term.*
+The dose calculator optimizes the future insulin infusion sequence over prediction horizon $N_2$ by minimizing the Hovorka et al. 2004 eq. 9 objective with a moving target trajectory:
+$$J(u) = \sum_{j=1}^{N_2} \left( g_{IG}(t+j) - w(t+j) \right)^2 + \frac{1}{k_{agr}} \sum_{j=1}^{N_2} \left( u(t+j) - u(t+j-1) \right)^2$$
+*Where $w(t)$ is the moving target trajectory (section 3.3: linear decline at $2\text{ mmol/L/h}$ while more than $2\text{ mmol/L}$ above target, $1\text{ mmol/L/h}$ between that and the target, exponential rise with 15-minute halftime below it, seeded at the measured sensor glucose), $u(t+j-1)$ with $u(t-1) = u_{prev}$ is the rate delivered in the previous control period, and $1/k_{agr}$ weights the effort of changing the rate ($k_{agr}$ is the aggressiveness constant: larger values price rate changes less). The glucose term uses the interstitial/sensor glucose $g_{IG}$ (section 3.2E), not the plasma value.*
+
+The implemented solver (`nmpc_sequence` in `src/controller.rs`) rolls the state forward over the horizon at `step_min` resolution under each candidate sequence, sums the two terms sample-by-sample, and selects the first rate $u(t+1)$ of the best sequence (receding horizon). It is seeded by a constant-rate grid search over $k=0..N_2$ candidates $k/N \, u_{max}$ and refined by bounded coordinate descent over the quantized sequence with step $u_{max}/(6 \cdot 5)$ (`NMPC_REFINE_SUBSTEPS`), at most `NMPC_REFINEMENT_PASSES` passes, monotone non-increasing in cost; this stands in for the paper's Marquardt minimization. The engine drives it at `CONTROL_PERIOD_MIN = 15` minute decisions over `CONTROL_HORIZON_MIN = 240` minutes: the horizon long enough for the prediction to see the effect of a candidate rate (insulin action acts over tens of minutes, and a single-sample horizon collapses the grid to the previous rate). The hypoglycemia guard (`is_hypoglycemic`) zeroes delivery outright and resets `u_prev`.
 
 ### 5.2 Operating Modes & Safety Boundaries
 
@@ -166,6 +171,28 @@ $$J_2 = \lambda \sum_{j=1}^{N_2} \left( u(t+j) - u_{operating} \right)^2$$
 | **Boost Mode** | Temporary insulin intensification by $+35\%$ | Ware et al. 2022 |
 | **Hard Hypo Cutoff** | Mandatory zero delivery ($u(t) = 0$) if $g_{IG} < 4.4\text{ mmol/L}$ | Safety Invariant |
 | **Max Insulin Limit ($u_{max}$)** | Capped at user-defined maximum hourly rate | Safety Invariant |
+
+### 5.3 Closed-Loop Simulation Wiring (`tir-tuner-cli/src/engine.rs`)
+
+The engine is the integration testbed that wires the verified pieces
+together; its knobs are not part of the published algorithm.
+
+* The virtual patient is the `population_mean` subject recalibrated to a
+  euglycemic resting glucose of $5.8\text{ mmol/L}$
+  (`with_basal_glucose`, the Cambridge-simulator convention). The belief
+  (`controller_model`) reuses the subject's EGP, volumes, kinetics and
+  suppression gain and recalibrates only `s_id` so its basal equilibrium
+  sits on the same target, so belief and body share one resting point
+  instead of fighting each other.
+* Control runs at a 15-minute period over a 240-minute horizon with
+  `controller_kagr = 5.0` (placeholder until the sweep pins it), a
+  0.5 mixing gain on sensor readings, and `last_rate_u_per_h` feeding
+  the eq. 9 effort term.
+* Announced meals deliver 80% of the full ICR bolus
+  (`meal_bolus_factor`, default 0.8); the closed loop covers the rest.
+  The full 100% bolus stacks with the loop's own correction and pushes
+  the reading below the range floor. Unannounced meals get the 100%
+  loop correction.
 
 ---
 
@@ -180,7 +207,9 @@ the native `proptest` / exhaustive suite plus the `fuzz/` targets.
 ### 6.1 Budget and tooling
 
 * Kani harnesses live in `#[cfg(kani)] mod verification` (`src/verification.rs`).
-* The whole Kani suite must finish within **90 seconds** wall-clock (currently about 30 seconds sequential, about 15 seconds with `--jobs`), with no single harness above a 30 second timeout.
+* The whole Kani suite finishes in about two minutes sequential; the
+  cost harness dominates at about 72 seconds and the remaining eight
+  proofs finish well under 30 seconds each.
 * CI command: `cargo kani -Z unstable-options --harness-timeout 30s -j --output-format terse`.
 * Native properties run under plain `cargo test` (default budget about 10 seconds); `CAMAPS_SOAK_ITERS=<n>` raises the `proptest` case count for an opt-in soak run.
 * Coverage-guided soak: `cargo +nightly fuzz run <target>` over the `fuzz/` crate.
@@ -195,8 +224,9 @@ the native `proptest` / exhaustive suite plus the `fuzz/` targets.
 | `verify_mode_specific_dosing_invariants` | Ease-off suspension, Boost `>=` Standard, `[0, u_max]` per mode |
 | `verify_no_floating_point_panics` | EGP submodel is NaN/infinity free and non-negative |
 | `verify_nmpc_candidate_rates_in_bounds` | every grid candidate lies in `[0, u_max]` |
-| `verify_nmpc_cost_finite_nonneg` | a short roll-out slice of the NMPC cost is finite and non-negative |
+| `verify_nmpc_cost_finite_nonneg` | a two-step roll-out slice of the sequence cost is finite and non-negative |
 | `verify_nmpc_selection_minimal_cost` | the selected index attains the minimal cost |
+| `verify_moving_target_trajectory_decline_bounded` | the trajectory above target declines within the linear band |
 | `verify_imm_probability_normalization` | normalized mode probabilities stay non-negative |
 
 ### 6.3 What is deliberately not in Kani
@@ -209,7 +239,7 @@ past 30 minutes. These claims are covered natively instead:
 * IMM sum-to-one, mixing and Bayesian-update distributions: exhaustive divisor-16 lattice plus `proptest` (`src/imm.rs`).
 * Full-state wired non-negativity / finiteness of the model: exhaustive compartment slices plus a `proptest` random walk (`src/hovorka.rs`).
 * `nmpc_grid_dose` realized-cost composition: `proptest` (`src/controller.rs`).
-* The full 60-minute roll-out instance the simulation drives (the Kani cost harness covers a short slice only, because CBMC bit-blasts the symbolic `f64` trajectory into an intractable circuit): `proptest` (`src/controller.rs`).
+* The full 240-minute roll-out instance the simulation drives (the Kani cost harness covers a short slice only, because CBMC bit-blasts the symbolic `f64` trajectory into an intractable circuit): `proptest` (`src/controller.rs`).
 
 `nmpc_grid_dose` is deliberately a pure cost minimizer and does not see
 the CGM reading: the delivered pump rate must pass through the

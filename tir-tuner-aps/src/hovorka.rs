@@ -22,27 +22,33 @@ pub fn basal_insulin_conc(bir_u_per_h: f64, mcr_i: f64, weight_kg: f64) -> f64 {
     (1000.0 * bir_u_per_h) / (60.0 * mcr_i * weight_kg)
 }
 
-/// Upper bound on the EGP response, as a multiple of basal EGP. The
-/// exponential suppression model rises without bound when the remote
-/// EGP action drops below the basal insulin concentration, so the
-/// low-insulin branch is capped here (about 0.048 mmol/kg/min at the
-/// default basal EGP of 0.0161). The cap preserves the basal identity
-/// `egp(bic) == egp_b` and therefore every verified property
+/// Upper bound on the EGP response, as a multiple of basal EGP.
+/// Mirrors the virtual patient body's implementation, which caps the
+/// low-insulin branch at 3x basal EGP. The cap preserves the basal
+/// identity `egp(bic) == egp_b` and therefore every verified property
 /// (non-negativity, finiteness, the basal steady state anchor).
 pub const EGP_MAX_FOLD_OVER_BASAL: f64 = 3.0;
 
 /// EGP (mmol/kg/min) as a function of the remote insulin action on
-/// hepatic EGP suppression `r_e` (mU/L), given basal EGP and the basal
-/// insulin concentration.
+/// hepatic EGP suppression `r_e` (mU/L), given basal EGP, the basal
+/// insulin concentration and the suppression gain `s_egp` (insulin-action
+/// units per mU/L).
 ///
-/// The specification form (section 3.2D of
-/// `docs/camaps_fx_kani_specification.md`): a fixed `0.5` mmol/L-relative
-/// half-increment denominator, capped at `EGP_MAX_FOLD_OVER_BASAL`
-/// times the basal EGP. This is the model the Kani suite and the native
-/// tests verify, not the literal functional form of the 2004
-/// publication.
-pub fn egp(r_e: f64, bic: f64, egp_b: f64) -> f64 {
-    let uncapped = egp_b * (-((r_e - bic) / 0.5) * std::f64::consts::LN_2).exp();
+/// Mirrors the virtual patient body's suppression model: the EGP
+/// action `x3 = s_egp * r_e` halves basal EGP every `0.5` units above
+/// its resting value `s_egp * bic`, and the low-insulin branch is capped
+/// at `EGP_MAX_FOLD_OVER_BASAL` times basal. With the population gain
+/// `s_egp = 0.019` (per mU/L) this is a mild, physiological suppression:
+/// 50% higher insulin concentration cuts EGP to about 80% of basal. The
+/// aps crate's earlier fixed `0.5` mU/L per halving made that EGP
+/// collapse to near zero under any sustained above-basal delivery, which
+/// froze the four-hour NMPC prediction; the spec section 3.2D notes the
+/// same divergence from the literal 2004 publication (which uses the
+/// linear form `EGP0[1 - x3]`).
+pub fn egp(r_e: f64, bic: f64, egp_b: f64, s_egp: f64) -> f64 {
+    let x_basal = s_egp * bic;
+    let x = s_egp * r_e;
+    let uncapped = egp_b * (((x_basal - x) / 0.5) * std::f64::consts::LN_2).exp();
     uncapped.min(EGP_MAX_FOLD_OVER_BASAL * egp_b)
 }
 
@@ -71,24 +77,40 @@ pub struct HovorkaParams {
     pub v_g: f64,
     /// Non-insulin dependent glucose utilization (mmol/kg/min).
     ///
-    /// Constant per the specification (section 3.2D); the 2004
-    /// publication's glucose-dependent saturable elimination is not part
-    /// of the verified model.
+    /// Carried as the published `F01` of section 3.2D and applied through
+    /// the glucose-dependent Michaelis-Menten form
+    /// `F01 / 0.85 * g_P / (g_P + 1)` (Wilinska Table 1, the same form
+    /// the virtual patient body uses): the uptake vanishes as glucose
+    /// approaches zero, so the model keeps a hepatic floor instead of
+    /// predicting a collapse under modest above-basal insulin over the
+    /// four-hour prediction horizon. At `g_P = 5.67` mmol/L the applied
+    /// uptake equals the published constant `F01`.
     pub f_01: f64,
     /// Peripheral insulin sensitivity (/min per mU/L).
     ///
     /// Chosen so the basal glucose equilibrium of the default
     /// configuration sits on the nominal target (5.8 mmol/L): at the
-    /// basal steady state `q1 = (egp_b - f_01) / (s_id * bic)`, which
-    /// equals `5.8 * v_g` for `s_id = 5.8e-4`.
+    /// basal steady state `q1 = (egp_b - f_01 / 0.85 * g / (g + 1)) /
+    /// (s_id * bic)`, which equals `5.8 * v_g` for `s_id = 5.7664e-4`.
     pub s_id: f64,
     /// Basal endogenous glucose production (mmol/kg/min).
     pub egp_b: f64,
+    /// EGP suppression gain (insulin-action units per mU/L of remote
+    /// EGP action), matching the virtual patient body's `sie_per_mu_l`.
+    pub s_egp: f64,
     /// Basal insulin requirement (U/h).
     pub bir: f64,
 }
 
 impl HovorkaParams {
+    /// Applied non-insulin dependent glucose uptake (mmol/kg/min) at the
+    /// given plasma glucose, the glucose-dependent Michaelis-Menten form
+    /// `F01 / 0.85 * g_P / (g_P + 1)` that the virtual patient body also
+    /// uses.
+    pub fn f01c(&self, plasma_g: f64) -> f64 {
+        (self.f_01 / 0.85) * plasma_g / (plasma_g + 1.0)
+    }
+
     /// Basal plasma insulin concentration (mU/L).
     pub fn basal_insulin_conc(&self) -> f64 {
         basal_insulin_conc(self.bir, self.mcr_i, self.weight_kg)
@@ -97,7 +119,7 @@ impl HovorkaParams {
     /// Endogenous glucose production at remote EGP action `r_e`
     /// (mmol/kg/min).
     pub fn egp(&self, r_e: f64) -> f64 {
-        egp(r_e, self.basal_insulin_conc(), self.egp_b)
+        egp(r_e, self.basal_insulin_conc(), self.egp_b, self.s_egp)
     }
 }
 
@@ -115,8 +137,9 @@ impl Default for HovorkaParams {
             k31: 0.01,
             v_g: 0.16,
             f_01: 0.01,
-            s_id: 0.00058,
+            s_id: 0.00057664,
             egp_b: 0.0161,
+            s_egp: 0.019,
             bir: 1.0,
         }
     }
@@ -196,7 +219,7 @@ impl HovorkaState {
             a1: -(1.0 / params.t_max_g) * self.a1 + meal_g_per_min,
             a2: (1.0 / params.t_max_g) * (self.a1 - self.a2),
             q1: -(params.s_id * self.r_d + params.k21) * self.q1 + params.k12 * self.q2
-                - params.f_01
+                - params.f01c(self.q1 / params.v_g)
                 + egp
                 + u_a
                 + self.u_s,
@@ -398,14 +421,20 @@ mod tests {
     /// EGP returns to its basal value `egp_b` instead of diverging. With
     /// the default parameters the equilibrium plasma glucose sits on the
     /// nominal target (5.8 mmol/L), pinning the `i`/`BIC` unit convention
-    /// that the qualitative Kani proofs cannot observe.
+    /// that the qualitative Kani proofs cannot observe. The glucose
+    /// uptake uses the Michaelis-Menten form (see [`HovorkaParams::f01c`]),
+    /// so the equilibrium is the fixed point
+    /// `q1 = (egp_b - f01c(q1/v_g)) / (s_id * bic)`.
     #[test]
     fn basal_steady_state_matches_target() {
         let params = HovorkaParams::default();
         let bic = params.basal_insulin_conc();
 
         let depot_mass = MU_PER_UNIT * params.bir / 60.0 * params.t_max_i;
-        let q_star = (params.egp_b - params.f_01) / (params.s_id * bic);
+        let mut q_star = params.v_g * crate::TARGET_GLUCOSE_MMOL_L;
+        for _ in 0..8 {
+            q_star = (params.egp_b - params.f01c(q_star / params.v_g)) / (params.s_id * bic);
+        }
         let eq = HovorkaState {
             i1: depot_mass,
             i2: depot_mass,

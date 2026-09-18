@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc dc3b26a0f03648e1e1771e3b4693c2c28777c25213dea72cf93f27c6c1bc44d1 # shrinks to state = HovorkaState { i1: 16146.913113269877, i2: 16911.50048320191, r_d: 5.8288024489248205, r_e: 23.67250430202076, a1: 0.0, a2: 72.54959853422066, q1: 23.75007312645055, q2: 20.61977497680856, q3: 0.1, u_s: 0.0 }, y_meas = 2.0, target = 4.0, u_prev = 0.0, u_max = 7.357739312852871, k_agr = 41.640257827440955, horizon = 283.0972891564678, step = 13.901165778055327
