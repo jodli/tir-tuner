@@ -156,8 +156,10 @@ To handle unpredictable physiological variations (e.g., meals, stress, circadian
 
 ### 5.1 NMPC Cost Function
 The dose calculator optimizes the future insulin infusion sequence over prediction horizon $N_2$ by minimizing the Hovorka et al. 2004 eq. 9 objective with a moving target trajectory:
-$$J(u) = \sum_{j=1}^{N_2} \left( g_{IG}(t+j) - w(t+j) \right)^2 + \frac{1}{k_{agr}} \sum_{j=1}^{N_2} \left( u(t+j) - u(t+j-1) \right)^2$$
+$$J(u) = \sum_{j=1}^{N_2} \left( g_{IG}(t+j) - w(t+j) \right)^2 + \frac{1}{k_{agr}} \sum_{j=1}^{N_2} \left( \frac{u(t+j) - u(t+j-1)}{K_u} \right)^2$$
 *Where $w(t)$ is the moving target trajectory (section 3.3: linear decline at $2\text{ mmol/L/h}$ while more than $2\text{ mmol/L}$ above target, $1\text{ mmol/L/h}$ between that and the target, exponential rise with 15-minute halftime below it, seeded at the measured sensor glucose), $u(t+j-1)$ with $u(t-1) = u_{prev}$ is the rate delivered in the previous control period, and $1/k_{agr}$ weights the effort of changing the rate ($k_{agr}$ is the aggressiveness constant: larger values price rate changes less). The glucose term uses the interstitial/sensor glucose $g_{IG}$ (section 3.2E), not the plasma value.*
+
+*The effort term is normalized by $K_u = 0.5\text{ U/h}$ (`NMPC_EFFORT_UNIT_U_PER_H`), the delivery step that moves this subject's glucose by roughly $1\text{ mmol/L}$ over the 4h horizon. With $K_u = 1$ the objective is eq. 9 as published; the constant is a realization detail that puts the two sums on the same magnitude so $k_{agr}$ truly balances adherence against rate variation. The paper folds the same scaling into the numeric value of $k_{agr}$.*
 
 The implemented solver (`nmpc_sequence` in `src/controller.rs`) rolls the state forward over the horizon at `step_min` resolution under each candidate sequence, sums the two terms sample-by-sample, and selects the first rate $u(t+1)$ of the best sequence (receding horizon). It is seeded by a constant-rate grid search over $k=0..N_2$ candidates $k/N \, u_{max}$ and refined by bounded coordinate descent over the quantized sequence with step $u_{max}/(6 \cdot 5)$ (`NMPC_REFINE_SUBSTEPS`), at most `NMPC_REFINEMENT_PASSES` passes, monotone non-increasing in cost; this stands in for the paper's Marquardt minimization. The engine drives it at `CONTROL_PERIOD_MIN = 15` minute decisions over `CONTROL_HORIZON_MIN = 240` minutes: the horizon long enough for the prediction to see the effect of a candidate rate (insulin action acts over tens of minutes, and a single-sample horizon collapses the grid to the previous rate). The hypoglycemia guard (`is_hypoglycemic`) zeroes delivery outright and resets `u_prev`.
 
@@ -185,9 +187,13 @@ together; its knobs are not part of the published algorithm.
   sits on the same target, so belief and body share one resting point
   instead of fighting each other.
 * Control runs at a 15-minute period over a 240-minute horizon with
-  `controller_kagr = 5.0` (placeholder until the sweep pins it), a
-  0.5 mixing gain on sensor readings, and `last_rate_u_per_h` feeding
-  the eq. 9 effort term.
+  `controller_kagr = 20.0` (the aggressiveness value that keeps below-range
+  readings under 5% and holds realistic scenarios in range on both the
+  hermetic four-meal day and the real-data day; it carries the tuned
+  `k_agr = 5.0` of the un-normalized formulation across the
+  `K_u = 0.5` renormalization, since the effort weight
+  $1 / (K_u^2 k_{agr})$ is unchanged at $0.2$), a 0.5 mixing gain on
+  sensor readings, and `last_rate_u_per_h` feeding the eq. 9 effort term.
 * Announced meals deliver 80% of the full ICR bolus
   (`meal_bolus_factor`, default 0.8); the closed loop covers the rest.
   The full 100% bolus stacks with the loop's own correction and pushes

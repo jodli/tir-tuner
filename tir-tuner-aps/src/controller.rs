@@ -6,15 +6,18 @@
 //! proportional controller, and the section 5.1 NMPC dose selector.
 //!
 //! The dose selector implements the published formulation (Hovorka et
-//! al 2004, eq 9) as written:
+//! al 2004, eq 9):
 //!
 //! `min over 0 <= u(t+1) .. u(t+N) <= u_max
 //!     sum_{i=1..N} (g_IG(t+i) - w(t+i))^2
-//!   + (1/k_agr) sum_{i=1..N} (u(t+i) - u(t+i-1))^2`
+//!   + (1/k_agr) sum_{i=1..N} ((u(t+i) - u(t+i-1)) / K_u)^2`
 //!
-//! `w` is the moving target trajectory of section 3.3 in the paper:
-//! from the measured glucose a clamped linear fall above target, an
-//! exponential rise below. The optimizer is a local search over the
+//! `K_u = NMPC_EFFORT_UNIT_U_PER_H` is a reference delivery step that
+//! normalizes the effort term to the scale of the glucose term (see the
+//! constant's documentation); with `K_u = 1` the formulation is eq 9 as
+//! published. `w` is the moving target trajectory of section 3.3 in the
+//! paper: from the measured glucose a clamped linear fall above target,
+//! an exponential rise below. The optimizer is a local search over the
 //! quantized rate sequence: a constant-rate grid init plus a bounded
 //! coordinate-descent refinement (an iterative stand-in for the paper's
 //! Marquardt minimization over the sequence). Only `u(t+1)`, the first
@@ -62,6 +65,27 @@ pub const TRAJECTORY_MODERATE_DECLINE_MMOL_PER_H: f64 = 1.0;
 /// Half-time (min) of the exponential rise of the moving target
 /// trajectory below the target.
 pub const TRAJECTORY_RISE_HALFTIME_MIN: f64 = 15.0;
+
+/// Reference delivery step (U/h) that makes the eq-9 effort term
+/// commensurable with the glucose tracking term.
+///
+/// The two sums of eq 9 live in different magnitudes: the glucose term
+/// sums squared deviations in (mmol/L)^2, typically tens of units over
+/// the 4h horizon, while a rate change around the operating point is a
+/// few tenths of a U/h, so the squared effort sum stays about two orders
+/// below the glucose sum for any reasonable k_agr. Measuring the rate
+/// change in reference steps `(u_j - u_{j-1}) / NMPC_EFFORT_UNIT_U_PER_H`
+/// brings the two sums to a comparable scale, which is what makes k_agr
+/// actually balance adherence against rate variation as the paper
+/// intends.
+///
+/// The value is the delivery step that moves this subject's glucose by
+/// about 1 mmol/L over the 4h prediction horizon, from the measured
+/// open-loop step response (+0.5 U/h over basal drops glucose roughly
+/// 2.7 mmol/L in 8h). The paper folds this normalization into the
+/// numeric value of k_agr; naming it keeps the equation readable while
+/// keeping eq 9 itself as written.
+pub const NMPC_EFFORT_UNIT_U_PER_H: f64 = 0.5;
 
 /// Operating modes of the closed-loop system (Ware et al. 2022).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -155,15 +179,17 @@ pub fn moving_target_trajectory(y_start: f64, target: f64, n: usize, step_min: f
 }
 
 /// NMPC cost of a candidate rate sequence `u` against the target
-/// trajectory `w`, section 5.1 as written (Hovorka et al 2004, eq 9):
+/// trajectory `w`, section 5.1 (Hovorka et al 2004, eq 9):
 ///
 /// `J(u) = sum_{j=1..N} (g_IG(t+j) - w(t+j))^2
-///         + (1/k_agr) sum_{j=1..N} (u(t+j) - u(t+j-1))^2`
+///         + (1/k_agr) sum_{j=1..N} ((u(t+j) - u(t+j-1)) / K_u)^2`
 ///
 /// with `u[-1] = u_prev`, the rate infused over the previous control
-/// period. The glucose term is the summed squared interstitial glucose
-/// deviation predicted by rolling the model forward under the sequence;
-/// the effort term prices changes in the rate, not deviation from an
+/// period, and `K_u = NMPC_EFFORT_UNIT_U_PER_H` the reference delivery
+/// step that makes the two sums commensurable. The glucose term is the
+/// summed squared interstitial glucose deviation predicted by rolling
+/// the model forward under the sequence; the effort term prices changes
+/// in the rate measured in reference steps, not deviation from an
 /// operating point. `k_agr` is the aggressiveness constant: larger
 /// values weight the effort term less and let the optimizer move the
 /// rate more freely.
@@ -184,7 +210,7 @@ pub fn nmpc_sequence_cost(
     for j in 0..u.len() {
         predict = predict.step(params, u[j], 0.0, 0.0, step_min);
         let glucose_err = predict.interstitial_glucose(params) - w[j];
-        let rate_change = u[j] - prev_rate;
+        let rate_change = (u[j] - prev_rate) / NMPC_EFFORT_UNIT_U_PER_H;
         sum += glucose_err * glucose_err + effort_weight * rate_change * rate_change;
         prev_rate = u[j];
     }
@@ -347,6 +373,7 @@ mod tests {
     use crate::hovorka::{HovorkaParams, HovorkaState};
     use crate::test_support::config;
     use proptest::prelude::*;
+    use tir_tuner_common::units::MU_PER_UNIT;
 
     fn state_strategy() -> impl Strategy<Value = HovorkaState> {
         (
@@ -567,5 +594,60 @@ mod tests {
                 prop_assert_eq!(delivered, 0.0, "hypo cutoff not honored in composition");
             }
         }
+    }
+
+    /// `k_agr` is genuinely the eq-9 balancing constant, not a dead
+    /// knob: at a fixed hyperglycemic belief state the selected dose
+    /// grows with `k_agr` (larger values price rate changes less, so
+    /// the optimizer moves the rate more freely toward the target
+    /// trajectory). Pins the behavior the unit normalization exists
+    /// for; without `NMPC_EFFORT_UNIT_U_PER_H` the effort sum sits
+    /// two orders below the glucose sum and the dose is flat across a
+    /// wide `k_agr` range. The fixed state is the clamped
+    /// above-target belief at 10 mmol/L with the depot equilibrated
+    /// to basal insulin.
+    #[test]
+    fn kagr_monotonically_increases_dose_at_hyper() {
+        let params = HovorkaParams::default();
+        let vg = params.v_g;
+        let g = 10.0;
+        let depot = MU_PER_UNIT * params.bir / 60.0 * params.t_max_i;
+        let bic = params.basal_insulin_conc();
+        let state = HovorkaState {
+            i1: depot,
+            i2: depot,
+            r_d: bic,
+            r_e: bic,
+            a1: 0.0,
+            a2: 0.0,
+            q1: g * vg,
+            q2: g * vg,
+            q3: g * vg,
+            u_s: 0.0,
+        };
+        let u_prev = 1.0;
+        let u_max = 20.0;
+        let step_min = 15.0;
+        let n = 16;
+        let w = moving_target_trajectory(g, TARGET_GLUCOSE_MMOL_L, n, step_min);
+
+        let dose_low = nmpc_grid_dose(&params, state, &w, u_prev, u_max, 0.5, step_min);
+        let dose_high = nmpc_grid_dose(&params, state, &w, u_prev, u_max, 40.0, step_min);
+        let refined_low = nmpc_sequence_dose(
+            &params, state, g, TARGET_GLUCOSE_MMOL_L, 0.5, u_max, u_prev, 240.0, step_min,
+        );
+        let refined_high = nmpc_sequence_dose(
+            &params, state, g, TARGET_GLUCOSE_MMOL_L, 40.0, u_max, u_prev, 240.0, step_min,
+        );
+
+        // More aggressive k_agr must pull harder: the returned dose
+        // is strictly larger, and both stay within the delivery cap.
+        assert!(dose_high > dose_low, "grid dose flat: {dose_low} -> {dose_high}");
+        assert!(
+            refined_high > refined_low,
+            "refined dose flat: {refined_low} -> {refined_high}"
+        );
+        assert!(dose_low >= 0.0 && dose_high <= u_max);
+        assert!(refined_low >= 0.0 && refined_high <= u_max);
     }
 }

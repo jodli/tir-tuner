@@ -29,7 +29,8 @@
 //!    `verify_moving_target_trajectory_decline_bounded`) - the NMPC dose
 //!    selector of the section 5.1 cost
 //!    `J(u) = sum_{j=1}^{N2} ((g_IG(t+j) - w(t+j))^2
-//!            + (1/k_agr) (u(t+j) - u(t+j-1))^2)`:
+//!            + (1/k_agr) ((u(t+j) - u(t+j-1)) / K_u)^2)` with
+//!    `K_u = NMPC_EFFORT_UNIT_U_PER_H`:
 //!    candidate rates lie in `[0, u_max]`, a short roll-out slice of the
 //!    sequence cost is finite and non-negative, the position chosen by
 //!    `best_grid_candidate_index` attains the minimal cost over the
@@ -233,7 +234,8 @@ pub fn verify_nmpc_candidate_rates_in_bounds() {
 }
 
 /// Proof 6b: a short roll-out slice of the section 5.1 sequence cost
-/// `J(u) = sum_{j=1..N} ((g_IG - w)^2 + (1/k_agr) (u_j - u_{j-1})^2)` is
+/// `J(u) = sum_{j=1..N} ((g_IG - w)^2
+///         + (1/k_agr) ((u_j - u_{j-1}) / K_u)^2)` is
 /// finite and non-negative. The state is sliced to the glucose
 /// compartments (`q1`, `q2`, `q3`, with the insulin/gut depots at zero)
 /// plus two symbolic rate sequence steps `u` and two symbolic target

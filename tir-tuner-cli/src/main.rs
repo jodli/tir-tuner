@@ -19,6 +19,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| "/Users/jan-olaf.becker/repos/personal/tir-tuner/ingest/2026-08-05".into());
     let dir = std::path::Path::new(&ingest);
 
+    let kagr = std::env::args()
+        .nth(2)
+        .map(|s| s.parse::<f64>())
+        .transpose()?
+        .unwrap_or(tir_tuner_cli::engine::CONTROLLER_KAGR_DEFAULT);
+
     let cgm_path = dir.join("cgm_data_1.csv");
     let bolus_path = dir.join("Insulin data/bolus_data_1.csv");
     if !cgm_path.exists() {
@@ -61,6 +67,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         duration_hours: 24.0,
         meals,
         max_delivery_u_per_h: 20.0,
+        controller_kagr: kagr,
         ..SimConfig::default()
     };
     let trace = simulate(&cfg);

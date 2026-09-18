@@ -538,9 +538,11 @@ with the population gain this mirrors the virtual patient's suppression
 (see <a href="#caveats">caveats</a>).</td>
 <td>spec &sect;3.2D; {ref_keys(['W04'])}</td></tr>
 <tr><td>NMPC dose calculator</td><td>Hovorka 2004 eq. 9 sequence objective
-<code>J = &Sigma;(g_IG(t+j)-w(t+j))&sup2; + &Sigma; (u(t+j)-u(t+j-1))&sup2;/k_agr</code> over a moving target
+<code>J = &Sigma;(g_IG(t+j)-w(t+j))&sup2; + &Sigma; ((u(t+j)-u(t+j-1))/K_u)&sup2;/k_agr</code> over a moving target
 trajectory (&sect;3.3), seeded by a candidate-grid constant rate and refined by bounded coordinate descent;
-the first rate of the best sequence is applied. Hard hypoglycemia cutoff and <code>[0, u_max]</code> delivery bounds.</td>
+the first rate of the best sequence is applied. <code>K_u</code> normalizes the effort term to the glucose
+scale (with <code>K_u = 1</code> the objective is eq. 9 as published). Hard hypoglycemia cutoff and
+<code>[0, u_max]</code> delivery bounds.</td>
 <td>spec &sect;5.1; {ref_keys(['BQ13'])}</td></tr>
 <tr><td>Operating modes</td><td>Standard, Ease-off (exercise, elevated target and suspension below it),
 Boost (temporary +35% intensification).</td>

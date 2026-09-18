@@ -10,7 +10,8 @@
 //! The controller is the aps sequence NMPC of spec section 5.1 (Hovorka
 //! et al 2004, eq 9), driven over the 240-minute prediction horizon at
 //! 15-minute sampling: the summed cost
-//! `sum_j (g_IG(t+j) - w(t+j))^2 + (1/k_agr) sum_j (u(t+j) - u(t+j-1))^2`
+//! `sum_j (g_IG(t+j) - w(t+j))^2
+//!  + (1/k_agr) sum_j ((u(t+j) - u(t+j-1)) / K_u)^2`
 //! is minimized over a quantized rate sequence anchored on the previous
 //! period's rate `u(t)`, and only the first element is applied. The
 //! pump-side algorithm is not modified here; the horizon only has to
@@ -35,7 +36,7 @@
 //! off the loop degenerates to the delivered basal requirement, which is
 //! the open-loop control arm for comparisons.
 
-use tir_tuner_aps::controller::{is_hypoglycemic, nmpc_sequence_dose};
+use tir_tuner_aps::controller::{is_hypoglycemic, nmpc_sequence_dose, NMPC_EFFORT_UNIT_U_PER_H};
 use tir_tuner_aps::hovorka::{HovorkaParams, HovorkaState};
 use tir_tuner_aps::TARGET_GLUCOSE_MMOL_L;
 use tir_tuner_body::derivative::BodyInputs;
@@ -72,19 +73,24 @@ pub const CONTROLLER_ESTIMATE_SMOOTHING: f64 = 0.5;
 
 /// Aggressiveness constant `k_agr` of the NMPC objective (Hovorka et al
 /// 2004, eq 9): the effort term weights the squared rate *change*
-/// `(u_j - u_{j-1})^2` by `1 / k_agr`. Larger values weight the effort
+/// `((u_j - u_{j-1}) / K_u)^2` by `1 / k_agr`, with
+/// `K_u = NMPC_EFFORT_UNIT_U_PER_H`. Larger values weight the effort
 /// less, so the optimizer moves the rate more freely; smaller values pin
 /// the sequence to the previous rate. The paper tuned k_agr for fewer
 /// than 5% of readings below 3.3 mmol/L at a mean fasting glucose of
 /// about 6 mmol/L.
 ///
+/// The default carries the tuning from the un-normalized formulation
+/// (`k_agr = 5`, `K_u = 1`) over to the normalized one: the effort
+/// weight `1 / (K_u^2 * k_agr)` is unchanged at `0.2`.
+///
 /// Measured on the real-data day (24 hours, four meals, default seeds):
-/// TIR 75.3% with 3.1% below range; the two-meal control day holds
+/// TIR 75.0% with 3.1% below range; the two-meal control day holds
 /// TIR 89.2%. The sum formulation is deliberately more cautious than a
 /// terminal-node formulation: it prices the whole predicted trajectory,
 /// so it cuts corrections earlier and leaves a few percent of post-meal
 /// highs instead of chasing the spikes into lows.
-pub const CONTROLLER_KAGR_DEFAULT: f64 = 5.0;
+pub const CONTROLLER_KAGR_DEFAULT: f64 = 5.0 / (NMPC_EFFORT_UNIT_U_PER_H * NMPC_EFFORT_UNIT_U_PER_H);
 
 /// Number of one-minute steps used to integrate the belief model over
 /// one control period (the aps bolus convention is a per-minute influx).
