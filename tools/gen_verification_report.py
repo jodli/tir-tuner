@@ -48,25 +48,34 @@ def parse_rust(path: Path) -> list[dict]:
     """Return source items of interest in file order.
 
     Items carry ({kind, name, docs, value, line}). Module docs (`//!`)
-    come back as kind='module'. kani::assert messages and
+    come back as kind='module'. The file's leading `//!` block is its
+    own module-level doc even without a `pub mod` declaration, so a
+    crate's lib.rs and a suite's verification.rs each yield one
+    regardless of their item layout. kani::assert messages and
     kani::assume expressions are collected per harness by
     harness_claims().
     """
     lines = path.read_text(encoding="utf-8").splitlines()
     items: list[dict] = []
+    file_docs: list[str] = []
     docs: list[str] = []
     pending = None  # None | 'kani' | 'test'
 
-    def flush(kind, name, line, value=None):
+    def flush(kind, name, line, value=None, src=None):
         items.append(
             {
                 "kind": kind,
                 "name": name,
-                "docs": " ".join(docs).strip(),
+                "docs": " ".join(src if src is not None else docs).strip(),
                 "value": value,
                 "line": line,
             }
         )
+
+    def flush_file_docs(line):
+        if file_docs:
+            flush("module", path.stem, line, src=file_docs)
+            file_docs.clear()
 
     return_lines = lines
     i = 0
@@ -75,9 +84,14 @@ def parse_rust(path: Path) -> list[dict]:
         s = raw.strip()
 
         if s.startswith("//!"):
-            docs.append(s[3:].strip())
+            file_docs.append(s[3:].strip())
             i += 1
             continue
+
+        # The `//!` block, if any, is flushed before any other line type
+        # so it does not get glued onto a following `///` item or const.
+        flush_file_docs(i + 1)
+
         if s.startswith("///"):
             docs.append(s[3:].strip())
             i += 1
@@ -508,8 +522,8 @@ randomized cases) cover the rounding-level claims: sum-to-one identities, dense 
 behaviour of the full model. <strong>Coverage-guided fuzzing</strong> soaks the actual numerical code paths.
 The split is documented in <a href="#ref-W04">the blueprint</a> and repeated in the module docs the
 report is extracted from.</p>
-<p>{library_docs}</p>
-<div class="moddoc">{ver_philosophy}</div>
+{library_docs}
+{ver_philosophy}
 """)}
 
 {section("2. What the model is and where it comes from", f"""
