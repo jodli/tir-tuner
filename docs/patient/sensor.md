@@ -12,9 +12,9 @@ This page explains what your CGM reading really is, and why it never quite match
 
 ## Where the reading comes from
 
-Your sensor does not measure blood. It sits under the skin, in the tissue, and reads the sugar in the fluid between the cells: the interstitial fluid. Sugar moves from the blood into that fluid, and the two are close but never identical. When blood sugar changes, the interstitial fluid follows with a delay, which is the first reason the sensor number lags a few minutes behind the body's state.
+Your sensor does not measure blood. It sits under the skin, in the tissue, and reads the sugar in the fluid between the cells: the interstitial fluid. Sugar moves from the blood into that fluid, and the two are close but never identical. When blood sugar changes, the interstitial fluid follows with a delay, which is why the sensor number lags a few minutes behind the blood.
 
-The model carries this explicitly. The body model has a glucose compartment that is the blood, and a separate small compartment that is the interstitial fluid. The sensor reads the interstitial one, because that is what happens in real life.
+The model captures this exactly. The body model has a glucose compartment that is the blood, and a separate small compartment that is the interstitial fluid. The sensor reads the interstitial one, because that is what happens in real life.
 
 ## The reading is approximate
 
@@ -23,9 +23,9 @@ The sensor output is the true interstitial sugar plus an error. The error model 
 - **It is noise**: each reading carries a random error with standard deviation 0.5 mmol/L by default.
 - **It is sticky**: if the sensor is off now, it tends to be off in the same direction for several minutes. The next error keeps 85% of the current one, plus a fresh random kick.
 
-The code name for this stickiness is autoregressive, written AR(1). It is exactly what you feel when a sensor runs high or low for an afternoon and only wanders back slowly: that is how these sensors behave.
+The code name for this stickiness is autoregressive, written AR(1). It is exactly what you feel when a sensor runs high or low for an afternoon and only wanders back slowly.
 
-On top of that, the sensor keeps a built-in calibration, a slow self-correction that holds the reading near the true level.
+The sensor also calibrates itself: a slow self-correction keeps the reading near the true level.
 
 ## The zero floor
 

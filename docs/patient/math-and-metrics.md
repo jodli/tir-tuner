@@ -41,15 +41,15 @@ A day of glucose readings is judged with a few standard numbers.
 - **Time in range (TIR)**: the share of readings inside the band 3.9 to 10.0 mmol/L (70 to 180 mg/dL), as a percentage. This is the headline number of a diabetes day. ISO defines the band; the model reports it the same way.
 - **Mean glucose**: the average of the readings, in mmol/L.
 - **Coefficient of variation (CV)**: the spread of the readings around the mean, as a percentage. It measures how much the day swings around that average, independent of how high. Two days with the same average can feel very different, and CV is what tells them apart.
-- **LBGI and HBGI**: the low and high blood glucose index. They are the Kovatchev risk scores, and they weight each reading toward the danger it represents. A long stretch of mild highs scores differently from one scary low. Readings above roughly 112.5 mg/dL (6.24 mmol/L) contribute nothing to the low index, and vice versa.
+- **LBGI and HBGI**: the low and high blood glucose indices. They are the Kovatchev risk scores, and they weight each reading toward the danger it represents. A long stretch of mild highs scores differently from one scary low. Readings above roughly 112.5 mg/dL (6.24 mmol/L) contribute nothing to the low index, and vice versa.
 
 These are the numbers behind your pump report and your clinic reviews. The rest of this project exists to move the TIR number up without letting the low risk scores climb.
 
 ## The clock
 
-A simulation moves forward in small, fixed time steps rather than continuously. The core step is a clamped forward Euler update: take the current value, add the rate of change times the step length, and never let the result go below zero.
+A simulation moves forward in small, fixed time steps rather than continuously. The core update is a clamped forward Euler step: take the current value, add the rate of change times the interval length, and never let the result go below zero.
 
-The clamp at zero is a safety rule. None of the masses may ever go negative, insulin or glucose. The rule is enforced at every step, and it is one of the invariants that the formal verification proves. The body integrates in steps of 0.25 minutes; the controller thinks in steps of 15 minutes. Both use the same clamped primitive.
+The clamp at zero is a safety rule. No amount may ever go negative, insulin or glucose. The rule is enforced at every step, and it is one of the invariants that the formal verification proves. The body integrates in steps of 0.25 minutes; the controller thinks in steps of 15 minutes. Both use the same clamped primitive.
 
 ## The seed
 

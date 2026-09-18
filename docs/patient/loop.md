@@ -8,11 +8,11 @@ sources:
 
 # The loop
 
-This page shows how the sensor, the controller, the pump and the body are wired into one running day, including a replay of real pump data.
+This page shows how the sensor, the controller, the pump and the body are wired together into one running day, including a replay of real pump data.
 
 ## Running one day
 
-The body is integrated forward in steps of 0.25 minutes. Every 15 minutes the control period fires: the sensor reads the body, the brain decides a rate, the pump delivers it, and the body lives with the consequence until the next period. Each piece plays its part:
+The body is integrated forward in steps of 0.25 minutes. Every 15 minutes the loop starts a new period: the sensor reads the body, the brain decides a rate, the pump delivers it, and the body lives with the consequence until the next one. Each piece plays its part:
 
 ```mermaid
 flowchart LR
@@ -34,11 +34,11 @@ When a meal happens, the pump can do three different things depending on how the
 2. **Unannounced**: no bolus at all, the loop sees the sugar rise and corrects on its own.
 3. **Open loop**: the controller is switched off, and the pump delivers its constant basal rate with the hypoglycemia suspension still active.
 
-The comparison is the point of the tests in this project. On the same meals and the same subject, the closed loop beats the basal-only arm. At the default settings, in simulation, the closed loop holds 89.2% time in range on a two-meal control day and 75.0%, with 3.1% below range, on a four-meal day replayed from real pump data.
+The comparison is the point of the tests in this project. On the same meals and the same subject, the closed loop beats the basal-only arm. At the default settings, in simulation, the closed loop holds 89.2% time in range on a two-meal control day, and 75.0% time in range (3.1% below range) on a four-meal day replayed from real pump data.
 
 ## The pump is approximate
 
-The pump is modeled with a small delivery error: the delivered rate differs from the commanded rate by a few percent, 5% coefficient of variation by default. Every pump has this imperfection, and the loop has to tolerate it. The sensor is noisy too, as [the sensor page](sensor.md) explained, and the body itself is only approximated by the controller's model, as [the brain page](brain.md) explained. A run uses all three at once, like a real day.
+The pump is modeled with a small delivery error: the delivered rate differs from the commanded rate by a few percent, 5% coefficient of variation by default. Every pump has this imperfection, and the loop has to tolerate it. The sensor is noisy too, as [the sensor page](sensor.md) explained, and the body itself is only approximated by the controller's model, as [the brain page](brain.md) described. A run uses all three at once, like a real day.
 
 ## The model versus the map
 

@@ -13,11 +13,11 @@ This page explains type 1 diabetes in the same language the model uses, and then
 
 ## The disease in brief
 
-Your body makes sugar and uses it, and it needs insulin for each half: insulin to let the cells use the sugar, and insulin to stop the liver's own production once there is enough. Type 1 diabetes removes the cells that make insulin. The sugar from food rises, the sugar your liver makes rises, and nothing pulls either back down. Every treatment is the attempt to replace the missing signal, and the pump is the replacement in this project.
+Your body makes sugar and uses it, and both jobs need insulin: insulin to let the cells use the sugar, and insulin to stop the liver's own production once there is enough. Type 1 diabetes removes the cells that make insulin. The sugar from food rises, the sugar your liver makes rises, and nothing pulls either back down. Every treatment is an attempt to replace the missing signal, and the pump is the replacement in this project.
 
 ## The model's map of a person
 
-The model keeps eleven compartments, each a reservoir with a rate it fills and drains. They form the map that everything else in this project reads:
+The model splits the body into eleven compartments, each a reservoir that fills and drains at its own rate. They form the map that everything else in this project reads:
 
 ```mermaid
 flowchart TD
@@ -41,9 +41,9 @@ Their short names are `s1`, `s2` (insulin under the skin), `i` (insulin in the b
 
 ## Insulin takes time to arrive
 
-When a pump delivers insulin, it does not land in the blood. It sits under the skin, passes through two depot compartments, and only then reaches the blood, with peak absorption about 55 minutes after delivery. That concentration is what acts on the body, and it builds up and fades over that timescale. No treatment can make insulin act faster.
+When a pump delivers insulin, it does not land in the blood. It sits under the skin, passes through two depot compartments, and only then reaches the blood, with peak absorption about 55 minutes after delivery. That concentration is what acts on the body, and it builds up and fades over that timescale. In this model, no treatment can make insulin act faster.
 
-This delay explains most of diabetes management. A bolus at the start of a meal is a bet about a peak that arrives almost an hour later. The pump exists largely to manage this delay.
+This delay explains most of diabetes management. A bolus at the start of a meal is a bet about a peak that arrives almost an hour later. The pump's main job is to manage this delay.
 
 ## Insulin has three jobs
 
@@ -70,19 +70,19 @@ flowchart LR
 
 ## Sugar use without insulin
 
-Not all glucose use needs insulin. The brain and red blood cells take it up regardless. The model calls this the insulin-independent uptake (F01), a constant background drain on the blood. Its strength depends on the level, through a shape called a Michaelis-Menten curve: higher glucose means a stronger drain, lower glucose a weaker one. The result is that blood glucose is never pulled to zero by the model, because this background use fades as the level falls. Low blood sugar remains possible, but the model never drains itself to zero on its own.
+Not all glucose use needs insulin. The brain and red blood cells take it up regardless. The model calls this the insulin-independent uptake (F01), a constant background drain on the blood. Its strength depends on the level, through a shape called a Michaelis-Menten curve: higher glucose means a stronger drain, lower glucose a weaker one. The result is that the model never drains blood glucose to zero on its own: as the level falls, the drain fades. Low blood sugar remains possible, but this drain is not the cause.
 
 ## The kidneys are a safety valve
 
 The kidneys filter the blood and hold the sugar back up to a threshold. Above roughly 9 mmol/L the excess starts to spill into the urine. The model implements this as renal excretion: zero below the threshold, and above it a drain proportional to the excess.
 
-That is why very high sugar tends to stop climbing on its own. When the kidneys open the valve, sugar is lost through urine. It is a wasteful way to control the level, and the model keeps it.
+That is why very high sugar tends to stop climbing on its own: past the threshold, the excess sugar is lost through urine. It is a wasteful way to lower the level, and the model keeps it.
 
 ## Why the model has a resting point
 
 Deliver a constant basal insulin and give no food, and the liver produces a fixed amount while the tissues use a fixed amount. Where those balance is the resting glucose, the level a person without meals and without activity would sit at.
 
-The simulator calibrates every virtual person so that resting glucose lands on the treatment target of 5.8 mmol/L. It adjusts the basal rate until the resting point matches, the same way a clinician sets a real pump's basal rate. In this project, "your basal rate sets your resting level" is literal: the basal rate is computed to land the resting point on the target.
+The simulator calibrates every virtual person so that resting glucose settles on the treatment target of 5.8 mmol/L. It adjusts the basal rate until the resting point matches, the same way a clinician sets a real pump's basal rate. In this project, "your basal rate sets your resting level" is literal: the rate is computed so the resting point lands on the target.
 
 ## No two people are alike
 
@@ -96,7 +96,7 @@ The model does not describe a generic person. It describes a virtual subject, a 
 | Insulin absorption speed | varies per subject | how fast a dose takes effect |
 | Insulin sensitivities | differ per subject | how strongly insulin acts |
 
-A faster absorber, a heavier body, a higher insulin need: each one shifts the whole day. The closed loop is tuned against this kind of spread, because a real population looks exactly like this. When the docs on the other pages say "the subject", they mean one specific virtual person.
+A faster absorber, a heavier body, a higher insulin need: each one changes the shape of the day. The closed loop is tuned against this kind of spread, because a real population looks exactly like this. When the docs on the other pages say "the subject", they mean one specific virtual person.
 
 ## The missing signal
 
