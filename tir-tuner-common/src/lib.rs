@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 //! Shared primitives for the tir-tuner workspace.
 //!
 //! Everything here is algorithm-independent: numeric integration
@@ -5,6 +6,8 @@
 //! [`tir_tuner_aps`] crate (the verified pump algorithm) and the
 //! `tir-tuner-body` / `tir-tuner-cgm` simulation crates all build on it
 //! without sharing semantics.
+//!
+//! For a patient-facing companion page, see `docs/patient/math-and-metrics.md`.
 
 pub mod euler;
 pub mod metrics;

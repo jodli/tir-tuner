@@ -49,6 +49,8 @@ pub fn step(
 pub const BASAL_EPS: f64 = 1e-8;
 const MAX_BASAL_STEPS: usize = 200_000; // ~34 virtual hours at dt 0.25
 
+/// Compute the basal steady state of a subject by integrating the real
+/// model to rest under the basal insulin requirement and no meal.
 pub fn basal_steady_state(subject: &VirtualSubject) -> BodyState {
     let inputs = BodyInputs {
         u_basal_mu_per_min: subject.bir_u_per_h / 60.0 * MU_PER_UNIT,

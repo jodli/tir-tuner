@@ -1,5 +1,10 @@
 //! Kani formal verification suite for the shared primitives (only built
 //! under `cargo kani`).
+//!
+//! # Source
+//!
+//! `clamped_forward_euler`'s non-negativity is an algebraic fact about
+//! IEEE `max`, not a literature claim; no reference key applies.
 
 use crate::euler::clamped_forward_euler;
 

@@ -41,6 +41,27 @@ When developing and reviewing code, the agent should refer to the following sour
    * *Role*: Real-world data distributions (>35,000 users across 19 countries) for validating baseline basal/bolus ratios and age-dependent glucose targets.
 5. **Wilinska et al. (2010) ("Simulation Environment for In Silico Testing...")**:
    * *Role*: Parameter distributions for virtual T1D patient populations used in simulation scenarios.
+6. **Facchinetti et al. (2014) ("Modeling the glucose sensor error")**:
+   * *Role*: The CGM measurement error model: a lagged, autocorrelated first-order (AR(1)) additive error on the interstitial glucose, with the calibration gain applied in the CGM crate.
+7. **Breton & Kovatchev (2008) ("Analysis, modeling, and simulation of the accuracy of continuous glucose sensors")**:
+   * *Role*: Continuous-glucose-sensor error analysis and simulation; jointly with Facchinetti et al. (2014) the source of the CGM error structure.
+8. **Patek et al. (2009) ("In silico preclinical trials: methodology and engineering guide to closed-loop control in type 1 diabetes mellitus")**:
+   * *Role*: The alignment-free outcome measures (time in range, mean glucose, coefficient of variation) used by the clinical reporting metrics.
+9. **Bequette (2013) ("Algorithms for a Closed-Loop Artificial Pancreas: The Case for Model Predictive Control")**:
+   * *Role*: Justification of the NMPC dose-calculator formulation (spec section 5.1).
+10. **Ware et al. (2022b) ("Safety of user-initiated intensification of insulin delivery using Cambridge hybrid closed-loop algorithm")**:
+    * *Role*: Safety evidence behind the Boost-mode intensification factor.
+11. **Alwan et al. (2023) ("Real-World Evidence Analysis of a Hybrid Closed-Loop System")**:
+    * *Role*: Real-world TIR distributions; one of the sources of the `3.9`-`10.0` mmol/L TIR band.
+
+**Section-numbering conventions.** Section references in this document
+follow the target source's own numbering. "eq. 9" and "section 3.3" (the
+NMPC objective and the moving target trajectory) are numbered as inside
+Hovorka et al. (2004). "spec section 3.2A-F" and "spec section 5.1" point
+at *this* specification's headings. "Paragraphs [0102]-[0116]" are the
+paragraph numbers of patent CA2702345C. The verification-report reference
+keys `[W04]`, `[W10]`, `[BQ13]`, `[W22]`, `[W22B]`, `[B26]`, `[A23]`,
+`[F14]`, `[B08]`, `[P09]`, `[CA2345]` map to this section's numbered list.
 
 ---
 
@@ -217,6 +238,7 @@ the native `proptest` / exhaustive suite plus the `fuzz/` targets.
   cost harness dominates at about 72 seconds and the remaining eight
   proofs finish well under 30 seconds each.
 * CI command: `cargo kani -Z unstable-options --harness-timeout 30s -j --output-format terse`.
+* Rustdoc includes the Kani-only modules when the same `cfg` flag is passed: `RUSTDOCFLAGS='--cfg kani' cargo doc --no-deps`.
 * Native properties run under plain `cargo test` (default budget about 10 seconds); `CAMAPS_SOAK_ITERS=<n>` raises the `proptest` case count for an opt-in soak run.
 * Coverage-guided soak: `cargo +nightly fuzz run <target>` over the `fuzz/` crate.
 

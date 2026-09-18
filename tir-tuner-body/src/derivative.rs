@@ -22,16 +22,27 @@ pub struct BodyInputs {
 /// Time derivatives of all eleven compartments (per minute).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BodyDerivatives {
+    /// Rate of change of the subcutaneous insulin mass, depot 1 (mU/min).
     pub s1: f64,
+    /// Rate of change of the subcutaneous insulin mass, depot 2 (mU/min).
     pub s2: f64,
+    /// Rate of change of plasma insulin (mU/L/min).
     pub i: f64,
+    /// Rate of change of the remote insulin action on transport (mU/L/min).
     pub x1: f64,
+    /// Rate of change of the remote insulin action on disposal (mU/L/min).
     pub x2: f64,
+    /// Rate of change of the remote insulin action on EGP (mU/L/min).
     pub x3: f64,
+    /// Rate of change of the accessible glucose mass (mmol/kg/min).
     pub q1: f64,
+    /// Rate of change of the non-accessible glucose mass (mmol/kg/min).
     pub q2: f64,
+    /// Rate of change of the gut glucose store, depot 1 (mmol/min).
     pub g1: f64,
+    /// Rate of change of the gut glucose store, depot 2 (mmol/min).
     pub g2: f64,
+    /// Rate of change of interstitial glucose (mmol/L/min).
     pub c: f64,
 }
 

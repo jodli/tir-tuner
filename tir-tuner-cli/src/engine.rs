@@ -110,11 +110,13 @@ pub struct Meal {
 /// Everything a single simulation run needs.
 #[derive(Clone, Debug)]
 pub struct SimConfig {
+    /// The virtual patient the scenario runs on.
     pub subject: VirtualSubject,
     /// Presenting plasma glucose at t=0, mg/dL.
     pub admit_glucose_mg_per_dl: f64,
     /// Total simulated time in hours.
     pub duration_hours: f64,
+    /// The meals of the day as time-gated carbohydrate inputs.
     pub meals: Vec<Meal>,
     /// Maximum pump delivery rate (U/h).
     pub max_delivery_u_per_h: f64,

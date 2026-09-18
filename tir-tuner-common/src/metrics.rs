@@ -1,7 +1,7 @@
 //! Clinical reporting metrics over glucose time series, all in mmol/L.
 //!
 //! These are the alignment-free outcome measures used by the trial
-//! literature (Patek 2009, Wilinska 2010): percent time in range with
+//! literature (Patek 2009 `[P09]`, Wilinska 2010 `[W10]`): percent time in range with
 //! the ISO-defined 3.9-10.0 mmol/L band, mean glucose, and coefficient
 //! of variation. Metrics are pure functions over slices so the numeric
 //! integration and the reporting stay independent.

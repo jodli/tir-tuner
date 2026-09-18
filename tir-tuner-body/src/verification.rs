@@ -7,6 +7,13 @@
 //! clamped Euler integration is proved symbolically over a narrow
 //! physiological band; the full-state behavior is covered by the native
 //! `proptest` walk in `solver.rs`.
+//!
+//! # Source
+//!
+//! The body integrates the Cambridge simulator subject of `[W10]`: the
+//! EGP suppression, the saturable `F01c` and the renal-excretion
+//! threshold are the blueprint section 3.2D forms of the Hovorka model
+//! (`[W04]`).
 
 use crate::derivative::{egp, f01c, gut_appearance, renal_excretion, BodyInputs};
 use crate::solver::step;

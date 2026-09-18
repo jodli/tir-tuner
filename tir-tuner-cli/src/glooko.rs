@@ -160,8 +160,11 @@ pub fn parse_meals(contents: &str) -> Result<Vec<MealEvent>, ParseError> {
 /// A row that could not be parsed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseError {
+    /// 1-based line number in the source CSV.
     pub line: usize,
+    /// The field being parsed when the row failed.
     pub field: &'static str,
+    /// The unparsed row text.
     pub row: String,
 }
 

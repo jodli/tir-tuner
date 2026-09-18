@@ -1,9 +1,10 @@
+#![warn(missing_docs)]
 //! CGM sensor model: interstitial glucose to a noise-corrupted reading.
 //!
 //! The sensor reads the body's interstitial glucose and returns a value
 //! corrupted by a first-order autoregressive measurement error, the
-//! structure identified by Facchinetti et al. 2014 and Breton &
-//! Kovatchev 2008: a lagged, auto-correlated error on top of the true
+//! structure identified by Facchinetti et al. 2014 `[F14]` and Breton &
+//! Kovatchev 2008 `[B08]`: a lagged, auto-correlated error on top of the true
 //! interstitial value. Calibration gain sits here, not on the body,
 //! which keeps the observation model genuinely separate from the
 //! physiology.
@@ -16,6 +17,8 @@
 //!
 //! As with the aps and body crates, the sensor is deterministic from a
 //! seed so the sim engine reproduces a scenario end-to-end.
+//!
+//! For a patient-facing companion page, see `docs/patient/sensor.md`.
 
 /// Default sensor measurement noise standard deviation (mmol/L) used in
 /// in-silico scenarios.

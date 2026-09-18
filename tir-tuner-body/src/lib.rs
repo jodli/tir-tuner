@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 //! Physiological virtual-patient model (Wilinska et al. 2010) for
 //! in-silico closed-loop testing.
 //!
@@ -16,6 +17,8 @@
 //!
 //! Known model divergences from the published Wilinska formulation are
 //! documented where they occur in [`subject`].
+//!
+//! For a patient-facing companion page, see `docs/patient/body.md`.
 
 pub mod derivative;
 pub mod solver;

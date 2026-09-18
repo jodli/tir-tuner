@@ -9,6 +9,21 @@
 //! `imm.rs` and `controller.rs`, plus the coverage-guided `fuzz/`
 //! targets.
 //!
+//! # Source
+//!
+//! The claim families trace to the literature and the patent as follows:
+//!
+//! * the NMPC proofs reference the blueprint section 5.1 objective, which
+//!   is Hovorka et al. 2004 eq. 9 with the moving target trajectory of
+//!   its section 3.3 (`[W04]`);
+//! * the Ease-off / Boost mode invariants and the dosing bounds follow
+//!   the Ware et al. 2022 cohort trial and its intensification follow-up
+//!   (`[W22]`, `[W22B]`);
+//! * the IMM normalization proof covers the mixture update of patent
+//!   CA2702345C paragraph range [0102]-[0116] (`[CA2345]`);
+//! * `verify_step_compartment_non_negativity` is the clamped Euler
+//!   saturation primitive, an algebraic fact, not a literature claim.
+//!
 //! # What Kani proves here
 //!
 //! 1. `verify_step_compartment_non_negativity` - `HovorkaState::step`

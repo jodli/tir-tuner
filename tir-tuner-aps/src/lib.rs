@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 //! CamAPS FX style hybrid closed-loop controller core.
 //!
 //! This crate implements a minimal, deterministic version of the
@@ -13,6 +14,8 @@
 //!
 //! The Kani formal verification suite lives in [`verification`] and is
 //! only compiled when `cfg(kani)` is set (i.e. under `cargo kani`).
+//!
+//! For a patient-facing companion page, see `docs/patient/brain.md`.
 
 pub mod controller;
 pub mod hovorka;

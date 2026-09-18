@@ -6,6 +6,13 @@
 //! (comparisons, clamps, additions, multiplications by bounded factors).
 //! The RNG-driven noise distribution and the autocorrelation estimate
 //! are native-test claims in `device.rs`.
+//!
+//! # Source
+//!
+//! The AR(1) sensor-error structure (`e' = alpha1 * e + w`) and the
+//! calibration gain on the interstitial reading are the error model of
+//! `[F14]` and `[B08]`; the scenario noise uses
+//! `SENSOR_NOISE_SD_MMOL_L`, per `[W10]`.
 
 use super::device::{gain_signal, next_error, SensorParams};
 

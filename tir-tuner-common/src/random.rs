@@ -9,6 +9,7 @@
 pub struct SeededRng(u64);
 
 impl SeededRng {
+    /// A generator seeded with the given value.
     pub fn new(seed: u64) -> Self {
         Self(seed)
     }

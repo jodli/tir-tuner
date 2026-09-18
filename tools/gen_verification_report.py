@@ -252,6 +252,12 @@ REFS = [
      "https://doi.org/10.1007/s44357-025-00002-2"),
     ("A23", "Alwan, H., et al. Real-World Evidence Analysis of a Hybrid Closed-Loop System. Journal of Diabetes Science and Technology 2023.",
      "https://doi.org/10.1177/19322968231185348"),
+    ("F14", "Facchinetti, A., Del Favero, S., Sparacino, G., Castle, J. R., Ward, W. K., Cobelli, C. Modeling the Glucose Sensor Error. IEEE Transactions on Biomedical Engineering 2014;61(3):620-629.",
+     "https://pubmed.ncbi.nlm.nih.gov/24108706/"),
+    ("B08", "Breton, M., Kovatchev, B. Analysis, Modeling, and Simulation of the Accuracy of Continuous Glucose Sensors. Journal of Diabetes Science and Technology 2008;2(5):853-862. PMC2740661.",
+     "https://pubmed.ncbi.nlm.nih.gov/19750186/"),
+    ("P09", "Patek, S. D., Bequette, B. W., Breton, M., Buckingham, B. A., Dassau, E., Doyle, F. J. III, Lum, J., Magni, L., Zisser, H. In Silico Preclinical Trials: Methodology and Engineering Guide to Closed-Loop Control in Type 1 Diabetes Mellitus. Journal of Diabetes Science and Technology 2009;3(2):269-282. PMC2771529.",
+     "https://pubmed.ncbi.nlm.nih.gov/20144358/"),
     ("CA2345", "Hovorka, R. (inventor). Substance Monitoring and Control in Human or Animal Bodies. Canadian patent CA2702345C, granted 2018, assigned to Cambridge Enterprise Ltd. (US family: US9402953B2, Glucose Monitoring and Control Using Multi-Model Approach.)",
      "https://patents.google.com/patent/CA2702345C/en"),
 ]
@@ -520,7 +526,7 @@ statements over bounded symbolic inputs whose operations are comparisons, clamps
 multiplications by constants. <strong>Native Rust tests</strong> (exhaustive lattice sweeps, <code>proptest</code>
 randomized cases) cover the rounding-level claims: sum-to-one identities, dense sweeps, the wired
 behaviour of the full model. <strong>Coverage-guided fuzzing</strong> soaks the actual numerical code paths.
-The split is documented in <a href="#ref-W04">the blueprint</a> and repeated in the module docs the
+The split is documented in <a href="docs/camaps_fx_kani_specification.md">the blueprint</a> and repeated in the module docs the
 report is extracted from.</p>
 {library_docs}
 {ver_philosophy}
