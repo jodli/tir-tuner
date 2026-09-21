@@ -1,5 +1,8 @@
+{% assign current_lang = page.lang | default: "en" %}
+{% assign first_seg = page.path | split: "/" | first %}
+{% assign in_de = first_seg == "de" %}
 <!doctype html>
-<html lang="en">
+<html lang="{{ current_lang }}">
 <head>
   <meta charset="utf-8">
   <title>{{ page.title | default: site.title }}</title>
@@ -51,6 +54,16 @@
       border-radius: 6px;
     }
     .mermaid { text-align: center; max-width: 100%; overflow-x: auto; }
+    .lang-switch {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.6rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .lang-switch a { text-decoration: none; }
+    .lang-switch [aria-current] { font-weight: 600; color: var(--ink); }
     .site-footer {
       margin-top: 3rem;
       padding-top: 0.75rem;
@@ -62,8 +75,17 @@
 </head>
 <body>
   <main>
+    <nav class="lang-switch" aria-label="{% if in_de %}Sprache{% else %}Language{% endif %}">
+      {% if in_de %}<a href="../{{ page.slug }}.html">English</a>{% else %}<span aria-current="page">English</span>{% endif %}
+      <span aria-hidden="true">|</span>
+      {% if in_de %}<span aria-current="page">Deutsch</span>{% else %}<a href="de/{{ page.slug }}.html">Deutsch</a>{% endif %}
+    </nav>
     {{ content }}
-    <p class="site-footer"><a href="./">Back to the overview</a></p>
+    {% if in_de %}
+      <p class="site-footer"><a href="../">Zurück zur Übersicht</a></p>
+    {% else %}
+      <p class="site-footer"><a href="./">Back to the overview</a></p>
+    {% endif %}
   </main>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script>

@@ -1,5 +1,6 @@
 ---
 title: The sensor
+lang: en
 sources:
   - tir-tuner-cgm/src/device.rs
   - tir-tuner-cgm/src/lib.rs
