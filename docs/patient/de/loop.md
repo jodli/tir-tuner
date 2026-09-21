@@ -10,11 +10,11 @@ sources:
 
 # Der Regelkreis
 
-Diese Seite zeigt, wie Sensor, Steuerung, Pumpe und Körper zu einem laufenden Tag verdrahtet sind, einschließlich einer Wiederholung mit echten Pumpdaten.
+Diese Seite zeigt, wie Sensor, Steuerung, Pumpe und Körper zu einem laufenden Tag verdrahtet sind, und spielt den Tag zusätzlich mit echten Pumpdaten durch.
 
 ## Einen Tag laufen lassen
 
-Der Körper wird in Schritten von 0.25 Minuten vorwärts integriert. Alle 15 Minuten beginnt der Regelkreis eine neue Periode: der Sensor liest den Körper, das Gehirn entscheidet eine Rate, die Pumpe liefert sie, und der Körper lebt mit der Folge, bis zur nächsten. Jedes Teil spielt seine Rolle:
+Der Körper wird in Schritten von 0,25 Minuten weitergerechnet. Alle 15 Minuten beginnt eine neue Regelperiode: Der Sensor liest den Körper, das Gehirn legt eine Rate fest, die Pumpe gibt sie ab, und der Körper arbeitet bis zur nächsten Periode mit dieser Folge weiter. Jeder Baustein hat seine Aufgabe:
 
 ```mermaid
 flowchart LR
@@ -26,51 +26,51 @@ flowchart LR
     V -.Abgaben.- T[(Spur: TIR, Mittelwert, CV)]
 ```
 
-Essen ist es, was aus der Simulation einen Tag macht. Mahlzeiten werden dem Modell als zeitlich begrenzte Kohlenhydrat-Eingaben gegeben, mit Startzeit, Menge in Gramm und Dauer. Die Mahlzeit kommt durch den Magen-Darm-Trakt und verhält sich genau, wie [Der Körper](body.md) es beschreibt.
+Mahlzeiten sind es, die aus der Simulation einen Tag machen. Sie geben dem Modell eine Mahlzeit als zeitlich begrenzte Kohlenhydrat-Eingabe an: Startzeit, Menge in Gramm und Dauer. Die Mahlzeit wandert durch den Magen-Darm-Trakt und verhält sich genau so, wie es [Der Körper](body.md) beschreibt.
 
 ## Mahlzeiten und Boli
 
-Wenn eine Mahlzeit passiert, kann die Pumpe je nach Simulationskonfiguration dreierlei tun:
+Je nach Konfiguration der Simulation kann die Pumpe auf eine Mahlzeit auf dreierlei Weise reagieren:
 
-1. **Vollständig angekündigt**: der Kohlenhydratfaktor (ICR) wird verwendet, um einen Bolus zu Mahlzeitenbeginn zu verschreiben. In der Standardeinstellung werden 80% des vollen ICR-Bolus zu Mahlzeitenbeginn abgegeben, den Rest erledigt der geschlossene Regelkreis.
-2. **Nicht angekündigt**: gar kein Bolus, der Regelkreis sieht den Zucker steigen und korrigiert von selbst.
-3. **Offener Regelkreis**: die Steuerung ist abgeschaltet, und die Pumpe liefert ihre konstante Basalrate, wobei die Hypoglykämie-Unterbrechung aktiv bleibt.
+1. **Angekündigt.** Der Kohlenhydratfaktor (ICR) bestimmt den Bolus zu Beginn der Mahlzeit. Standardmäßig gibt die Pumpe zu Mahlzeitenbeginn 80 % des vollen ICR-Bolus ab; den Rest übernimmt der geschlossene Regelkreis.
+2. **Nicht angekündigt.** Ein Bolus bleibt aus; der Regelkreis sieht den Zucker steigen und korrigiert von selbst.
+3. **Offener Regelkreis.** Die Steuerung ist abgeschaltet, und die Pumpe gibt nur ihre konstante Basalrate ab; die Hypoglykämie-Unterbrechung bleibt aktiv.
 
-Der Vergleich ist der Sinn der Tests in diesem Projekt. Bei denselben Mahlzeiten und demselben Probanden schlägt der geschlossene Regelkreis den Nur-Basal-Arm. In der Standardeinstellung hält er in der Simulation 89.2% Zeit im Zielbereich an einem Tag mit zwei Mahlzeiten und 75.0% Zeit im Zielbereich (3.1% unter dem Bereich) an einem Tag mit vier Mahlzeiten, der aus echten Pumpdaten abgespielt wird.
+Der Vergleich ist der Sinn der Tests in diesem Projekt: Bei gleichen Mahlzeiten und gleichem Probanden schneidet der geschlossene Regelkreis besser ab als die reine Basalvariante. In der Standardeinstellung erreicht er in der Simulation 89,2 % Zeit im Zielbereich an einem Tag mit zwei Mahlzeiten und 75,0 % Zeit im Zielbereich (3,1 % unterhalb des Zielbereichs) an einem Tag mit vier Mahlzeiten, der aus echten Pumpdaten abgespielt wird.
 
 ## Die Pumpe ist ungenau
 
-Die Pumpe wird mit einem kleinen Abgabefehler modelliert: Die abgegebene Rate weicht um ein paar Prozent von der befohlenen ab, standardmäßig 5% Variationskoeffizient. Jede Pumpe hat diese Unvollkommenheit, und der Regelkreis muss sie tolerieren. Der Sensor rauscht ebenfalls, wie [die Sensorseite](sensor.md) erklärte, und der Körper selbst wird vom Modell der Steuerung nur angenähert, wie [die Gehirnseite](brain.md) beschrieb. Ein Lauf nutzt alle drei gleichzeitig, wie ein echter Tag.
+Auch die Pumpe ist im Modell nicht perfekt: Die abgegebene Rate weicht um ein paar Prozent von der verordneten ab, standardmäßig mit einem Variationskoeffizienten von 5 %. Jede Pumpe hat diese Unvollkommenheit, und der Regelkreis muss mit ihr leben. Der Sensor rauscht ebenfalls, wie die [Sensorseite](sensor.md) erklärt, und der Körper ist im Modell der Steuerung nur angenähert, wie die [Gehirnseite](brain.md) beschreibt. In einem Lauf wirken alle drei zusammen, so wie an einem echten Tag.
 
 ## Das Modell gegen die Landkarte
 
 In einer Simulation laufen zwei Versionen des Körpers, und sie sind nicht identisch:
 
-- Der **Körper** ist die Wahrheit der Simulation. Er ist der vollständige virtuelle Patient mit seinen eigenen, möglicherweise gezogenen Parametern.
-- Die **Annahme** ist das Modell der Steuerung von diesem Körper. Sie ist eine vereinfachte Skizze, absichtlich nicht gleich dem Körper, neu kalibriert, sodass sich ihre Ruheglukose auf demselben Ziel einpendelt wie die des Körpers.
+- Der **Körper** ist in der Simulation die Wahrheit: der vollständige virtuelle Patient, mit seinen eigenen, möglicherweise zufällig gezogenen Parametern.
+- Die **Annahme** ist das Bild, das sich die Steuerung von diesem Körper macht: eine vereinfachte Skizze, absichtlich nicht identisch mit dem Körper, und so kalibriert, dass ihre Ruheglukose auf demselben Ziel liegt wie die des Körpers.
 
-Die Steuerung handelt nach der Annahme, die in bedeutsamer Weise falsch ist, und der Regelkreis muss trotzdem funktionieren. Diese Trennung ist dieselbe Design-Entscheidung wie im echten System, und sie ist der Grund, warum die Simulation ein Test der Robustheit ist und kein Selbstkonsistenz-Check. Die Annahme wird bei jedem echten Wert neu verankert (50/50-Mischung), sodass sich die Landkarte im Lauf des Tages selbst korrigiert.
+Die Steuerung handelt nach der Annahme, auch wenn diese deutlich danebenliegt, und der Regelkreis muss trotzdem funktionieren. Diese Trennung ist dieselbe Konstruktionsentscheidung wie im echten System; sie ist der Grund, warum die Simulation eine Prüfung der Robustheit ist und kein reiner Selbsttest. Bei jedem echten Wert wird die Annahme neu ausgerichtet (50/50-Mischung), sodass sich das Bild im Lauf des Tages selbst korrigiert.
 
 ## Ihr eigener Tag, wiederholt
 
-Das persönlichste Stück dieses Projekts ist der Glooko-Import. Echte Pumpensoftware exportiert einen Tag als CSV-Dateien mit Komma als Dezimaltrenner, Zeitstempeln wie `05.08.2026 23:59` und Zeilen in umgekehrt chronologischer Reihenfolge. Der Parser behandelt das echte Format, kein idealisiertes.
+Der Glooko-Import ist der persönlichste Teil dieses Projekts. Echte Pumpensoftware exportiert den Tag als CSV-Dateien, mit Komma als Dezimaltrenner, Zeitstempeln wie `05.08.2026 23:59` und Zeilen in umgekehrt chronologischer Reihenfolge. Der Parser rechnet mit dem realen Format, nicht mit einem idealisierten.
 
-Zwei Dateien werden importiert:
+Importiert werden zwei Dateien:
 
-- Der **CGM-Export**: die Sensorwerte eines echten Tages, in mg/dL.
-- Der **Boluseexport**: die Mahlzeiten-Ereignisse, bei denen der Patient Kohlenhydrate protokollierte und die Pumpe die dazugehörigen Boli abgab.
+- **CGM-Export:** die Sensorwerte eines echten Tages, in mg/dL.
+- **Bolus-Export:** die Mahlzeiten, zu denen Sie Kohlenhydrate protokolliert haben und die Pumpe die passenden Boli abgab.
 
-Der Bolusexport speist den Mahlzeitenplan: dasselbe Essen, dieselben Zeiten, gegen das Modell abgespielt, mit der Steuerung über das Insulin. Am Ende druckt der Lauf dieselbe Kennzahlenzeile für den echten und den simulierten Tag, Zeit im Zielbereich, mittlere Glukose und Variationskoeffizient, sodass beide direkt vergleichbar sind:
+Der Bolus-Export speist den Mahlzeitenplan: dasselbe Essen, dieselben Zeiten, abgespielt gegen das Modell, während die Steuerung das Insulin dosiert. Am Ende druckt der Lauf für beide Tage dieselbe Kennzahlenzeile, Zeit im Zielbereich, mittlere Glukose und Variationskoeffizient, sodass sich echter und simulierter Tag direkt vergleichen lassen:
 
 ```
 real Glooko: <N> samples, TIR <...>%, mean <...> mmol/L, CV <...>%
 sim (closed loop): <M> samples, TIR <...>%, mean <...> mmol/L, CV <...>%
 ```
 
-Ihre Werte und Ihre Mahlzeiten werden durch den verifizierten Regelkreis abgespielt, und die gedruckten Zahlen sind das Ergebnis dieses Laufs.
+Ihre Werte und Ihre Mahlzeiten laufen durch den verifizierten Regelkreis; die gedruckten Zahlen sind das Ergebnis dieses Laufs.
 
 ## Der Fünfzehn-Minuten-Neustart
 
-Der Regelkreis verwirft seinen eigenen Plan alle fünfzehn Minuten und stellt mit dem neuesten Wert die ganze Frage neu. Dieser Neustart ist das Design. Die Pumpe muss nur über die nächsten fünfzehn Minuten richtig liegen, und sie bleibt offen dafür, später falsch zu liegen. Ein Tag ist die Summe dieser Korrekturen, die ganze Nacht.
+Alle fünfzehn Minuten verwirft der Regelkreis seinen eigenen Plan und stellt mit dem neuesten Wert die ganze Frage neu. Dieser Neustart ist Absicht: Die Pumpe muss nur über die nächsten fünfzehn Minuten richtig liegen; ob sie später falsch liegt, bleibt offen. Ein Tag ist die Summe dieser Korrekturen, über die ganze Nacht.
 
-Ab hier: [die Zahlen, auf die es ankommt](math-and-metrics.md) erklären die Kennzahlen, die den Tag beurteilen, und die [Übersicht](index.md) fügt das ganze System wieder zusammen. Die formale Verifikation der Sicherheitsregeln des Regelkreises liegt im [vollständigen Bericht](../verification_report.html).
+Weiter: [Die Zahlen, auf die es ankommt](math-and-metrics.md) erklären die Kennzahlen, an denen der Tag gemessen wird, und die [Übersicht](index.md) fügt das ganze System wieder zusammen. Die formale Verifikation der Sicherheitsregeln steht im [vollständigen Bericht](../verification_report.html).

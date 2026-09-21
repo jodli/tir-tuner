@@ -6,25 +6,25 @@ alt: ../index.html
 
 # Wie alles zusammenpasst
 
-Diese Seiten erklären, wie die künstliche Bauchspeicheldrüse von innen funktioniert. Sie sind für Menschen mit Typ-1-Diabetes geschrieben, nicht für Ingenieure. Jede Seite behandelt einen Teil des Systems und kann für sich gelesen werden.
+Diese Seiten erklären, wie die künstliche Bauchspeicheldrüse von innen funktioniert. Sie sind für Menschen mit Typ-1-Diabetes geschrieben, nicht für Ingenieure. Jede Seite behandelt einen Teil des Systems und lässt sich einzeln lesen.
 
 ## Die Kurzfassung
 
-Typ-1-Diabetes bedeutet, dass Ihr Körper kein Insulin mehr herstellt. Ohne Insulin bleibt der Zucker aus dem Essen im Blut, und ebenso der Zucker, den Ihre Leber von sich aus weiter produziert. Eine künstliche Bauchspeicheldrüse übernimmt diese Aufgabe. Ein Sensor unter der Haut misst, wie viel Zucker in Ihrer Gewebeflüssigkeit steckt. Ein kleiner Computer betrachtet diesen Wert, entscheidet, wie viel Insulin Ihr Körper in den nächsten Stunden braucht, und sagt einer Pumpe, wie schnell sie abgeben soll. Der Regelkreis wiederholt sich alle fünfzehn Minuten, den ganzen Tag, ohne dass Sie etwas tun.
+Bei Typ-1-Diabetes stellt der Körper kein Insulin mehr her. Ohne Insulin bleibt der Zucker aus der Nahrung im Blut, ebenso der Zucker, den die Leber selbst weiterbildet. Eine künstliche Bauchspeicheldrüse übernimmt diese Aufgabe. Ein Sensor unter der Haut misst, wie viel Zucker in der Gewebeflüssigkeit steckt. Ein kleiner Computer nimmt diesen Wert, entscheidet, wie viel Insulin der Körper in den nächsten Stunden braucht, und teilt der Pumpe mit, wie schnell sie abgeben soll. Das wiederholt sich alle fünfzehn Minuten, den ganzen Tag, ganz ohne Ihr Zutun.
 
-Genau diesen Regelkreis bildet dieses Repository nach. Wir haben einen virtuellen Körper, einen virtuellen Sensor, eine virtuelle Steuerung und eine virtuelle Pumpe gebaut, miteinander verbunden und dann nachgewiesen, dass die Sicherheitsregeln halten. Die folgenden Seiten gehen die einzelnen Teile durch.
+Genau diesen Regelkreis baut dieses Repository nach: einen virtuellen Körper, einen virtuellen Sensor, eine virtuelle Steuerung und eine virtuelle Pumpe. Die vier Teile verbinden wir miteinander und weisen dann nach, dass die Sicherheitsregeln halten. Die folgenden Seiten stellen die einzelnen Teile vor.
 
 ## Die Seiten
 
 | Seite | Der Teil des Systems | Das Crate dahinter |
 |---|---|---|
-| [Die Zahlen, auf die es ankommt](math-and-metrics.md) | Einheiten, die Kennzahlen und die Uhr, die die Simulation antreibt | `tir-tuner-common` |
+| [Die Zahlen, auf die es ankommt](math-and-metrics.md) | Einheiten, Kennzahlen und die Uhr, die die Simulation antreibt | `tir-tuner-common` |
 | [Der Sensor](sensor.md) | Was Ihr CGM-Wert misst und warum er schwankt | `tir-tuner-cgm` |
 | [Der Körper](body.md) | Wie Typ-1-Diabetes funktioniert und das Modell, das ihn beschreibt | `tir-tuner-body` |
 | [Das Gehirn](brain.md) | Wie die Pumpe entscheidet, wie viel Insulin sie abgibt | `tir-tuner-aps` |
 | [Der Regelkreis](loop.md) | Wie alles zusammengeschaltet ist, inklusive Ihrer eigenen Pumpdaten | `tir-tuner-cli` |
 
-Die Namen beginnen mit `tir-tuner`, weil das ursprüngliche Ziel dieses Projekts war, die Zeit im Zielbereich (TIR) von Glukosereglern in der Simulation zu justieren. Der Name blieb; das Projekt ist ihm entwachsen.
+Alle Namen beginnen mit `tir-tuner`, weil das Projekt ursprünglich angetreten war, die Zeit im Zielbereich (TIR) von Glukosereglern in der Simulation zu optimieren. Der Name blieb; das Projekt ist ihm entwachsen.
 
 ## Einmal durch den Regelkreis
 
@@ -44,7 +44,7 @@ sequenceDiagram
     participant P as Pumpe
     participant V as Körper
     S->>G: Wert alle 15 Minuten
-    G->>G: nächste 4 Stunden vorhersagen
+    G->>G: die nächsten 4 Stunden vorhersagen
     G->>P: die ersten 15 Minuten des besten Plans
     P->>V: Insulin, mit geprüfter Rate
     V-->>S: Gewebezucker verändert sich
@@ -53,14 +53,14 @@ sequenceDiagram
 
 ## Wo Sie anfangen
 
-- Wenn Sie mit allem neu sind, beginnen Sie mit [Der Körper](body.md). Er erklärt die Krankheit in derselben Sprache, die auch das Modell verwendet.
+- Wenn Ihnen das alles neu ist, beginnen Sie mit [Der Körper](body.md). Er erklärt die Krankheit in derselben Sprache, die auch das Modell verwendet.
 - Danach lesen Sie [Das Gehirn](brain.md). Es trifft die Entscheidungen und hat die klarsten Sicherheitsregeln.
-- [Der Sensor](sensor.md) erklärt, warum Ihr Sensorwert und Ihr Messgerät sich unterscheiden.
-- [Die Zahlen, auf die es ankommt](math-and-metrics.md) erklärt die Kennzahlen und warum Ihr Pumpbericht voll davon ist.
-- [Der Regelkreis](loop.md) zeigt das gesamte System im Lauf, einschließlich eines Tages aus Ihren eigenen Pumpdaten.
+- [Der Sensor](sensor.md) erklärt, warum der Wert des Sensors und der des Messgeräts auseinanderliegen können.
+- [Die Zahlen, auf die es ankommt](math-and-metrics.md) erklärt die Kennzahlen und warum Ihr Pumpbericht so viele davon enthält.
+- [Der Regelkreis](loop.md) zeigt das ganze System in Aktion, einschließlich eines Tages aus Ihren eigenen Pumpdaten.
 
 ## Ein Wort zur Ehrlichkeit
 
-Nichts hier ist eine medizinische Empfehlung. Diese Seiten beschreiben ein Forschungsmodell der Funktionsweise, kein Produkt, mit dem Sie Ihre Therapie anpassen sollten. Ihre Pumpe, Ihr Sensor und Ihr Behandlungsteam sind die Quelle der Wahrheit. Die Aufgabe des Modells ist es, Ihnen zu helfen zu verstehen, was sie zusammen tun.
+Nichts hier ist eine medizinische Empfehlung. Diese Seiten beschreiben ein Forschungsmodell, wie das System funktioniert, und kein Produkt, mit dem Sie Ihre Therapie anpassen sollten. Ihre Pumpe, Ihr Sensor und Ihr Behandlungsteam sind die Quelle der Wahrheit: Das Modell soll Ihnen helfen zu verstehen, was sie zusammen tun.
 
-Der formale Sicherheitskatalog hinter der Steuerung liegt im [vollständigen Bericht](../verification_report.html). Er ist in mathematischer Sprache geschrieben; die Seiten in diesem Ordner sind es nicht.
+Der formale Sicherheitskatalog hinter der Steuerung steht im [vollständigen Bericht](../verification_report.html). Er ist in mathematischer Sprache verfasst; die Seiten in diesem Ordner nicht.

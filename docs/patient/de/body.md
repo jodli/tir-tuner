@@ -11,15 +11,15 @@ sources:
 
 # Der Körper
 
-Diese Seite erklärt Typ-1-Diabetes in derselben Sprache, die das Modell verwendet, und zeigt dann, wie das Modell einen Menschen beschreibt. Es ist die längste Seite, denn hier lebt die Krankheit.
+Diese Seite erklärt Typ-1-Diabetes in derselben Sprache, die das Modell verwendet, und zeigt dann, wie das Modell einen Menschen beschreibt. Es ist die längste Seite, denn hier steht die Krankheit im Mittelpunkt.
 
 ## Die Krankheit in Kürze
 
-Ihr Körper stellt Zucker her und verbraucht ihn, und beide Aufgaben brauchen Insulin: Insulin, damit die Zellen den Zucker nutzen können, und Insulin, um die eigene Produktion der Leber zu stoppen, sobald genug da ist. Typ-1-Diabetes zerstört die Zellen, die das Insulin herstellen. Der Zucker aus dem Essen steigt, der Zucker aus der Leber steigt, und nichts zieht sie zurück. Jede Behandlung ist der Versuch, das fehlende Signal zu ersetzen, und die Pumpe ist dieser Ersatz in diesem Projekt.
+Der Körper bildet Zucker und verbraucht ihn, und beides braucht Insulin: Insulin, damit die Zellen den Zucker nutzen können, und Insulin, damit die Leber aufhört, selbst Zucker zu bilden, sobald genug da ist. Bei Typ-1-Diabetes werden die Zellen zerstört, die Insulin herstellen. So steigt der Zucker aus dem Essen, der Zucker aus der Leber steigt ebenfalls, und nichts holt ihn zurück. Jede Behandlung versucht, das fehlende Signal zu ersetzen; die Pumpe ist in diesem Projekt dieser Ersatz.
 
 ## Die Landkarte, die das Modell von einem Menschen hat
 
-Das Modell teilt den Körper in elf Kompartimente, jedes ein Reservoir, das sich in eigenem Tempo füllt und entleert. Sie bilden die Landkarte, die alles andere in diesem Projekt liest:
+Das Modell teilt den Körper in elf Kompartimente, jedes ein Reservoir, das sich in eigenem Tempo füllt und leert. Zusammen bilden sie die Landkarte, an der sich alles andere in diesem Projekt orientiert:
 
 ```mermaid
 flowchart TD
@@ -39,29 +39,29 @@ flowchart TD
     G -. drosselt .-> K
 ```
 
-Ihre Kurznamen sind `s1`, `s2` (Insulin unter der Haut), `i` (Insulin im Blut), `x1`, `x2`, `x3` (was Insulin tut, sobald es im Blut ist), `q1`, `q2` (Zucker in Blut und Gewebe), `g1`, `g2` (Essen auf dem Weg durch den Magen-Darm-Trakt) und `c` (Zucker in der Flüssigkeit, die der Sensor liest).
+Die Kurznamen der Kompartimente: `s1`, `s2` (Insulin unter der Haut), `i` (Insulin im Blut), `x1`, `x2`, `x3` (was Insulin tut, sobald es im Blut ist), `q1`, `q2` (Zucker in Blut und Gewebe), `g1`, `g2` (Essen auf dem Weg durch den Magen-Darm-Trakt) und `c` (Zucker in der Flüssigkeit, die der Sensor liest).
 
 ## Insulin braucht Zeit
 
-Wenn eine Pumpe Insulin abgibt, landet es nicht im Blut. Es sitzt unter der Haut, wandert durch zwei Depot-Kompartimente und erreicht erst dann das Blut, mit einer Spitzenaufnahme etwa 55 Minuten nach der Abgabe. Diese Konzentration wirkt auf den Körper, und sie baut sich über diese Zeitspanne auf und ab. In diesem Modell kann keine Behandlung Insulin schneller wirken lassen.
+Wenn die Pumpe Insulin abgibt, landet es nicht sofort im Blut. Es sammelt sich unter der Haut, wandert durch zwei Depot-Kompartimente und kommt erst dann im Blut an; etwa 55 Minuten nach der Abgabe erreicht die Wirkung ihren Höhepunkt. Über dieselbe Zeitspanne baut sie sich auf und wieder ab. In diesem Modell kann keine Behandlung das Insulin schneller wirken lassen.
 
-Diese Verzögerung erklärt den Großteil des Diabetes-Managements. Ein Bolus zu Beginn einer Mahlzeit ist eine Wette auf eine Spitze, die fast eine Stunde später eintrifft. Die Hauptaufgabe der Pumpe ist es, mit dieser Verzögerung umzugehen.
+Diese Verzögerung erklärt den Großteil des Diabetesmanagements. Ein Bolus zur Mahlzeit ist eine Wette auf eine Wirkungsspitze, die erst fast eine Stunde später eintrifft. Die Hauptaufgabe der Pumpe ist es, mit dieser Verzögerung umzugehen.
 
 ## Insulin hat drei Aufgaben
 
-Sobald es im Blut ist, wirkt Insulin über drei getrennte Effekte, und das Modell hält sie als `x1`, `x2`, `x3` fest:
+Sobald das Insulin im Blut ist, wirkt es über drei getrennte Effekte; das Modell führt sie als `x1`, `x2`, `x3`:
 
-1. **Es zieht Zucker in die Zellen.** Der Zucker im Blut wandert schneller ins Gewebe, wenn Insulin vorhanden ist. Das ist der Transporteffekt, `x1`.
-2. **Es ermöglicht die Aufnahme.** Muskeln und Fett nehmen Zucker auf und verbrauchen oder speichern ihn, und das funktioniert nur mit Insulin in vollem Tempo. Das ist der Aufnahmeeffekt, `x2`.
-3. **Es sagt der Leber, kürzerzutreten.** Die Leber stellt die ganze Zeit Zucker her. Insulin unterdrückt diese Produktion. Das ist der Leberschluss, `x3`.
+1. **Es zieht Zucker in die Zellen.** Der Zucker im Blut wandert schneller ins Gewebe, wenn Insulin da ist. Das ist der Transporteffekt, `x1`.
+2. **Es ermöglicht die Aufnahme.** Muskeln und Fett nehmen Zucker auf und verbrauchen oder speichern ihn; nur mit Insulin läuft das vollständig. Das ist der Aufnahmeeffekt, `x2`.
+3. **Es drosselt die Leber.** Die Leber bildet laufend Zucker. Insulin bremst diese Produktion. Das ist die Leberhemmung, `x3`.
 
 Jeder Effekt wird von der Insulinkonzentration angetrieben, aber jeder bewegt sich in eigenem Tempo. Deshalb behandelt das Modell sie als drei getrennte Reservoire.
 
 ## Die Leber hört nie auf
 
-Die Leber produziert von sich aus Zucker, und diese Produktion ist nicht optional. Die Standardruheproduktion des Modells liegt bei etwa 0.0169 mmol pro kg pro Minute, und ohne Insulin kann sie auf das Dreifache steigen. Nichts anderes im Körper kann sie ersetzen. Deshalb steigt der Blutzucker bei Typ-1-Diabetes über Nacht: ohne Basalinsulin produziert die Leber weiter, und nichts hält sie zurück.
+Die Leber bildet von sich aus Zucker; das lässt sich nicht abschalten. Die Grundproduktion liegt im Modell bei etwa 0,0169 mmol pro Kilogramm pro Minute; ohne Insulin kann sie auf das Dreifache steigen. Nichts anderes im Körper kann sie ersetzen. Deshalb steigt der Blutzucker bei Typ-1-Diabetes über Nacht: Ohne Basalinsulin arbeitet die Leber weiter, und nichts hält sie zurück.
 
-Basalinsulin zielt genau auf diesen Anstieg. Es wird kontinuierlich abgegeben, das Hintergrundsignal, das die Leber in Schach hält, anders als die größeren Dosen zu den Mahlzeiten. Das Modell nennt den konstanten Bedarf den Basalinsulinbedarf (BIR), und er gehört zu den wenigen Zahlen, die einen Menschen definieren.
+Basalinsulin wirkt genau gegen diesen Anstieg. Es läuft kontinuierlich, ein Hintergrundsignal, das die Leber in Schach hält, anders als die größeren Dosen zu den Mahlzeiten. Das Modell nennt diesen konstanten Bedarf Basalinsulinbedarf (BIR); er gehört zu den wenigen Zahlen, die einen Menschen beschreiben.
 
 ```mermaid
 flowchart LR
@@ -72,38 +72,38 @@ flowchart LR
 
 ## Zuckerabbau ohne Insulin
 
-Nicht jede Glukoseaufnahme braucht Insulin. Das Gehirn und die roten Blutkörperchen nehmen Zucker unabhängig davon auf. Das Modell nennt das den insulinunabhängigen Abbau (F01), eine konstante Hintergrundsenke im Blut. Seine Stärke hängt vom Niveau ab, über eine Form namens Michaelis-Menten-Kurve: höhere Glukose bedeutet eine stärkere Senke, niedrigere eine schwächere. Das Ergebnis ist, dass das Modell den Blutzucker von selbst nie auf Null absenkt: fällt das Niveau, verblasst die Senke. Niedriger Blutzucker bleibt möglich, aber diese Senke ist nicht die Ursache.
+Nicht jede Glukoseaufnahme braucht Insulin. Gehirn und rote Blutkörperchen nehmen Zucker ohne Insulin auf. Das Modell nennt das den insulinunabhängigen Abbau (F01): eine Senke, die im Blut ständig arbeitet. Wie stark sie ist, regelt eine Michaelis-Menten-Kurve: Je höher die Glukose, desto stärker die Senke, je niedriger, desto schwächer. Dadurch fällt der Blutzucker im Modell von selbst nie auf Null: Sinkt das Niveau, verblasst die Senke. Unterzucker bleibt möglich, nur ist diese Senke nicht die Ursache.
 
 ## Die Nieren als Sicherheitsventil
 
-Die Nieren filtern das Blut und halten den Zucker bis zu einer Schwelle zurück. Oberhalb von etwa 9 mmol/L beginnt der Überschuss in den Urin überzulaufen. Das Modell setzt das als renale Ausscheidung um: unterhalb der Schwelle null, darüber eine Senke proportional zum Überschuss.
+Die Nieren filtern das Blut und behalten den Zucker bis zu einer Schwelle zurück. Ab etwa 9 mmol/L läuft der Überschuss in den Urin über. Das Modell bildet das als renale Ausscheidung ab: unterhalb der Schwelle Null, darüber eine Senke proportional zum Überschuss.
 
-Deshalb hört sehr hoher Zucker tendenziell von selbst auf zu steigen: über der Schwelle geht der Überschuss über den Urin verloren. Es ist ein verschwenderischer Weg, das Niveau zu senken, und das Modell behält ihn.
+Deshalb steigt sehr hoher Zucker von selbst nicht unbegrenzt weiter: Oberhalb der Schwelle geht der Überschuss über den Urin verloren. Das ist ein verschwenderischer Weg, das Niveau zu senken, aber das Modell bildet genau diesen Mechanismus ab.
 
 ## Warum das Modell einen Ruhepunkt hat
 
-Geben Sie ein konstantes Basalinsulin und kein Essen, und die Leber produziert eine feste Menge, während das Gewebe eine feste Menge verbraucht. Wo sich das ausgleicht, ist die Ruheglukose, das Niveau, auf dem ein Mensch ohne Mahlzeiten und ohne Aktivität sitzt.
+Bei konstantem Basalinsulin und ohne Mahlzeiten erzeugt die Leber eine feste Menge, während das Gewebe eine feste Menge verbraucht. Der Punkt, an dem sich beides ausgleicht, ist die Ruheglukose: das Niveau, auf dem ein Mensch ohne Essen und ohne Aktivität verharrt.
 
-Der Simulator kalibriert jeden virtuellen Menschen so, dass sich die Ruheglukose auf dem Therapieziel von 5.8 mmol/L einpendelt. Er passt die Basalrate an, bis der Ruhepunkt passt, so wie ein Arzt die Basalrate einer echten Pumpe einstellt. In diesem Projekt ist "Ihre Basalrate bestimmt Ihr Ruheniveau" wörtlich zu nehmen: die Rate wird so berechnet, dass der Ruhepunkt auf dem Ziel landet.
+Der Simulator kalibriert jeden virtuellen Menschen so, dass sich die Ruheglukose beim Therapieziel von 5,8 mmol/L einpendelt: Er justiert die Basalrate, bis der Ruhepunkt stimmt, so wie ein Arzt die Basalrate einer echten Pumpe einstellt. In diesem Projekt gilt "Ihre Basalrate bestimmt Ihr Ruheniveau" also wörtlich: Die Rate wird so berechnet, dass der Ruhepunkt genau auf dem Ziel liegt.
 
 ## Keine zwei Menschen sind gleich
 
-Das Modell beschreibt keinen generischen Menschen. Es beschreibt einen virtuellen Probanden, einen vollständigen Parametersatz aus veröffentlichten Populationsverteilungen, geseedet, sodass dieselbe Person exakt reproduziert werden kann. Die Variationen sind real, und jede verschiebt den Verlauf eines Tages:
+Das Modell beschreibt keinen durchschnittlichen Menschen, sondern einen virtuellen Probanden: einen vollständigen Parametersatz aus veröffentlichten Populationsverteilungen, mit festem Seed, sodass sich dieselbe Person exakt reproduzieren lässt. Die Streuung ist echt, und jeder Parameter verschiebt den Verlauf eines Tages:
 
 | Parameter | Populationsmittel (mit Streuung) | Was er ändert |
 |---|---|---|
-| Körpergewicht | 74.9 kg (sd 14.4) | Verteilungsvolumen, Dosisskalierung |
-| Täglicher Insulinbedarf | 0.35 U/kg (sd 0.14) | Basalbedarf, Gesamtskalierung |
-| Kohlenhydratfaktor (ICR) | 1.7 U pro 10 g (sd 1.0) | wie viel Bolus eine Mahlzeit braucht |
+| Körpergewicht | 74,9 kg (SD 14,4) | Verteilungsvolumen, Dosisskalierung |
+| Täglicher Insulinbedarf | 0,35 U/kg (SD 0,14) | Basalbedarf, Gesamtskalierung |
+| Kohlenhydratfaktor (ICR) | 1,7 U pro 10 g (SD 1,0) | wie viel Bolus eine Mahlzeit erfordert |
 | Insulinabsorptionsgeschwindigkeit | variiert pro Proband | wie schnell eine Dosis wirkt |
-| Insulinsensitivitäten | unterscheiden sich pro Proband | wie stark Insulin wirkt |
+| Insulinsensitivitäten | unterschiedlich pro Proband | wie stark Insulin wirkt |
 
-Ein schnelleres Aufnehmen, ein schwererer Körper, ein höherer Insulinbedarf: jede Veränderung formt den Tag neu. Der geschlossene Regelkreis ist gegen genau diese Streuung abgestimmt, denn eine echte Population sieht genau so aus. Wenn die anderen Seiten "der Proband" sagen, meinen sie einen bestimmten virtuellen Menschen.
+Wer Insulin schneller aufnimmt, schwerer ist oder mehr Insulin braucht, hat einen anderen Tag. Der geschlossene Regelkreis ist auf genau diese Streuung ausgelegt, denn eine echte Population sieht genauso aus. Wenn die anderen Seiten von "dem Probanden" schreiben, ist damit ein bestimmter virtueller Mensch gemeint.
 
 ## Das fehlende Signal
 
-Die Krankheit ist ein fehlendes Signal. Die Leber produziert weiter, das Essen kommt herein, und ohne das Signal kann der Zucker nur nach oben. Jedes Teil dieses Projekts, Sensor, Gehirn, Pumpe, existiert, um dieses Signal mit so wenig Verzögerung und so wenigen Fehlern wie möglich zu liefern. Das ist die Aufgabe, und die übrigen Seiten zeigen, wie sie gelöst wird:
+Die Krankheit ist ein fehlendes Signal: Die Leber arbeitet weiter, das Essen kommt herein, und ohne das Signal kann der Zucker nur steigen. Jeder Baustein dieses Projekts, Sensor, Gehirn, Pumpe, dient dem einen Ziel, dieses Signal so verzögerungsarm und so fehlerfrei wie möglich zu liefern. Die folgenden Seiten zeigen, wie das gelingt:
 
-- [Der Sensor](sensor.md) misst das Zuckerniveau, bei dem der Körper am Ende landet.
-- [Das Gehirn](brain.md) entscheidet, wie viel des fehlenden Signals geliefert wird.
-- [Der Regelkreis](loop.md) verbindet beides mit einer Pumpe und lässt den ganzen Tag laufen.
+- [Der Sensor](sensor.md) misst, auf welchem Zuckerniveau der Körper am Ende landet.
+- [Das Gehirn](brain.md) entscheidet, wie viel von dem fehlenden Signal geliefert wird.
+- [Der Regelkreis](loop.md) verbindet Sensor und Gehirn mit einer Pumpe und lässt alles einen Tag lang laufen.

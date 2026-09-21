@@ -14,24 +14,24 @@ Diese Seite erklärt, was Ihr CGM-Wert wirklich ist und warum er nie ganz dem en
 
 ## Woher der Wert kommt
 
-Ihr Sensor misst kein Blut. Er sitzt unter der Haut, im Gewebe, und liest den Zucker in der Flüssigkeit zwischen den Zellen: der interstitiellen Flüssigkeit (Gewebeflüssigkeit). Zucker wandert aus dem Blut in diese Flüssigkeit, und die beiden sind nah beieinander, aber nie identisch. Wenn sich der Blutzucker ändert, folgt die Gewebeflüssigkeit mit Verzögerung; deshalb hinkt der Sensorwert dem Blut ein paar Minuten hinterher.
+Ihr Sensor misst kein Blut. Er liegt unter der Haut im Gewebe und liest den Zucker aus der Flüssigkeit zwischen den Zellen, der Gewebeflüssigkeit (interstitielle Flüssigkeit). Zucker wandert vom Blut in diese Flüssigkeit; beide liegen nahe beieinander, sind aber nie identisch. Ändert sich der Blutzucker, folgt die Gewebeflüssigkeit mit Verzögerung; deshalb hinkt der Sensorwert dem Blut ein paar Minuten hinterher.
 
-Das Modell bildet genau das ab. Das Körpermodell hat ein Glukose-Kompartiment für das Blut und ein separates kleines für die Gewebeflüssigkeit. Der Sensor liest das Gewebe, denn genau das passiert im echten Leben.
+Das Modell bildet genau das ab: Das Körpermodell hat ein Glukose-Kompartiment für das Blut und ein separates, kleineres für die Gewebeflüssigkeit. Der Sensor liest das Gewebe, denn genauso ist es im echten Leben.
 
 ## Der Wert ist ungefähr
 
-Das Sensorergebnis ist der wahre Gewebezucker plus einer Abweichung. Das Fehlermodell ist bewusst realistisch und hat zwei Eigenschaften:
+Der Sensorwert setzt sich aus dem echten Gewebezucker und einer Abweichung zusammen. Das Fehlermodell ist bewusst realistisch und hat zwei Eigenschaften:
 
-- **Es ist Rauschen**: jeder Wert trägt einen Zufallsfehler mit Standardabweichung 0.5 mmol/L als Vorgabe.
-- **Es ist klebrig**: weicht der Sensor jetzt ab, tendiert er dazu, mehrere Minuten lang in dieselbe Richtung abzuweichen. Der nächste Fehler behält 85% des aktuellen plus einen frischen Zufallsimpuls.
+- **Rauschen.** Jeder Wert trägt einen Zufallsfehler mit einer Standardabweichung von 0,5 mmol/L (Standardwert).
+- **Klebrigkeit.** Weicht der Sensor jetzt ab, weicht er gleich im Anschluss weiter in dieselbe Richtung ab: Der nächste Fehler setzt sich zu 85 % aus dem aktuellen zusammen, dazu kommt ein frischer Zufallsimpuls.
 
-Der Fachbegriff für diese Klebrigkeit ist autoregressiv, geschrieben AR(1). Es ist genau das, was Sie spüren, wenn ein Sensor einen Nachmittag lang zu hoch oder zu niedrig liegt und nur langsam zurückwandert.
+Fachlich heißt diese Klebrigkeit autoregressiv, kurz AR(1). Genau das spüren Sie, wenn der Sensor einen Nachmittag lang zu hoch oder zu niedrig liegt und nur langsam zurückfindet.
 
-Der Sensor kalibriert sich außerdem selbst: eine langsame Selbstkorrektur hält den Wert nahe am wahren Niveau.
+Außerdem kalibriert sich der Sensor selbst: Eine langsame Selbstkorrektur hält den Wert in der Nähe des echten Niveaus.
 
 ## Die Nullgrenze
 
-Ein Wert wird auf Null geklemmt, bevor irgendetwas anderes ihn sieht. Der Steuerung darf nie gesagt werden, dass der Zucker unter Null liegt, denn das Modell und die Sicherheitslogik können das nicht interpretieren. Selbst wenn der Roherror einen Wert ins Negative drückt, erreicht die Steuerung ein Wert von Null oder darüber. Diese Klemme gehört zum gemessenen Verhalten und zu den verifizierten Sicherheitsregeln.
+Ein Wert wird auf Null geklemmt, bevor ihn irgendetwas anderes sieht. Der Steuerung wird nie ein Zuckerwert unter Null gemeldet, denn weder das Modell noch die Sicherheitslogik können damit umgehen. Drückt der Roherror einen Wert ins Negative, bekommt die Steuerung trotzdem Null oder mehr. Diese Klemme gehört zum beschriebenen Verhalten und zu den verifizierten Sicherheitsregeln.
 
 ## Wo der Sensor im Regelkreis sitzt
 
@@ -43,8 +43,8 @@ flowchart LR
     P -->|Insulin| V
 ```
 
-Der Sensorwert ist die einzige Sicht der Steuerung auf den Körper. Alles, was das Gehirn entscheidet, beginnt mit dieser Zahl, deshalb zählt ihre Unvollkommenheit.
+Der Sensorwert ist die einzige Sicht, die die Steuerung auf den Körper hat. Jede Entscheidung des Gehirns beginnt mit dieser Zahl; deshalb fällt ihre Unvollkommenheit so stark ins Gewicht.
 
 ## Gebaut für einen unvollkommenen Sensor
 
-Der Regelkreis ist dafür gebaut, mit einem verrauschten, trägen, klebrigen Sensor zu leben. Die Steuerung mischt den Wert mit ihrer eigenen Vorhersage, sodass eine einzelne schlechte Probe die Insulinrate nicht verreißen kann, und eine harte Grenze schützt vor den Folgen eines niedrigen Werts. Die Unvollkommenheit des Sensors ist der Grund, warum das Gehirn ein Modell braucht. Die nächsten beiden Seiten drehen sich darum: [Der Körper](body.md) ist das, was der Sensor misst, und [Das Gehirn](brain.md) denkt darüber nach.
+Der Regelkreis ist dafür gebaut, mit einem verrauschten, langsamen, klebrigen Sensor zu leben. Die Steuerung mischt den Wert mit ihrer eigenen Vorhersage, sodass eine einzelne schlechte Messung die Insulinrate nicht aus der Bahn werfen kann; eine harte Grenze schützt vor den Folgen eines zu niedrigen Werts. Genau deshalb braucht das Gehirn ein Modell. Die nächsten beiden Seiten zeigen, warum: [Der Körper](body.md) erklärt, was der Sensor misst; [Das Gehirn](brain.md), was aus der Zahl wird.
