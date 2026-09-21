@@ -1,6 +1,7 @@
 ---
 title: Das Gehirn
 lang: de
+alt: ../brain.html
 sources:
   - tir-tuner-aps/src/lib.rs
   - tir-tuner-aps/src/controller.rs

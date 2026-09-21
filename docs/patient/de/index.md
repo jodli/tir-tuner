@@ -1,6 +1,7 @@
 ---
 title: Wie alles zusammenpasst
 lang: de
+alt: ../index.html
 ---
 
 # Wie alles zusammenpasst

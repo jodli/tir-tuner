@@ -1,6 +1,7 @@
 ---
 title: The numbers that matter
 lang: en
+alt: de/math-and-metrics.html
 sources:
   - tir-tuner-common/src/units.rs
   - tir-tuner-common/src/metrics.rs

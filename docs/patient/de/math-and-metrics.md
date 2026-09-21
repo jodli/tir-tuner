@@ -1,6 +1,7 @@
 ---
 title: Die Zahlen, auf die es ankommt
 lang: de
+alt: ../math-and-metrics.html
 sources:
   - tir-tuner-common/src/units.rs
   - tir-tuner-common/src/metrics.rs

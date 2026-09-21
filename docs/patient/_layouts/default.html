@@ -1,6 +1,4 @@
 {% assign current_lang = page.lang | default: "en" %}
-{% assign first_seg = page.path | split: "/" | first %}
-{% assign in_de = first_seg == "de" %}
 <!doctype html>
 <html lang="{{ current_lang }}">
 <head>
@@ -75,14 +73,20 @@
 </head>
 <body>
   <main>
-    <nav class="lang-switch" aria-label="{% if in_de %}Sprache{% else %}Language{% endif %}">
-      {% if in_de %}<a href="../{{ page.slug }}.html">English</a>{% else %}<span aria-current="page">English</span>{% endif %}
-      <span aria-hidden="true">|</span>
-      {% if in_de %}<span aria-current="page">Deutsch</span>{% else %}<a href="de/{{ page.slug }}.html">Deutsch</a>{% endif %}
+    <nav class="lang-switch" aria-label="{% if current_lang == 'de' %}Sprache{% else %}Language{% endif %}">
+      {% if current_lang == "de" %}
+        <a href="{{ page.alt }}">English</a>
+        <span aria-hidden="true">|</span>
+        <span aria-current="page">Deutsch</span>
+      {% else %}
+        <span aria-current="page">English</span>
+        <span aria-hidden="true">|</span>
+        <a href="{{ page.alt }}">Deutsch</a>
+      {% endif %}
     </nav>
     {{ content }}
-    {% if in_de %}
-      <p class="site-footer"><a href="../">Zurück zur Übersicht</a></p>
+    {% if current_lang == "de" %}
+      <p class="site-footer"><a href="index.html">Zurück zur Übersicht</a></p>
     {% else %}
       <p class="site-footer"><a href="./">Back to the overview</a></p>
     {% endif %}

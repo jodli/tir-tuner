@@ -1,6 +1,7 @@
 ---
 title: The body
 lang: en
+alt: de/body.html
 sources:
   - tir-tuner-body/src/derivative.rs
   - tir-tuner-body/src/state.rs

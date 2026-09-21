@@ -1,6 +1,7 @@
 ---
 title: Der Körper
 lang: de
+alt: ../body.html
 sources:
   - tir-tuner-body/src/derivative.rs
   - tir-tuner-body/src/state.rs

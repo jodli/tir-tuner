@@ -1,6 +1,7 @@
 ---
 title: The loop
 lang: en
+alt: de/loop.html
 sources:
   - tir-tuner-cli/src/engine.rs
   - tir-tuner-cli/src/glooko.rs

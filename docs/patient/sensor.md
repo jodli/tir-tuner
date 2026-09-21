@@ -1,6 +1,7 @@
 ---
 title: The sensor
 lang: en
+alt: de/sensor.html
 sources:
   - tir-tuner-cgm/src/device.rs
   - tir-tuner-cgm/src/lib.rs

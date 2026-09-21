@@ -1,6 +1,7 @@
 ---
 title: The brain
 lang: en
+alt: de/brain.html
 sources:
   - tir-tuner-aps/src/lib.rs
   - tir-tuner-aps/src/controller.rs

@@ -1,6 +1,7 @@
 ---
 title: How the pieces fit
 lang: en
+alt: de/index.html
 ---
 
 # How the pieces fit
