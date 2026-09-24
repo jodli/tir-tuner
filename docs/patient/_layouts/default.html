@@ -93,16 +93,28 @@
   </main>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script>
-    const blocks = document.querySelectorAll("pre code.language-mermaid");
-    blocks.forEach((block) => {
+    const mermaidBlocks = document.querySelectorAll("pre code.language-mermaid");
+    mermaidBlocks.forEach((block) => {
       const pre = block.parentElement;
       const diagram = document.createElement("div");
       diagram.className = "mermaid";
-      diagram.textContent = block.textContent;
+      diagram.dataset.source = block.textContent;
       pre.replaceWith(diagram);
     });
-    mermaid.initialize({ startOnLoad: false, theme: "default" });
-    mermaid.run();
+
+    function renderDiagrams() {
+      const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const containers = document.querySelectorAll("div.mermaid[data-source]");
+      containers.forEach((div) => {
+        div.textContent = div.dataset.source;
+        div.removeAttribute("data-processed");
+      });
+      mermaid.initialize({ startOnLoad: false, theme: dark ? "dark" : "default" });
+      mermaid.run({ nodes: Array.from(containers) });
+    }
+
+    renderDiagrams();
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderDiagrams);
   </script>
 </body>
 </html>
