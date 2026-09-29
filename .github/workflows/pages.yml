@@ -20,8 +20,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
       - name: Stage the verification report for the site
         run: cp docs/verification_report.html docs/patient/verification_report.html
+      # The `#[formula_doc]` attributes lift the arithmetic out of the
+      # function bodies into KaTeX formulas, so the generated rustdoc is
+      # the only place the code's formulas appear rendered.
+      #
+      # rustdoc writes relative URLs and no front matter, so Jekyll
+      # copies the tree through untouched and it works under the
+      # /rustdoc/ prefix. `.lock` is the only dot-prefixed entry and is
+      # skipped.
+      #
+      # `rustdoc/index.html` is a tracked landing page, not generated
+      # output: `cargo doc` emits no root index, so the copy leaves it
+      # alone and it survives.
+      - name: Build the API documentation
+        run: |
+          cargo doc --workspace --no-deps
+          mkdir -p docs/patient/rustdoc
+          cp -R target/doc/. docs/patient/rustdoc/
+          rm -f docs/patient/rustdoc/.lock
       - name: Build with Jekyll
         uses: actions/jekyll-build-pages@v1
         with:

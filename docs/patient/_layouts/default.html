@@ -90,6 +90,13 @@
     {% else %}
       <p class="site-footer"><a href="./">Back to the overview</a></p>
     {% endif %}
+    <p class="site-footer">
+      {% if current_lang == "de" %}
+        <a href="../rustdoc/index.html">Der Quellcode, mit den Formeln dahinter</a>
+      {% else %}
+        <a href="rustdoc/index.html">The source code, with the formulas behind it</a>
+      {% endif %}
+    </p>
   </main>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script>

@@ -1,6 +1,10 @@
 /target
 /fuzz/target
 /fuzz/artifacts
+# The rustdoc tree is built by the docs workflow. The landing page is
+# hand-written and tracked; everything under it is generated.
+/docs/patient/rustdoc/*
+!/docs/patient/rustdoc/index.html
 .DS_Store
 .slopless
 /tools/__pycache__
