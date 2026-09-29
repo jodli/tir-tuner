@@ -2,7 +2,7 @@ name: deploy docs
 
 on:
   push:
-    branches: [rust]
+    branches: [formula-docs]
   workflow_dispatch:
 
 permissions:
