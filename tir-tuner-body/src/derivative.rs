@@ -9,6 +9,7 @@
 use crate::state::BodyState;
 use crate::subject::VirtualSubject;
 use document_formulas::formula_doc;
+use std::f64::consts::LN_2;
 use tir_tuner_common::units::MMOL_PER_GRAM_CHO;
 
 /// Inputs to the body over one time step.
@@ -55,10 +56,11 @@ pub struct BodyDerivatives {
 /// insulin action suppresses production. See module docs and
 /// [`crate::subject`] for the divergence note from the published
 /// `EGP0[1+x3]`.
+#[formula_doc]
 pub fn egp(subject: &VirtualSubject, x3: f64) -> f64 {
     let x3_basal = subject.basale_x3();
-    let uncapped = subject.egp0_mmol_per_kg_min
-        * ((x3_basal - x3) / 0.5 * std::f64::consts::LN_2).exp();
+    let uncapped =
+        subject.egp0_mmol_per_kg_min * ((x3_basal - x3) / 0.5 * LN_2).exp();
     uncapped.min(3.0 * subject.egp0_mmol_per_kg_min)
 }
 
@@ -100,10 +102,10 @@ pub fn interstitial_rate(subject: &VirtualSubject, plasma: f64, interstitial: f6
 /// Full right-hand side of the ODE system.
 ///
 /// The insulin and gut chains are bound as named locals and come out as
-/// formulas. The non-accessible glucose balance `q2` is there too; the
-/// accessible balance `q1` is not, because its right-hand side calls the
-/// `egp`, `f01c` and `renal_excretion` submodels rather than spelling
-/// out their arithmetic.
+/// formulas. The glucose balances bind the submodel outputs (`egp`,
+/// `f01c`, `renal`, `ug`) to locals first, so each balance reads as one
+/// line; the submodel equations themselves live on the `egp`, `f01c`,
+/// `gut_appearance` and `renal_excretion` pages.
 #[formula_doc]
 pub fn derivatives(
     subject: &VirtualSubject,
@@ -128,15 +130,12 @@ pub fn derivatives(
     let g1 = gut_input_mmol_per_min - state.g1 / subject.t_max_g_min;
     let g2 = state.g1 / subject.t_max_g_min - state.g2 / subject.t_max_g_min;
 
-    let ug = gut_appearance(subject, state.g2);
-
     // Glucose masses: accessible Q1, non-accessible Q2.
-    let q1 = egp(subject, state.x3)
-        + ug
-        - f01c(subject, g)
-        - state.x1 * state.q1
-        + subject.k12_per_min * state.q2
-        - renal_excretion(subject, g);
+    let egp = egp(subject, state.x3);
+    let f01c = f01c(subject, g);
+    let renal = renal_excretion(subject, g);
+    let ug = gut_appearance(subject, state.g2);
+    let q1 = egp + ug - f01c - state.x1 * state.q1 + subject.k12_per_min * state.q2 - renal;
     let q2 = state.x1 * state.q1
         - state.x2 * state.q2
         - subject.k12_per_min * state.q2;

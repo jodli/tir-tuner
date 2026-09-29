@@ -1,5 +1,7 @@
 //! Numerical integration primitives.
 
+use document_formulas::formula_doc;
+
 /// Forward Euler update saturated at zero: `(prev + dt * rate).max(0.0)`.
 ///
 /// This is the enforcement primitive behind the physiological
@@ -10,8 +12,10 @@
 /// the negation only over a bounded finite range of `prev` / `rate`;
 /// the full-domain statement is an algebraic property of IEEE `max`,
 /// not a solver result.
+#[formula_doc]
 pub fn clamped_forward_euler(prev: f64, rate: f64, dt: f64) -> f64 {
-    (prev + dt * rate).max(0.0)
+    let next = prev + dt * rate;
+    next.max(0.0)
 }
 
 #[cfg(test)]

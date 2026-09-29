@@ -149,63 +149,91 @@ pub fn compute_nmpc_dose(ig_reading: f64, max_delivery_rate: f64) -> f64 {
 /// The moving target trajectory `w(t+j)` of Hovorka et al 2004,
 /// section 3.3: the desired glucose profile the NMPC cost tracks.
 ///
-/// Starting from the measured glucose `y_start`, the trajectory falls
-/// linearly at [`TRAJECTORY_MAX_DECLINE_MMOL_PER_H`] while more than
-/// [`TRAJECTORY_MAX_OFFSET_MMOL_L`] above the target, falls at
-/// [`TRAJECTORY_MODERATE_DECLINE_MMOL_PER_H`] between that and the
-/// target, and settles on the target once reached (the decline is
-/// clamped at the target so hypers cannot undershoot). Below the target
-/// it rises exponentially with halftime
-/// [`TRAJECTORY_RISE_HALFTIME_MIN`], converging on the target from
-/// below. The trajectory is projected every `step_min` over `n` samples;
-/// with `y_start` exactly on target it stays flat.
+/// One projection step of the moving target trajectory, section 3.3:
+/// the value moves one `step_min` toward the target, declining linearly
+/// while above it and rising exponentially toward it from below, each
+/// branch clamped so the path cannot overshoot the target.
 ///
-/// The three rate coefficients below are what the extractor lifts out of
-/// this body. The projection itself, which steps the value toward the
-/// target by those coefficients, lives in the `n`-iteration loop and is
-/// not extracted.
+/// * above `target + TRAJECTORY_MAX_OFFSET_MMOL_L`, decline by
+///   `TRAJECTORY_MAX_DECLINE_MMOL_PER_H` per hour, floored at `target`
+/// * between `target` and that offset, decline by
+///   `TRAJECTORY_MODERATE_DECLINE_MMOL_PER_H` per hour, floored at `target`
+/// * below `target`, rise with halftime `TRAJECTORY_RISE_HALFTIME_MIN`
+///
+/// Split out of [`moving_target_trajectory`] so the crate can render the
+/// three branches: the extractor does not descend into the `if` chain.
 #[formula_doc]
-pub fn moving_target_trajectory(y_start: f64, target: f64, n: usize, step_min: f64) -> Vec<f64> {
-    let mut w = Vec::with_capacity(n);
+#[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
+pub fn moving_target_step(prev: f64, target: f64, step_min: f64) -> f64 {
     let decline_steep = TRAJECTORY_MAX_DECLINE_MMOL_PER_H * step_min / 60.0;
     let decline_moderate = TRAJECTORY_MODERATE_DECLINE_MMOL_PER_H * step_min / 60.0;
     let rise_factor = 0.5f64.powf(step_min / TRAJECTORY_RISE_HALFTIME_MIN);
+    let next = if prev > target + TRAJECTORY_MAX_OFFSET_MMOL_L {
+        (prev - decline_steep).max(target)
+    } else if prev > target {
+        (prev - decline_moderate).max(target)
+    } else if prev < target {
+        target + (prev - target) * rise_factor
+    } else {
+        prev
+    };
+    next
+}
+
+/// The moving target trajectory `w(t+j)` over `n` samples at `step_min`
+/// resolution, starting from the measured glucose `y_start` and
+/// projected with [`moving_target_step`]. With `y_start` exactly on
+/// target it stays flat.
+#[formula_doc]
+pub fn moving_target_trajectory(y_start: f64, target: f64, n: usize, step_min: f64) -> Vec<f64> {
+    let mut w = Vec::with_capacity(n);
     let mut prev = y_start;
     w.push(prev);
     for _ in 1..n {
-        if prev > target + TRAJECTORY_MAX_OFFSET_MMOL_L {
-            prev = (prev - decline_steep).max(target);
-        } else if prev > target {
-            prev = (prev - decline_moderate).max(target);
-        } else if prev < target {
-            prev = target + (prev - target) * rise_factor;
-        }
+        prev = moving_target_step(prev, target, step_min);
         w.push(prev);
     }
     w
 }
 
+/// Contribution of one horizon step to the section 5.1 cost
+/// (Hovorka et al. 2004, eq 9):
+///
+/// `(g_IG(t+j) - w(t+j))^2 + (1/k_agr) * ((u(t+j) - u(t+j-1)) / K_u)^2`
+///
+/// where `g_ig` is the interstitial glucose predicted after advancing the
+/// model one step under rate `u_j`. The effort term prices the change
+/// against the previous rate, normalized by the reference delivery step
+/// `K_u = NMPC_EFFORT_UNIT_U_PER_H` so both terms share a magnitude and
+/// `k_agr` truly balances adherence against rate variation. `k_agr` is the
+/// aggressiveness constant: larger values weight the effort term less and
+/// let the optimizer move the rate more freely.
+///
+/// Split out of [`nmpc_sequence_cost`] so the crate can render it: the
+/// extractor does not descend into the horizon loop, so a per-step helper
+/// is what makes this equation appear in the generated page. It takes the
+/// predicted glucose as a plain `f64` rather than the state, so that the
+/// deviation term is a renderable expression instead of a method call.
+#[formula_doc]
+#[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
+pub fn nmpc_step_cost(g_ig: f64, u_j: f64, w_j: f64, prev_rate: f64, k_agr: f64) -> f64 {
+    let effort_weight = 1.0 / k_agr;
+    let glucose_err = g_ig - w_j;
+    let rate_change = (u_j - prev_rate) / NMPC_EFFORT_UNIT_U_PER_H;
+    let glucose_term = glucose_err * glucose_err;
+    let effort_term = effort_weight * rate_change * rate_change;
+    glucose_term + effort_term
+}
+
 /// NMPC cost of a candidate rate sequence `u` against the target
-/// trajectory `w`, section 5.1 (Hovorka et al 2004, eq 9):
+/// trajectory `w`, section 5.1:
 ///
 /// `J(u) = sum_{j=1..N} (g_IG(t+j) - w(t+j))^2
 ///         + (1/k_agr) sum_{j=1..N} ((u(t+j) - u(t+j-1)) / K_u)^2`
 ///
 /// with `u[-1] = u_prev`, the rate infused over the previous control
-/// period, and `K_u = NMPC_EFFORT_UNIT_U_PER_H` the reference delivery
-/// step that makes the two sums commensurable. The glucose term is the
-/// summed squared interstitial glucose deviation predicted by rolling
-/// the model forward under the sequence; the effort term prices changes
-/// in the rate measured in reference steps, not deviation from an
-/// operating point. `k_agr` is the aggressiveness constant: larger
-/// values weight the effort term less and let the optimizer move the
-/// rate more freely.
-///
-/// The only binding the extractor lifts out of this body is the effort
-/// weight, the `1/k_agr` factor that scales the second sum. Both
-/// per-step terms and the accumulations are built inside the horizon
-/// loop, which the extractor does not descend into, so the prose above
-/// remains the authoritative statement of the cost.
+/// period. This is the sum of [`nmpc_step_cost`] over the horizon, rolling
+/// the model forward one `step_min` at a time under each rate.
 #[formula_doc]
 pub fn nmpc_sequence_cost(
     params: &HovorkaParams,
@@ -220,12 +248,10 @@ pub fn nmpc_sequence_cost(
     let mut sum = 0.0;
     let mut predict = state;
     let mut prev_rate = u_prev;
-    let effort_weight = 1.0 / k_agr;
     for j in 0..u.len() {
         predict = predict.step(params, u[j], 0.0, 0.0, step_min);
-        let glucose_err = predict.interstitial_glucose(params) - w[j];
-        let rate_change = (u[j] - prev_rate) / NMPC_EFFORT_UNIT_U_PER_H;
-        sum += glucose_err * glucose_err + effort_weight * rate_change * rate_change;
+        let g_ig = predict.interstitial_glucose(params);
+        sum += nmpc_step_cost(g_ig, u[j], w[j], prev_rate, k_agr);
         prev_rate = u[j];
     }
     sum
@@ -264,6 +290,18 @@ pub fn best_grid_candidate_index(costs: &[f64; NMPC_GRID_POINTS]) -> usize {
     best_index
 }
 
+/// The `k`-th candidate rate of the constant-rate grid: the linear sample
+/// `u_max * (k / NMPC_GRID_STEPS)` that the grid init of the section 5.1
+/// solver sweeps (`k = 0..=NMPC_GRID_STEPS`). Split out of
+/// [`nmpc_grid_dose`] so the crate can render the sample: the extractor
+/// does not descend into the loop.
+#[formula_doc]
+#[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
+pub fn nmpc_grid_rate(k: usize, u_max: f64) -> f64 {
+    let u = u_max * (k as f64 / NMPC_GRID_STEPS as f64);
+    u
+}
+
 /// Constant-rate NMPC init: the argument of the minimum of the section
 /// 5.1 cost over the candidate grid
 /// `{ k / NMPC_GRID_STEPS * u_max : k = 0..=N }`, where the glucose
@@ -272,6 +310,7 @@ pub fn best_grid_candidate_index(costs: &[f64; NMPC_GRID_POINTS]) -> usize {
 /// sequence solver; the Kani suite proves the candidate rates stay in
 /// `[0, u_max]` and the position selected by
 /// [`best_grid_candidate_index`] attains the minimal cost.
+#[formula_doc]
 pub fn nmpc_grid_dose(
     params: &HovorkaParams,
     state: HovorkaState,
@@ -284,7 +323,7 @@ pub fn nmpc_grid_dose(
     let mut rates = [0.0; NMPC_GRID_POINTS];
     let mut costs = [0.0; NMPC_GRID_POINTS];
     for k in 0..=NMPC_GRID_STEPS {
-        let u = u_max * (k as f64 / NMPC_GRID_STEPS as f64);
+        let u = nmpc_grid_rate(k, u_max);
         rates[k] = u;
         costs[k] = nmpc_constant_cost(params, state, u, w, u_prev, k_agr, step_min);
     }

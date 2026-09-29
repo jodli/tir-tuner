@@ -57,35 +57,53 @@ pub fn imm_mixture_sum(mu: &[f64; IMM_MODE_COUNT]) -> f64 {
 pub const IMM_MARKOV_TRANSITION: [[f64; IMM_MODE_COUNT]; IMM_MODE_COUNT] =
     [[0.95, 0.05, 0.05], [0.03, 0.90, 0.05], [0.02, 0.05, 0.90]];
 
-/// Prognostic weights `c_j = sum_i p[j][i] * mu[i]` (section 4.1.1).
+/// Prognostic weights `c_j = sum_i p[j][i] * mu[i]` (section 4.1.1),
+/// unrolled over the three modes so the crate can render each sum.
 ///
 /// With a column-stochastic transition matrix and a non-negative
 /// normalized `mu` the weights are between 0 and 1 and sum to one over
 /// `j`; the native lattice and `proptest` cases verify normalization and
 /// the mixing probabilities derived from them.
+#[formula_doc]
 pub fn imm_prognostic_weights(mu: &[f64; IMM_MODE_COUNT]) -> [f64; IMM_MODE_COUNT] {
     let mut c = [0.0; IMM_MODE_COUNT];
-    for j in 0..IMM_MODE_COUNT {
-        for i in 0..IMM_MODE_COUNT {
-            c[j] += IMM_MARKOV_TRANSITION[j][i] * mu[i];
-        }
+    for (j, c_j) in c.iter_mut().enumerate() {
+        *c_j = imm_prognostic_weight(mu, j);
     }
     c
+}
+
+/// Prognostic weight for one mode `c_j = sum_i p[j][i] * mu[i]`
+/// (section 4.1.1). Split out of [`imm_prognostic_weights`] so the crate
+/// can render the sum: the extractor does not descend into the nested
+/// loop.
+#[formula_doc]
+#[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
+pub fn imm_prognostic_weight(mu: &[f64; IMM_MODE_COUNT], j: usize) -> f64 {
+    let c_j = IMM_MARKOV_TRANSITION[j][0] * mu[0]
+        + IMM_MARKOV_TRANSITION[j][1] * mu[1]
+        + IMM_MARKOV_TRANSITION[j][2] * mu[2];
+    c_j
 }
 
 /// Mixing probability `mu_{i|j} = p[j][i] * mu[i] / c_j` (section 4.1.1).
 ///
 /// Only valid when `c[j] > 0.0`; otherwise any mixing is undefined and
 /// zero is returned. For a fixed `j` the mixing probabilities sum to one
-/// over `i`, which the native lattice test verifies.
+/// over `i`, which the native lattice test verifies. The equation shown
+/// is the `c[j] > 0` branch; the guard itself is control flow and is not
+/// rendered.
+#[formula_doc]
+#[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
 pub fn imm_mixing_probability(
     j: usize,
     i: usize,
     mu: &[f64; IMM_MODE_COUNT],
     c: &[f64; IMM_MODE_COUNT],
 ) -> f64 {
+    let numerator = IMM_MARKOV_TRANSITION[j][i] * mu[i] / c[j];
     if c[j] > 0.0 {
-        IMM_MARKOV_TRANSITION[j][i] * mu[i] / c[j]
+        numerator
     } else {
         0.0
     }
@@ -130,13 +148,41 @@ pub fn imm_mode_probability_update(
     c: &[f64; IMM_MODE_COUNT],
 ) -> [f64; IMM_MODE_COUNT] {
     let mut post = [0.0; IMM_MODE_COUNT];
-    let total = c[0] * likelihood[0] + c[1] * likelihood[1] + c[2] * likelihood[2];
+    let total = imm_likelihood_normalizer(likelihood, c);
     if total > 0.0 {
-        for j in 0..IMM_MODE_COUNT {
-            post[j] = c[j] * likelihood[j] / total;
+        for (j, post_j) in post.iter_mut().enumerate() {
+            *post_j = imm_mode_posterior(likelihood, c, total, j);
         }
     }
     post
+}
+
+/// Mode-normalizer product `c_m * Lambda_m` summed over the modes, the
+/// denominator of the section 4.1.4 update.
+#[formula_doc]
+#[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
+pub fn imm_likelihood_normalizer(
+    likelihood: &[f64; IMM_MODE_COUNT],
+    c: &[f64; IMM_MODE_COUNT],
+) -> f64 {
+    let total = c[0] * likelihood[0] + c[1] * likelihood[1] + c[2] * likelihood[2];
+    total
+}
+
+/// Posterior mode probability of `j` for a positive normalizer:
+/// `mu_j = (c_j * Lambda_j) / total` (section 4.1.4). Split out of
+/// [`imm_mode_probability_update`] so the crate can render it: the
+/// extractor does not descend into the per-mode loop.
+#[formula_doc]
+#[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
+pub fn imm_mode_posterior(
+    likelihood: &[f64; IMM_MODE_COUNT],
+    c: &[f64; IMM_MODE_COUNT],
+    total: f64,
+    j: usize,
+) -> f64 {
+    let mu_j = c[j] * likelihood[j] / total;
+    mu_j
 }
 
 #[cfg(test)]

@@ -6,6 +6,7 @@
 //! interstitial glucose `c` (mmol/L).
 
 use crate::subject::VirtualSubject;
+use document_formulas::formula_doc;
 
 /// Full glucoregulatory state of a virtual subject.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -60,9 +61,13 @@ impl BodyState {
         }
     }
 
-    /// Accessible plasma glucose concentration (mmol/L).
+    /// Accessible plasma glucose concentration `g_P(t)` (mmol/L),
+    /// the `q1 / V_G` of specification section 3.2D.
+    #[formula_doc]
+    #[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
     pub fn plasma_glucose(&self, subject: &VirtualSubject) -> f64 {
-        self.q1 / subject.vg_l_per_kg
+        let g_p = self.q1 / subject.vg_l_per_kg;
+        g_p
     }
 }
 
