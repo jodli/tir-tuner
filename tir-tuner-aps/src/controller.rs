@@ -29,6 +29,7 @@ use crate::{
     BOOST_DELIVERY_FACTOR, DOSE_GAIN_U_H_PER_MMOL_L, EASE_OFF_TARGET_MMOL_L,
     HARD_HYPO_CUTOFF_MMOL_L, TARGET_GLUCOSE_MMOL_L,
 };
+use document_formulas::formula_doc;
 
 /// Resolution of the NMPC candidate grid: candidate rates
 /// `k / NMPC_GRID_STEPS * u_max` for `k in 0..=NMPC_GRID_STEPS`.
@@ -158,6 +159,12 @@ pub fn compute_nmpc_dose(ig_reading: f64, max_delivery_rate: f64) -> f64 {
 /// [`TRAJECTORY_RISE_HALFTIME_MIN`], converging on the target from
 /// below. The trajectory is projected every `step_min` over `n` samples;
 /// with `y_start` exactly on target it stays flat.
+///
+/// The three rate coefficients below are what the extractor lifts out of
+/// this body. The projection itself, which steps the value toward the
+/// target by those coefficients, lives in the `n`-iteration loop and is
+/// not extracted.
+#[formula_doc]
 pub fn moving_target_trajectory(y_start: f64, target: f64, n: usize, step_min: f64) -> Vec<f64> {
     let mut w = Vec::with_capacity(n);
     let decline_steep = TRAJECTORY_MAX_DECLINE_MMOL_PER_H * step_min / 60.0;
@@ -193,6 +200,13 @@ pub fn moving_target_trajectory(y_start: f64, target: f64, n: usize, step_min: f
 /// operating point. `k_agr` is the aggressiveness constant: larger
 /// values weight the effort term less and let the optimizer move the
 /// rate more freely.
+///
+/// The only binding the extractor lifts out of this body is the effort
+/// weight, the `1/k_agr` factor that scales the second sum. Both
+/// per-step terms and the accumulations are built inside the horizon
+/// loop, which the extractor does not descend into, so the prose above
+/// remains the authoritative statement of the cost.
+#[formula_doc]
 pub fn nmpc_sequence_cost(
     params: &HovorkaParams,
     state: HovorkaState,
@@ -283,6 +297,7 @@ pub fn nmpc_grid_dose(
 /// [`NMPC_REFINEMENT_PASSES`] passes, and monotonically non-increasing
 /// in cost; it is the iterative stand-in for the paper's Marquardt
 /// minimization over the sequence.
+#[formula_doc]
 fn refine_sequence(
     params: &HovorkaParams,
     state: HovorkaState,
@@ -325,6 +340,7 @@ fn refine_sequence(
 /// refined sequence costs no more than the constant-rate init; the
 /// paper's Marquart minimization is replaced by this bounded local
 /// search over the quantized sequence.
+#[formula_doc]
 pub fn nmpc_sequence(
     params: &HovorkaParams,
     state: HovorkaState,

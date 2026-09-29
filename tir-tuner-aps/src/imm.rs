@@ -9,6 +9,8 @@
 //! dependent upper bound and sum-to-one identity are native-only, per
 //! section 6.3 of the specification).
 
+use document_formulas::formula_doc;
+
 /// Number of parallel filter modes.
 pub const IMM_MODE_COUNT: usize = 3;
 
@@ -24,6 +26,7 @@ pub const IMM_PROBABILITY_SUM_TOLERANCE: f64 = 1e-6;
 /// rounding; both are covered by the native lattice and `proptest` cases,
 /// while the Kani harness `verify_imm_probability_normalization` proves
 /// only the non-negativity sign property.
+#[formula_doc]
 pub fn normalize_imm_probabilities(mu: &mut [f64; IMM_MODE_COUNT]) {
     let sum = mu[0] + mu[1] + mu[2];
     if sum > 0.0 {
@@ -35,6 +38,7 @@ pub fn normalize_imm_probabilities(mu: &mut [f64; IMM_MODE_COUNT]) {
 }
 
 /// Mixture sum of the mode probabilities after normalization.
+#[formula_doc]
 pub fn imm_mixture_sum(mu: &[f64; IMM_MODE_COUNT]) -> f64 {
     mu[0] + mu[1] + mu[2]
 }
@@ -92,6 +96,7 @@ pub fn imm_mixing_probability(
 /// For non-negative weights summing to (about) one this stays inside the
 /// convex hull of the per-mode values, which the native lattice test
 /// verifies.
+#[formula_doc]
 pub fn imm_mixture_mean(values: &[f64; IMM_MODE_COUNT], mu: &[f64; IMM_MODE_COUNT]) -> f64 {
     mu[0] * values[0] + mu[1] * values[1] + mu[2] * values[2]
 }
@@ -99,6 +104,7 @@ pub fn imm_mixture_mean(values: &[f64; IMM_MODE_COUNT], mu: &[f64; IMM_MODE_COUN
 /// Mixture-weighted covariance for scalar per-mode state estimates
 /// (section 4.1.5): `sum_j mu[j] * (P_j + (x_j - x)(x_j - x))`. Every
 /// term is a variance, so the mixture is non-negative.
+#[formula_doc]
 pub fn imm_mixture_variance(
     variances: &[f64; IMM_MODE_COUNT],
     means: &[f64; IMM_MODE_COUNT],
@@ -118,6 +124,7 @@ pub fn imm_mixture_variance(
 /// lattice cases verify. When the
 /// normalizer is non-positive the posterior is left unchanged (all
 /// zero), mirroring the guard in [`normalize_imm_probabilities`].
+#[formula_doc]
 pub fn imm_mode_probability_update(
     likelihood: &[f64; IMM_MODE_COUNT],
     c: &[f64; IMM_MODE_COUNT],

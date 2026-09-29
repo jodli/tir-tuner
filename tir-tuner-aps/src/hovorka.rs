@@ -13,11 +13,13 @@
 //! and meal carbohydrate ingestion is accepted as a rate `meal_g_per_min`
 //! (g/min) feeding the gut depot `a1` (section 3.2C).
 
+use document_formulas::formula_doc;
 use tir_tuner_common::euler::clamped_forward_euler;
 use tir_tuner_common::units::{MMOL_PER_GRAM_CHO, MU_PER_UNIT};
 
 /// Basal insulin concentration `BIC` (mU/L) for given basal insulin
 /// requirement, clearance and body weight.
+#[formula_doc]
 pub fn basal_insulin_conc(bir_u_per_h: f64, mcr_i: f64, weight_kg: f64) -> f64 {
     (1000.0 * bir_u_per_h) / (60.0 * mcr_i * weight_kg)
 }
@@ -107,6 +109,7 @@ impl HovorkaParams {
     /// given plasma glucose, the glucose-dependent Michaelis-Menten form
     /// `F01 / 0.85 * g_P / (g_P + 1)` that the virtual patient body also
     /// uses.
+    #[formula_doc]
     pub fn f01c(&self, plasma_g: f64) -> f64 {
         (self.f_01 / 0.85) * plasma_g / (plasma_g + 1.0)
     }
@@ -180,11 +183,13 @@ pub struct HovorkaState {
 impl HovorkaState {
     /// Instantaneous subcutaneous insulin concentration `i(t)` (mU/L),
 /// consistent with the mU mass state and with `BIC`.
+    #[formula_doc]
     pub fn insulin_conc(&self, params: &HovorkaParams) -> f64 {
         self.i2 / (params.t_max_i * params.mcr_i * params.weight_kg)
     }
 
     /// Gut carbohydrate absorption rate `u_A(t)` (mmol/kg/min).
+    #[formula_doc]
     pub fn gut_absorption(&self, params: &HovorkaParams) -> f64 {
         self.a2 / (params.t_max_g * params.weight_kg * MMOL_PER_GRAM_CHO)
     }
@@ -261,11 +266,13 @@ impl HovorkaState {
     }
 
     /// Plasma glucose concentration `g_P(t)` (mmol/L).
+    #[formula_doc]
     pub fn plasma_glucose(&self, params: &HovorkaParams) -> f64 {
         self.q1 / params.v_g
     }
 
     /// Interstitial (sensor) glucose concentration `g_IG(t)` (mmol/L).
+    #[formula_doc]
     pub fn interstitial_glucose(&self, params: &HovorkaParams) -> f64 {
         self.q3 / params.v_g
     }

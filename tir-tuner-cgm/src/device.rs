@@ -1,6 +1,7 @@
 //! The sensor device: AR(1) measurement error on top of the true
 //! interstitial glucose, plus the calibration gain.
 
+use document_formulas::formula_doc;
 use tir_tuner_common::random::SeededRng;
 
 /// Sensor model coefficients.
@@ -75,12 +76,14 @@ impl CgmSensor {
 
 /// One AR(1) error step: `e' = alpha1 * e + w`. Pure so the Kani proofs
 /// can drive it with symbolic inputs.
+#[formula_doc]
 pub fn next_error(params: &SensorParams, current_error: f64, innovation: f64) -> f64 {
     params.alpha1 * current_error + innovation
 }
 
 /// The raw pre-clip reading for a given error term:
 /// `gain * interstitial + e`. Pure, ditto.
+#[formula_doc]
 pub fn gain_signal(params: &SensorParams, interstitial_mmol_per_l: f64, error: f64) -> f64 {
     params.calibration_gain * interstitial_mmol_per_l + error
 }

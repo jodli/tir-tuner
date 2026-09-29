@@ -36,6 +36,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 
 [[package]]
+name = "document_formulas"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18a43c96171a7a3cfd5309596dd839721a55bacb7687f47640c07c00139674c6"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "errno"
 version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -268,6 +279,7 @@ dependencies = [
 name = "tir-tuner-aps"
 version = "0.1.0"
 dependencies = [
+ "document_formulas",
  "proptest",
  "tir-tuner-common",
 ]
@@ -276,6 +288,7 @@ dependencies = [
 name = "tir-tuner-body"
 version = "0.1.0"
 dependencies = [
+ "document_formulas",
  "proptest",
  "tir-tuner-common",
 ]
@@ -284,6 +297,7 @@ dependencies = [
 name = "tir-tuner-cgm"
 version = "0.1.0"
 dependencies = [
+ "document_formulas",
  "proptest",
  "tir-tuner-common",
 ]
@@ -302,6 +316,7 @@ dependencies = [
 name = "tir-tuner-common"
 version = "0.1.0"
 dependencies = [
+ "document_formulas",
  "proptest",
 ]
 

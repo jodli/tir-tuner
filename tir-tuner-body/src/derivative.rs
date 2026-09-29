@@ -8,6 +8,7 @@
 
 use crate::state::BodyState;
 use crate::subject::VirtualSubject;
+use document_formulas::formula_doc;
 use tir_tuner_common::units::MMOL_PER_GRAM_CHO;
 
 /// Inputs to the body over one time step.
@@ -66,6 +67,7 @@ pub fn egp(subject: &VirtualSubject, x3: f64) -> f64 {
 /// Wilinska Table 1; `F01c = F01` exactly at `G = 5/0.85 = 5.88`? No:
 /// `G/(G+1) = 0.85` gives `G = 5.67` mmol/L, so basal uptake equals the
 /// published `F01` at a near-basal glucose of 5.67 mmol/L.
+#[formula_doc]
 pub fn f01c(subject: &VirtualSubject, plasma_glucose_mmol_per_l: f64) -> f64 {
     let f01s = subject.f01_mmol_per_kg_min / 0.85;
     f01s * plasma_glucose_mmol_per_l / (plasma_glucose_mmol_per_l + 1.0)
@@ -83,17 +85,26 @@ pub fn renal_excretion(subject: &VirtualSubject, plasma_glucose_mmol_per_l: f64)
 }
 
 /// Gut glucose appearance rate (mmol/kg/min), clamped at `ug_ceil`.
+#[formula_doc]
 pub fn gut_appearance(subject: &VirtualSubject, g2_mmol: f64) -> f64 {
     let rate = g2_mmol / (subject.t_max_g_min * subject.weight_kg);
     rate.min(subject.ug_ceil_mmol_per_kg_min)
 }
 
 /// Interstitial glucose equilibration rate (mmol/L per min).
+#[formula_doc]
 pub fn interstitial_rate(subject: &VirtualSubject, plasma: f64, interstitial: f64) -> f64 {
     subject.ka_int_per_min * (plasma - interstitial)
 }
 
 /// Full right-hand side of the ODE system.
+///
+/// The insulin and gut chains are bound as named locals and come out as
+/// formulas. The non-accessible glucose balance `q2` is there too; the
+/// accessible balance `q1` is not, because its right-hand side calls the
+/// `egp`, `f01c` and `renal_excretion` submodels rather than spelling
+/// out their arithmetic.
+#[formula_doc]
 pub fn derivatives(
     subject: &VirtualSubject,
     state: &BodyState,

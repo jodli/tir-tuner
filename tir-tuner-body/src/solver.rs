@@ -9,6 +9,7 @@
 use crate::derivative::{derivatives, BodyInputs};
 use crate::state::BodyState;
 use crate::subject::VirtualSubject;
+use document_formulas::formula_doc;
 use tir_tuner_common::euler::clamped_forward_euler;
 use tir_tuner_common::units::MU_PER_UNIT;
 
@@ -83,6 +84,7 @@ fn max_abs_derivative(d: &crate::derivative::BodyDerivatives) -> f64 {
 /// The non-accessible glucose mass is set to its basal balance point
 /// `q2 = x1*q1/(x2 + k12)` so the model does not start with a spur of
 /// inter-compartment flux.
+#[formula_doc]
 pub fn admit_state(subject: &VirtualSubject, glucose_mg_per_dl: f64) -> BodyState {
     use tir_tuner_common::units::mg_per_dl_to_mmol_per_l;
     let g = mg_per_dl_to_mmol_per_l(glucose_mg_per_dl);
