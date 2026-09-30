@@ -9,10 +9,10 @@
 //! which keeps the observation model genuinely separate from the
 //! physiology.
 //!
-//! The error follows `e_{t+1} = alpha1 * e_t + w_t` with `w_t` zero-mean
-//! Gaussian of standard deviation `noise_sd` (default
-//! [`SENSOR_NOISE_SD_MMOL_L`]); the reading is
-//! `calibration_gain * interstitial + e` clipped at zero, because a
+//! The error is a first-order autoregressive process with zero-mean
+//! Gaussian innovation of standard deviation `noise_sd` (default
+//! [`SENSOR_NOISE_SD_MMOL_L`]); the reading is the gain-scaled
+//! interstitial value plus the error, clipped at zero, because a
 //! closed-loop controller must never observe a negative glucose.
 //!
 //! As with the aps and body crates, the sensor is deterministic from a

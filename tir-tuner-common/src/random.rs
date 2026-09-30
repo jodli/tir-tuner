@@ -5,6 +5,8 @@
 //! sequence and the same pump delivery error. No external chassis, no
 //! system entropy.
 
+use document_formulas::formula_doc;
+
 /// SplitMix64-based deterministic generator.
 pub struct SeededRng(u64);
 
@@ -26,6 +28,7 @@ impl SeededRng {
     }
 
     /// Standard normal via Box-Muller.
+    #[formula_doc]
     pub fn next_normal(&mut self) -> f64 {
         let u1 = (self.next_f64() + f64::MIN_POSITIVE).max(f64::MIN_POSITIVE);
         let u2 = self.next_f64();

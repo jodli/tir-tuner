@@ -7,6 +7,7 @@
 //! integration and the reporting stay independent.
 
 use crate::units::mmol_per_l_to_mg_per_dl;
+use document_formulas::formula_doc;
 
 /// Target range lower bound, mmol/L (70 mg/dL).
 pub const TIME_IN_RANGE_MIN_MMOL_L: f64 = 3.9;
@@ -16,6 +17,7 @@ pub const TIME_IN_RANGE_MAX_MMOL_L: f64 = 10.0;
 /// Fraction of glucose samples inside the [3.9, 10.0] mmol/L band,
 /// expressed as a percentage. Samples that are NaN are ignored so a
 /// dropped CGM reading does not silently depress the result.
+#[formula_doc]
 pub fn time_in_range_pct(samples_mmol_per_l: &[f64]) -> f64 {
     if samples_mmol_per_l.is_empty() {
         return f64::NAN;
@@ -34,11 +36,22 @@ pub fn time_in_range_pct(samples_mmol_per_l: &[f64]) -> f64 {
     if counted == 0 {
         f64::NAN
     } else {
-        100.0 * in_range as f64 / counted as f64
+        tir_percent(in_range, counted)
     }
 }
 
+/// Percent time in range from the in-range and counted sample totals.
+/// Split out of [`time_in_range_pct`] so the crate can render the ratio:
+/// the extractor does not descend into the counting loop.
+#[formula_doc]
+#[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
+pub fn tir_percent(in_range: usize, counted: usize) -> f64 {
+    let pct = 100.0 * in_range as f64 / counted as f64;
+    pct
+}
+
 /// Mean glucose over non-NaN samples, mmol/L.
+#[formula_doc]
 pub fn mean_glucose(samples_mmol_per_l: &[f64]) -> f64 {
     let mut sum = 0.0;
     let mut counted = 0usize;
@@ -52,12 +65,22 @@ pub fn mean_glucose(samples_mmol_per_l: &[f64]) -> f64 {
     if counted == 0 {
         f64::NAN
     } else {
-        sum / counted as f64
+        mean_of(sum, counted)
     }
 }
 
-/// Coefficient of variation of glucose, percent: `stddev / mean * 100`.
-/// Requires at least two non-NaN samples; otherwise NaN.
+/// Arithmetic mean of the sample sum and count. Split out of
+/// [`mean_glucose`] so the crate can render the ratio.
+#[formula_doc]
+#[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
+pub fn mean_of(sum: f64, counted: usize) -> f64 {
+    let mean = sum / counted as f64;
+    mean
+}
+
+/// Coefficient of variation of glucose, percent. Requires at least two
+/// non-NaN samples; otherwise NaN.
+#[formula_doc]
 pub fn coefficient_of_variation(samples_mmol_per_l: &[f64]) -> f64 {
     let mean = mean_glucose(samples_mmol_per_l);
     if mean.is_nan() {
@@ -76,8 +99,20 @@ pub fn coefficient_of_variation(samples_mmol_per_l: &[f64]) -> f64 {
     if count < 2 || mean == 0.0 {
         f64::NAN
     } else {
-        100.0 * (sq_err / (count as f64 - 1.0)).sqrt() / mean
+        cv_pct(sq_err, count, mean)
     }
+}
+
+/// Coefficient of variation from the summed squared deviation about
+/// the mean: the sample standard deviation over the mean, scaled to
+/// percent. Split out of
+/// [`coefficient_of_variation`] so the crate can render it.
+#[formula_doc]
+#[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
+pub fn cv_pct(sq_err: f64, count: usize, mean: f64) -> f64 {
+    let sd = (sq_err / (count as f64 - 1.0)).sqrt();
+    let cv = 100.0 * sd / mean;
+    cv
 }
 
 /// Low blood glucose index, the Kovatchev risk score. Readings above
@@ -106,23 +141,35 @@ fn risk_score(samples_mmol_per_l: &[f64], side: RiskSide) -> f64 {
         if v.is_nan() {
             continue;
         }
-        let mg = mmol_per_l_to_mg_per_dl(v);
-        let f = 1.509 * (mg.ln().powf(1.084) - 5.381);
-        let contribute = match side {
-            RiskSide::Low => f < 0.0,
-            RiskSide::High => f >= 0.0,
-        };
-        if contribute {
-            // G* in Kovatchev's notation, the "distance" component is
-            // 10*f^2 with f in the 0..1.00001 scale.
-            total += 10.0 * f * f;
-        }
+        total += risk_if_on_side(v, matches!(side, RiskSide::Low));
         counted += 1;
     }
     if counted == 0 {
         f64::NAN
     } else {
-        total / counted as f64
+        mean_of(total, counted)
+    }
+}
+
+/// The Kovatchev risk contribution of one glucose reading `v` (mmol/L)
+/// on a given side of the risk transform.
+///
+/// The Kovatchev transform maps a reading to a risk scale where the
+/// sign flips at ~112.5 mg/dL; the score is the squared distance of the
+/// deviation (Kovatchev 2017, section 6.2). Readings on the wrong side
+/// of the flip contribute zero. Split out of the averaging loop so the
+/// crate can render the transform.
+#[formula_doc]
+#[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
+pub fn risk_if_on_side(value_mmol_per_l: f64, low_side: bool) -> f64 {
+    let mg_dl = mmol_per_l_to_mg_per_dl(value_mmol_per_l);
+    let f = 1.509 * (mg_dl.ln().powf(1.084) - 5.381);
+    let score = 10.0 * f * f;
+    let contributes = if low_side { f < 0.0 } else { f >= 0.0 };
+    if contributes {
+        score
+    } else {
+        0.0
     }
 }
 

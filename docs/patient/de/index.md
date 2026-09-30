@@ -64,3 +64,5 @@ sequenceDiagram
 Nichts hier ist eine medizinische Empfehlung. Diese Seiten beschreiben ein Forschungsmodell, wie das System funktioniert, und kein Produkt, mit dem Sie Ihre Therapie anpassen sollten. Ihre Pumpe, Ihr Sensor und Ihr Behandlungsteam sind die Quelle der Wahrheit: Das Modell soll Ihnen helfen zu verstehen, was sie zusammen tun.
 
 Der formale Sicherheitskatalog hinter der Steuerung steht im [vollständigen Bericht](../verification_report.html). Er ist in mathematischer Sprache verfasst; die Seiten in diesem Ordner nicht.
+
+Die [API-Dokumentation](../rustdoc/index.html) geht noch eine Ebene tiefer. Sie beschreibt jede Funktion und stellt die Rechnung in jeder als gerenderte Formel dar, damit Sie die Gleichungen sehen, aus denen das Modell gebaut ist.

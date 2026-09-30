@@ -13,11 +13,14 @@
 //! and meal carbohydrate ingestion is accepted as a rate `meal_g_per_min`
 //! (g/min) feeding the gut depot `a1` (section 3.2C).
 
+use document_formulas::formula_doc;
+use std::f64::consts::LN_2;
 use tir_tuner_common::euler::clamped_forward_euler;
 use tir_tuner_common::units::{MMOL_PER_GRAM_CHO, MU_PER_UNIT};
 
 /// Basal insulin concentration `BIC` (mU/L) for given basal insulin
 /// requirement, clearance and body weight.
+#[formula_doc]
 pub fn basal_insulin_conc(bir_u_per_h: f64, mcr_i: f64, weight_kg: f64) -> f64 {
     (1000.0 * bir_u_per_h) / (60.0 * mcr_i * weight_kg)
 }
@@ -35,20 +38,22 @@ pub const EGP_MAX_FOLD_OVER_BASAL: f64 = 3.0;
 /// units per mU/L).
 ///
 /// Mirrors the virtual patient body's suppression model: the EGP
-/// action `x3 = s_egp * r_e` halves basal EGP every `0.5` units above
-/// its resting value `s_egp * bic`, and the low-insulin branch is capped
-/// at `EGP_MAX_FOLD_OVER_BASAL` times basal. With the population gain
+/// action (the suppression gain times the remote EGP action) halves
+/// basal EGP every `0.5` units above its resting value `s_egp * bic`,
+/// and the low-insulin branch is capped at `EGP_MAX_FOLD_OVER_BASAL`
+/// times basal. With the population gain
 /// `s_egp = 0.019` (per mU/L) this is a mild, physiological suppression:
 /// 50% higher insulin concentration cuts EGP to about 80% of basal. The
 /// aps crate's earlier fixed `0.5` mU/L per halving made that EGP
 /// collapse to near zero under any sustained above-basal delivery, which
 /// froze the four-hour NMPC prediction; the spec section 3.2D notes the
-/// same divergence from the literal 2004 publication (which uses the
-/// linear form `EGP0[1 - x3]`).
+/// same divergence from the literal 2004 publication (which uses a
+/// linear EGP form).
+#[formula_doc]
 pub fn egp(r_e: f64, bic: f64, egp_b: f64, s_egp: f64) -> f64 {
     let x_basal = s_egp * bic;
     let x = s_egp * r_e;
-    let uncapped = egp_b * (((x_basal - x) / 0.5) * std::f64::consts::LN_2).exp();
+    let uncapped = egp_b * (((x_basal - x) / 0.5) * LN_2).exp();
     uncapped.min(EGP_MAX_FOLD_OVER_BASAL * egp_b)
 }
 
@@ -78,20 +83,19 @@ pub struct HovorkaParams {
     /// Non-insulin dependent glucose utilization (mmol/kg/min).
     ///
     /// Carried as the published `F01` of section 3.2D and applied through
-    /// the glucose-dependent Michaelis-Menten form
-    /// `F01 / 0.85 * g_P / (g_P + 1)` (Wilinska Table 1, the same form
-    /// the virtual patient body uses): the uptake vanishes as glucose
-    /// approaches zero, so the model keeps a hepatic floor instead of
-    /// predicting a collapse under modest above-basal insulin over the
+    /// the glucose-dependent Michaelis-Menten form (Wilinska Table 1, the
+    /// same form the virtual patient body uses): the uptake vanishes as
+    /// glucose approaches zero, so the model keeps a hepatic floor instead
+    /// of predicting a collapse under modest above-basal insulin over the
     /// four-hour prediction horizon. At `g_P = 5.67` mmol/L the applied
     /// uptake equals the published constant `F01`.
     pub f_01: f64,
     /// Peripheral insulin sensitivity (/min per mU/L).
     ///
     /// Chosen so the basal glucose equilibrium of the default
-    /// configuration sits on the nominal target (5.8 mmol/L): at the
-    /// basal steady state `q1 = (egp_b - f_01 / 0.85 * g / (g + 1)) /
-    /// (s_id * bic)`, which equals `5.8 * v_g` for `s_id = 5.7664e-4`.
+    /// configuration sits on the nominal target (5.8 mmol/L): at the basal
+    /// steady state the equilibrium mass equals `5.8 * v_g` for
+    /// `s_id = 5.7664e-4`.
     pub s_id: f64,
     /// Basal endogenous glucose production (mmol/kg/min).
     pub egp_b: f64,
@@ -105,10 +109,12 @@ pub struct HovorkaParams {
 impl HovorkaParams {
     /// Applied non-insulin dependent glucose uptake (mmol/kg/min) at the
     /// given plasma glucose, the glucose-dependent Michaelis-Menten form
-    /// `F01 / 0.85 * g_P / (g_P + 1)` that the virtual patient body also
-    /// uses.
+    /// that the virtual patient body also uses.
+    #[formula_doc]
+    #[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
     pub fn f01c(&self, plasma_g: f64) -> f64 {
-        (self.f_01 / 0.85) * plasma_g / (plasma_g + 1.0)
+        let f01c = (self.f_01 / 0.85) * plasma_g / (plasma_g + 1.0);
+        f01c
     }
 
     /// Basal plasma insulin concentration (mU/L).
@@ -179,14 +185,20 @@ pub struct HovorkaState {
 
 impl HovorkaState {
     /// Instantaneous subcutaneous insulin concentration `i(t)` (mU/L),
-/// consistent with the mU mass state and with `BIC`.
+    /// consistent with the mU mass state and with `BIC`.
+    #[formula_doc]
+    #[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
     pub fn insulin_conc(&self, params: &HovorkaParams) -> f64 {
-        self.i2 / (params.t_max_i * params.mcr_i * params.weight_kg)
+        let i = self.i2 / (params.t_max_i * params.mcr_i * params.weight_kg);
+        i
     }
 
     /// Gut carbohydrate absorption rate `u_A(t)` (mmol/kg/min).
+    #[formula_doc]
+    #[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
     pub fn gut_absorption(&self, params: &HovorkaParams) -> f64 {
-        self.a2 / (params.t_max_g * params.weight_kg * MMOL_PER_GRAM_CHO)
+        let u_a = self.a2 / (params.t_max_g * params.weight_kg * MMOL_PER_GRAM_CHO);
+        u_a
     }
 
     /// Increment of the continuous-time differential equations at the
@@ -199,6 +211,7 @@ impl HovorkaState {
     /// under a basal of `BIR` U/h sits exactly at `BIC` mU/L. The
     /// returned `u_s` increment is zero: the process noise of section
     /// 3.2F is injected externally (see [`HovorkaState::u_s`]).
+    #[formula_doc]
     pub fn derivative(
         &self,
         params: &HovorkaParams,
@@ -206,25 +219,43 @@ impl HovorkaState {
         u_bolus: f64,
         meal_g_per_min: f64,
     ) -> HovorkaState {
+        // `i`, `u_a`, `egp` and `f01c` are the four auxiliary quantities of
+        // sections 3.2A, 3.2C, 3.2D and 3.2D. Each one is a method call the
+        // extractor cannot render inline, so the equations below name them
+        // and the generated page links each to its own rendered formula.
         let i = self.insulin_conc(params);
         let u_a = self.gut_absorption(params);
         let egp = params.egp(self.r_e);
+        let f01c = params.f01c(self.plasma_glucose(params));
         let insulin_influx_mu_per_min = MU_PER_UNIT * u_basal / 60.0 + MU_PER_UNIT * u_bolus;
 
+        // The ten state increments of section 3.2, bound to names so the
+        // crate can render each equation individually. `u_s` is carried
+        // through unchanged: the process noise of 3.2F is injected
+        // externally.
+        let di1 = -(1.0 / params.t_max_i) * self.i1 + insulin_influx_mu_per_min;
+        let di2 = (1.0 / params.t_max_i) * (self.i1 - self.i2);
+        let dr_d = params.p2_d * (i - self.r_d);
+        let dr_e = params.p2_e * (i - self.r_e);
+        let da1 = -(1.0 / params.t_max_g) * self.a1 + meal_g_per_min;
+        let da2 = (1.0 / params.t_max_g) * (self.a1 - self.a2);
+        let dq1 = -(params.s_id * self.r_d + params.k21) * self.q1 + params.k12 * self.q2 - f01c
+            + egp
+            + u_a
+            + self.u_s;
+        let dq2 = params.k21 * self.q1 - params.k12 * self.q2;
+        let dq3 = params.k31 * (self.q1 - self.q3);
+
         HovorkaState {
-            i1: -(1.0 / params.t_max_i) * self.i1 + insulin_influx_mu_per_min,
-            i2: (1.0 / params.t_max_i) * (self.i1 - self.i2),
-            r_d: params.p2_d * (i - self.r_d),
-            r_e: params.p2_e * (i - self.r_e),
-            a1: -(1.0 / params.t_max_g) * self.a1 + meal_g_per_min,
-            a2: (1.0 / params.t_max_g) * (self.a1 - self.a2),
-            q1: -(params.s_id * self.r_d + params.k21) * self.q1 + params.k12 * self.q2
-                - params.f01c(self.q1 / params.v_g)
-                + egp
-                + u_a
-                + self.u_s,
-            q2: params.k21 * self.q1 - params.k12 * self.q2,
-            q3: params.k31 * (self.q1 - self.q3),
+            i1: di1,
+            i2: di2,
+            r_d: dr_d,
+            r_e: dr_e,
+            a1: da1,
+            a2: da2,
+            q1: dq1,
+            q2: dq2,
+            q3: dq3,
             u_s: 0.0,
         }
     }
@@ -261,13 +292,19 @@ impl HovorkaState {
     }
 
     /// Plasma glucose concentration `g_P(t)` (mmol/L).
+    #[formula_doc]
+    #[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
     pub fn plasma_glucose(&self, params: &HovorkaParams) -> f64 {
-        self.q1 / params.v_g
+        let g_p = self.q1 / params.v_g;
+        g_p
     }
 
     /// Interstitial (sensor) glucose concentration `g_IG(t)` (mmol/L).
+    #[formula_doc]
+    #[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
     pub fn interstitial_glucose(&self, params: &HovorkaParams) -> f64 {
-        self.q3 / params.v_g
+        let g_ig = self.q3 / params.v_g;
+        g_ig
     }
 }
 
@@ -327,28 +364,76 @@ mod tests {
                 for &meal in &meal_vals {
                     for &dt in &dt_vals {
                         for &v in &i_vals {
-                            check(HovorkaState { i1: v, ..mid_state }, u_basal, u_bolus, meal, dt);
-                            check(HovorkaState { i2: v, ..mid_state }, u_basal, u_bolus, meal, dt);
-                        }
-                        for &v in &a_vals {
-                            check(HovorkaState { a1: v, ..mid_state }, u_basal, u_bolus, meal, dt);
-                            check(HovorkaState { a2: v, ..mid_state }, u_basal, u_bolus, meal, dt);
-                        }
-                        for &v in &q_vals {
-                            check(HovorkaState { q1: v, ..mid_state }, u_basal, u_bolus, meal, dt);
-                            check(HovorkaState { q2: v, ..mid_state }, u_basal, u_bolus, meal, dt);
-                            check(HovorkaState { q3: v, ..mid_state }, u_basal, u_bolus, meal, dt);
-                        }
-                        for &v in &r_vals {
                             check(
-                                HovorkaState { r_d: v, ..mid_state },
+                                HovorkaState { i1: v, ..mid_state },
                                 u_basal,
                                 u_bolus,
                                 meal,
                                 dt,
                             );
                             check(
-                                HovorkaState { r_e: v, ..mid_state },
+                                HovorkaState { i2: v, ..mid_state },
+                                u_basal,
+                                u_bolus,
+                                meal,
+                                dt,
+                            );
+                        }
+                        for &v in &a_vals {
+                            check(
+                                HovorkaState { a1: v, ..mid_state },
+                                u_basal,
+                                u_bolus,
+                                meal,
+                                dt,
+                            );
+                            check(
+                                HovorkaState { a2: v, ..mid_state },
+                                u_basal,
+                                u_bolus,
+                                meal,
+                                dt,
+                            );
+                        }
+                        for &v in &q_vals {
+                            check(
+                                HovorkaState { q1: v, ..mid_state },
+                                u_basal,
+                                u_bolus,
+                                meal,
+                                dt,
+                            );
+                            check(
+                                HovorkaState { q2: v, ..mid_state },
+                                u_basal,
+                                u_bolus,
+                                meal,
+                                dt,
+                            );
+                            check(
+                                HovorkaState { q3: v, ..mid_state },
+                                u_basal,
+                                u_bolus,
+                                meal,
+                                dt,
+                            );
+                        }
+                        for &v in &r_vals {
+                            check(
+                                HovorkaState {
+                                    r_d: v,
+                                    ..mid_state
+                                },
+                                u_basal,
+                                u_bolus,
+                                meal,
+                                dt,
+                            );
+                            check(
+                                HovorkaState {
+                                    r_e: v,
+                                    ..mid_state
+                                },
                                 u_basal,
                                 u_bolus,
                                 meal,

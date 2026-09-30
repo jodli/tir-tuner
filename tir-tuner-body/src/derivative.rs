@@ -8,6 +8,8 @@
 
 use crate::state::BodyState;
 use crate::subject::VirtualSubject;
+use document_formulas::formula_doc;
+use std::f64::consts::LN_2;
 use tir_tuner_common::units::MMOL_PER_GRAM_CHO;
 
 /// Inputs to the body over one time step.
@@ -47,25 +49,25 @@ pub struct BodyDerivatives {
 }
 
 /// Endogenous glucose production (mmol/kg/min), the aps-style
-/// suppression model: `egp0 * 2^((x3_basal - x3)/S)`, capped at 3x basal
-/// EGP, with `S = 0.5` (mU-invariant scale) and `x3_basal` the resting
-/// value of the EGP action `sie * i_basal`. At rest the exponent is
-/// zero, so EGP equals the published basal `egp0` exactly; rising
-/// insulin action suppresses production. See module docs and
-/// [`crate::subject`] for the divergence note from the published
-/// `EGP0[1+x3]`.
+/// suppression model: an exponential fall from basal EGP as the remote
+/// EGP action rises, capped at 3x basal EGP, with a halving scale of
+/// `0.5` mU/L of insulin action. At rest (the EGP action at its basal
+/// value) the exponent is zero, so EGP equals the published basal
+/// `egp0` exactly; rising insulin action suppresses production. See
+/// module docs and [`crate::subject`] for the divergence note from the
+/// published `EGP0[1+x3]`.
+#[formula_doc]
 pub fn egp(subject: &VirtualSubject, x3: f64) -> f64 {
     let x3_basal = subject.basale_x3();
-    let uncapped = subject.egp0_mmol_per_kg_min
-        * ((x3_basal - x3) / 0.5 * std::f64::consts::LN_2).exp();
+    let uncapped = subject.egp0_mmol_per_kg_min * ((x3_basal - x3) / 0.5 * LN_2).exp();
     uncapped.min(3.0 * subject.egp0_mmol_per_kg_min)
 }
 
-/// Non-insulin-dependent glucose uptake (mmol/kg/min). The Michaelis-
-/// Menten form `F01s * G / (G + 1)` with `F01s = F01/0.85`, from
-/// Wilinska Table 1; `F01c = F01` exactly at `G = 5/0.85 = 5.88`? No:
-/// `G/(G+1) = 0.85` gives `G = 5.67` mmol/L, so basal uptake equals the
-/// published `F01` at a near-basal glucose of 5.67 mmol/L.
+/// Non-insulin-dependent glucose uptake (mmol/kg/min), the Michaelis-
+/// Menten form from Wilinska Table 1, saturated as glucose rises above
+/// the half-saturation point. Basal uptake equals the published `F01`
+/// at a near-basal glucose of 5.67 mmol/L.
+#[formula_doc]
 pub fn f01c(subject: &VirtualSubject, plasma_glucose_mmol_per_l: f64) -> f64 {
     let f01s = subject.f01_mmol_per_kg_min / 0.85;
     f01s * plasma_glucose_mmol_per_l / (plasma_glucose_mmol_per_l + 1.0)
@@ -83,17 +85,26 @@ pub fn renal_excretion(subject: &VirtualSubject, plasma_glucose_mmol_per_l: f64)
 }
 
 /// Gut glucose appearance rate (mmol/kg/min), clamped at `ug_ceil`.
+#[formula_doc]
 pub fn gut_appearance(subject: &VirtualSubject, g2_mmol: f64) -> f64 {
     let rate = g2_mmol / (subject.t_max_g_min * subject.weight_kg);
     rate.min(subject.ug_ceil_mmol_per_kg_min)
 }
 
 /// Interstitial glucose equilibration rate (mmol/L per min).
+#[formula_doc]
 pub fn interstitial_rate(subject: &VirtualSubject, plasma: f64, interstitial: f64) -> f64 {
     subject.ka_int_per_min * (plasma - interstitial)
 }
 
 /// Full right-hand side of the ODE system.
+///
+/// The insulin and gut chains are bound as named locals and come out as
+/// formulas. The glucose balances bind the submodel outputs (`egp`,
+/// `f01c`, `renal`, `ug`) to locals first, so each balance reads as one
+/// line; the submodel equations themselves live on the `egp`, `f01c`,
+/// `gut_appearance` and `renal_excretion` pages.
+#[formula_doc]
 pub fn derivatives(
     subject: &VirtualSubject,
     state: &BodyState,
@@ -117,18 +128,13 @@ pub fn derivatives(
     let g1 = gut_input_mmol_per_min - state.g1 / subject.t_max_g_min;
     let g2 = state.g1 / subject.t_max_g_min - state.g2 / subject.t_max_g_min;
 
-    let ug = gut_appearance(subject, state.g2);
-
     // Glucose masses: accessible Q1, non-accessible Q2.
-    let q1 = egp(subject, state.x3)
-        + ug
-        - f01c(subject, g)
-        - state.x1 * state.q1
-        + subject.k12_per_min * state.q2
-        - renal_excretion(subject, g);
-    let q2 = state.x1 * state.q1
-        - state.x2 * state.q2
-        - subject.k12_per_min * state.q2;
+    let egp = egp(subject, state.x3);
+    let f01c = f01c(subject, g);
+    let renal = renal_excretion(subject, g);
+    let ug = gut_appearance(subject, state.g2);
+    let q1 = egp + ug - f01c - state.x1 * state.q1 + subject.k12_per_min * state.q2 - renal;
+    let q2 = state.x1 * state.q1 - state.x2 * state.q2 - subject.k12_per_min * state.q2;
 
     let c = interstitial_rate(subject, g, state.c);
 

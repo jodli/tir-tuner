@@ -64,3 +64,5 @@ sequenceDiagram
 Nothing here is medical advice. These pages describe a research model of how the system works, not a product you should use to adjust your treatment. Your pump, your sensor and your care team are the source of truth. The model's job is to help you understand what they are all doing together.
 
 The formal safety catalogue behind the controller lives in the [full report](verification_report.html). It is written in mathematical language; the pages in this folder are not.
+
+The [API documentation](rustdoc/index.html) goes one level deeper still. It documents every function, and it prints the arithmetic inside each one as a rendered formula, so you can see the equations the model is built from.

@@ -9,6 +9,7 @@ license = "MIT OR Apache-2.0"
 name = "tir_tuner_body"
 
 [dependencies]
+document_formulas = "0.2.0"
 tir-tuner-common = { path = "../tir-tuner-common" }
 
 [dev-dependencies]

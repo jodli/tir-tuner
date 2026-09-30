@@ -1,5 +1,7 @@
 //! Unit conversion constants and helpers shared across the workspace.
 
+use document_formulas::formula_doc;
+
 /// Millie-units per insulin unit, the `i1`/`i2` mass-state convention
 /// (Hovorka et al. 2004).
 pub const MU_PER_UNIT: f64 = 1000.0;
@@ -12,21 +14,24 @@ pub const MG_PER_DL_PER_MMOL_PER_L: f64 = 18.0182;
 /// Millimoles of glucose per gram of carbohydrate.
 ///
 /// Glucose molar mass 180.156 g/mol; a gram of carbohydrate is treated
-/// as a gram of glucose, giving `1/0.180156` mmol.
+/// as a gram of glucose, about 5.55 mmol.
 pub const MMOL_PER_GRAM_CHO: f64 = 5.551;
 
 /// Convert a glucose concentration from mmol/L to mg/dL.
+#[formula_doc]
 pub fn mmol_per_l_to_mg_per_dl(value_mmol_per_l: f64) -> f64 {
     value_mmol_per_l * MG_PER_DL_PER_MMOL_PER_L
 }
 
 /// Convert a glucose concentration from mg/dL to mmol/L.
+#[formula_doc]
 pub fn mg_per_dl_to_mmol_per_l(value_mg_per_dl: f64) -> f64 {
     value_mg_per_dl / MG_PER_DL_PER_MMOL_PER_L
 }
 
 /// Convert a carbohydrate mass from grams to mmol of glucose, the unit
 /// the physiological models carry it in.
+#[formula_doc]
 pub fn grams_cho_to_mmol(grams: f64) -> f64 {
     grams * MMOL_PER_GRAM_CHO
 }

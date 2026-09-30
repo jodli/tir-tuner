@@ -9,6 +9,7 @@
 use crate::derivative::{derivatives, BodyInputs};
 use crate::state::BodyState;
 use crate::subject::VirtualSubject;
+use document_formulas::formula_doc;
 use tir_tuner_common::euler::clamped_forward_euler;
 use tir_tuner_common::units::MU_PER_UNIT;
 
@@ -80,9 +81,9 @@ fn max_abs_derivative(d: &crate::derivative::BodyDerivatives) -> f64 {
 /// every non-glucose compartment at its basal rest value. One of the
 /// three ingest scenario entry points (100 / 80 / 180 mg/dL).
 ///
-/// The non-accessible glucose mass is set to its basal balance point
-/// `q2 = x1*q1/(x2 + k12)` so the model does not start with a spur of
-/// inter-compartment flux.
+/// The non-accessible glucose mass is set to its basal balance point so
+/// the model does not start with a spur of inter-compartment flux.
+#[formula_doc]
 pub fn admit_state(subject: &VirtualSubject, glucose_mg_per_dl: f64) -> BodyState {
     use tir_tuner_common::units::mg_per_dl_to_mmol_per_l;
     let g = mg_per_dl_to_mmol_per_l(glucose_mg_per_dl);
@@ -165,7 +166,9 @@ mod tests {
                 meal_g_per_min: 0.0,
             };
             let d = derivatives(&subject, &state, &inputs);
-            for v in [d.s1, d.s2, d.i, d.x1, d.x2, d.x3, d.q1, d.q2, d.g1, d.g2, d.c] {
+            for v in [
+                d.s1, d.s2, d.i, d.x1, d.x2, d.x3, d.q1, d.q2, d.g1, d.g2, d.c,
+            ] {
                 assert!(v.abs() < 1e-6, "compartment derivative {} not at rest", v);
             }
             // The resting glucose is whatever balances production and
@@ -210,10 +213,12 @@ mod tests {
         }
         let g = state.plasma_glucose(&subject);
         assert!(g < 7.0, "glucose fell from 9.99 to {}", g);
-        let all_non_neg =
-            [state.s1, state.s2, state.i, state.x1, state.x2, state.x3, state.q1, state.q2, state.g1, state.g2, state.c]
-                .iter()
-                .all(|&v| v >= 0.0);
+        let all_non_neg = [
+            state.s1, state.s2, state.i, state.x1, state.x2, state.x3, state.q1, state.q2,
+            state.g1, state.g2, state.c,
+        ]
+        .iter()
+        .all(|&v| v >= 0.0);
         assert!(all_non_neg);
     }
 
@@ -237,7 +242,12 @@ mod tests {
             state = step(&subject, &state, inputs, DT_MIN);
             peak = peak.max(state.plasma_glucose(&subject));
         }
-        assert!(peak > baseline + 0.5, "meal peak {} over {}", peak, baseline);
+        assert!(
+            peak > baseline + 0.5,
+            "meal peak {} over {}",
+            peak,
+            baseline
+        );
     }
 
     proptest::proptest! {

@@ -8,12 +8,11 @@
 //!
 //! # Model divergences from the published text
 //!
-//! * EGP: Wilinska prints `EGP = EGP0[1+x3]`, which would raise liver
-//!   glucose output as insulin action grows. Insulin suppresses EGP, so
-//!   the sign is treated as a typo. This crate uses the exponential
-//!   suppression `egp0 * 2^((i_basal - x3)/0.5)`, capped at 3x basal EGP,
-//!   the same philosophy as the aps crate and the physiologically
-//!   intended direction.
+//! * EGP: Wilinska prints a linear form `EGP0[1+x3]` which would raise
+//!   liver glucose output as insulin action grows. Insulin suppresses
+//!   EGP, so the sign is treated as a typo. This crate uses the
+//!   exponential suppression of the aps crate, capped at 3x basal EGP,
+//!   the physiologically intended direction.
 //! * Renal excretion is applied to the accessible glucose `G` through
 //!   the `R_cl (G - R_thr) VG` form, not the piecewise-linear Hovorka
 //!   original.
@@ -28,6 +27,7 @@
 //! Insulin concentrations are read in U/L; the ingestion input is grams
 //! of carbohydrate per minute.
 
+use document_formulas::formula_doc;
 use tir_tuner_common::random::SeededRng;
 use tir_tuner_common::units::MU_PER_UNIT;
 
@@ -98,10 +98,20 @@ pub struct VirtualSubject {
 impl VirtualSubject {
     /// The population-mean subject: every parameter at its published
     /// typical value, no sampling. Used as the deterministic default.
+    ///
+    /// The basal requirement is the published daily dose
+    /// `0.35 U/kg/d` spread over the 24 h of the day, which at the mean
+    /// weight of 74.9 kg gives 1.09 U/h.
+    #[formula_doc]
+    #[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
     pub fn population_mean() -> Self {
+        let weight_kg = 74.9;
+        let daily_dose_u_per_kg = 0.35;
+        let bir_u_per_h = daily_dose_u_per_kg * weight_kg / 24.0;
+
         Self {
-            weight_kg: 74.9,
-            bir_u_per_h: 0.35 * 74.9 / 24.0, // 1.09 U/h
+            weight_kg,
+            bir_u_per_h,
             icr_u_per_10g_cho: 1.7,
             vg_l_per_kg: 0.15,
             vi_l_per_kg: 0.12,
@@ -128,18 +138,25 @@ impl VirtualSubject {
     /// Basal steady-state plasma insulin concentration (mU/L) for the
     /// subject's basal requirement.
     ///
-    /// From the insulin ODEs at steady state: `s1 = s2 = u/ka`,
-    /// `i = ka*s2/(vi*w*ke) = u/(vi*w*ke)`, with `u` the basal mass
-    /// rate (mU/min).
+    /// The steady state of the insulin ODEs: the subcutaneous chain
+    /// saturates at the basal mass rate and plasma insulin settles at
+    /// the basal rate per insulin distribution volume and clearance.
+    #[formula_doc]
+    #[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
     pub fn basal_insulin_concentration(&self) -> f64 {
         let u_per_min = self.bir_u_per_h / 60.0 * MU_PER_UNIT;
-        u_per_min / (self.vi_l_per_kg * self.weight_kg * self.ke_per_min)
+        let i_basal = u_per_min / (self.vi_l_per_kg * self.weight_kg * self.ke_per_min);
+        i_basal
     }
 
-    /// Basal steady-state value of insulin action `x3` (mU/L), used as
-    /// the EGP anchor.
+    /// Basal steady-state value of insulin action `x3` (mU/L), the EGP
+    /// anchor of section 3.2D: the suppression gain times the basal
+    /// insulin concentration.
+    #[formula_doc]
+    #[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
     pub fn basale_x3(&self) -> f64 {
-        self.sie_per_mu_l * self.basal_insulin_concentration()
+        let x3_basal = self.sie_per_mu_l * self.basal_insulin_concentration();
+        x3_basal
     }
 }
 
@@ -196,7 +213,10 @@ mod tests {
 
     #[test]
     fn population_mean_is_reproducible() {
-        assert_eq!(VirtualSubject::population_mean(), VirtualSubject::population_mean());
+        assert_eq!(
+            VirtualSubject::population_mean(),
+            VirtualSubject::population_mean()
+        );
     }
 
     #[test]
