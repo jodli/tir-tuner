@@ -2,7 +2,7 @@
 
 use document_formulas::formula_doc;
 
-/// Forward Euler update saturated at zero: `(prev + dt * rate).max(0.0)`.
+/// Forward Euler update saturated at zero.
 ///
 /// This is the enforcement primitive behind the physiological
 /// non-negativity invariants of the glucoregulatory models. For every

@@ -8,12 +8,11 @@
 //!
 //! # Model divergences from the published text
 //!
-//! * EGP: Wilinska prints `EGP = EGP0[1+x3]`, which would raise liver
-//!   glucose output as insulin action grows. Insulin suppresses EGP, so
-//!   the sign is treated as a typo. This crate uses the exponential
-//!   suppression `egp0 * 2^((i_basal - x3)/0.5)`, capped at 3x basal EGP,
-//!   the same philosophy as the aps crate and the physiologically
-//!   intended direction.
+//! * EGP: Wilinska prints a linear form `EGP0[1+x3]` which would raise
+//!   liver glucose output as insulin action grows. Insulin suppresses
+//!   EGP, so the sign is treated as a typo. This crate uses the
+//!   exponential suppression of the aps crate, capped at 3x basal EGP,
+//!   the physiologically intended direction.
 //! * Renal excretion is applied to the accessible glucose `G` through
 //!   the `R_cl (G - R_thr) VG` form, not the piecewise-linear Hovorka
 //!   original.
@@ -139,9 +138,9 @@ impl VirtualSubject {
     /// Basal steady-state plasma insulin concentration (mU/L) for the
     /// subject's basal requirement.
     ///
-    /// From the insulin ODEs at steady state: `s1 = s2 = u/ka`,
-    /// `i = ka*s2/(vi*w*ke) = u/(vi*w*ke)`, with `u` the basal mass
-    /// rate (mU/min).
+    /// The steady state of the insulin ODEs: the subcutaneous chain
+    /// saturates at the basal mass rate and plasma insulin settles at
+    /// the basal rate per insulin distribution volume and clearance.
     #[formula_doc]
     #[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
     pub fn basal_insulin_concentration(&self) -> f64 {
@@ -151,7 +150,8 @@ impl VirtualSubject {
     }
 
     /// Basal steady-state value of insulin action `x3` (mU/L), the EGP
-    /// anchor `x_{3,basal} = S_{EGP} \cdot I_{basal}` of section 3.2D.
+    /// anchor of section 3.2D: the suppression gain times the basal
+    /// insulin concentration.
     #[formula_doc]
     #[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
     pub fn basale_x3(&self) -> f64 {
@@ -213,7 +213,10 @@ mod tests {
 
     #[test]
     fn population_mean_is_reproducible() {
-        assert_eq!(VirtualSubject::population_mean(), VirtualSubject::population_mean());
+        assert_eq!(
+            VirtualSubject::population_mean(),
+            VirtualSubject::population_mean()
+        );
     }
 
     #[test]

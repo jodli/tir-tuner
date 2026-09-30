@@ -70,7 +70,7 @@ pub fn mean_glucose(samples_mmol_per_l: &[f64]) -> f64 {
 }
 
 /// Arithmetic mean of the sample sum and count. Split out of
-/// [`mean_glucose`] so the crate can render `sum / n`.
+/// [`mean_glucose`] so the crate can render the ratio.
 #[formula_doc]
 #[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
 pub fn mean_of(sum: f64, counted: usize) -> f64 {
@@ -78,8 +78,8 @@ pub fn mean_of(sum: f64, counted: usize) -> f64 {
     mean
 }
 
-/// Coefficient of variation of glucose, percent: `stddev / mean * 100`.
-/// Requires at least two non-NaN samples; otherwise NaN.
+/// Coefficient of variation of glucose, percent. Requires at least two
+/// non-NaN samples; otherwise NaN.
 #[formula_doc]
 pub fn coefficient_of_variation(samples_mmol_per_l: &[f64]) -> f64 {
     let mean = mean_glucose(samples_mmol_per_l);
@@ -103,9 +103,9 @@ pub fn coefficient_of_variation(samples_mmol_per_l: &[f64]) -> f64 {
     }
 }
 
-/// Coefficient of variation from the summed squared deviation about the
-/// mean, the sample standard deviation `sd = sqrt(sq_err/(n-1))` over
-/// the mean, scaled to percent. Split out of
+/// Coefficient of variation from the summed squared deviation about
+/// the mean: the sample standard deviation over the mean, scaled to
+/// percent. Split out of
 /// [`coefficient_of_variation`] so the crate can render it.
 #[formula_doc]
 #[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
@@ -154,12 +154,11 @@ fn risk_score(samples_mmol_per_l: &[f64], side: RiskSide) -> f64 {
 /// The Kovatchev risk contribution of one glucose reading `v` (mmol/L)
 /// on a given side of the risk transform.
 ///
-/// The transform `f = 1.509 * (ln(mg)^1.084 - 5.381)` maps a reading to
-/// a risk scale where the sign flips at ~112.5 mg/dL; the score is
-/// `10 * f^2`, the squared distance of the deviation (Kovatchev 2017,
-/// section 6.2). Readings on the wrong side of the flip contribute zero.
-/// Split out of the averaging loop so the crate can render the
-/// transform.
+/// The Kovatchev transform maps a reading to a risk scale where the
+/// sign flips at ~112.5 mg/dL; the score is the squared distance of the
+/// deviation (Kovatchev 2017, section 6.2). Readings on the wrong side
+/// of the flip contribute zero. Split out of the averaging loop so the
+/// crate can render the transform.
 #[formula_doc]
 #[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
 pub fn risk_if_on_side(value_mmol_per_l: f64, low_side: bool) -> f64 {

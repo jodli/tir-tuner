@@ -14,7 +14,7 @@ pub const MG_PER_DL_PER_MMOL_PER_L: f64 = 18.0182;
 /// Millimoles of glucose per gram of carbohydrate.
 ///
 /// Glucose molar mass 180.156 g/mol; a gram of carbohydrate is treated
-/// as a gram of glucose, giving `1/0.180156` mmol.
+/// as a gram of glucose, about 5.55 mmol.
 pub const MMOL_PER_GRAM_CHO: f64 = 5.551;
 
 /// Convert a glucose concentration from mmol/L to mg/dL.

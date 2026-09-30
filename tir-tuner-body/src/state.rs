@@ -39,11 +39,12 @@ impl BodyState {
     /// The basal steady state: no insulin bolus, no meal, plasma and
     /// glucose compartments at rest.
     ///
-    /// Subcutaneous chain at rest: `s2 = s1 = u_basal/ka` with `u_basal`
-    /// the basal mass rate (mU/min); plasma `i = u/(vi*w*ke)`; remote
-    /// actions track `i`; gut empty; interstitial glucose `c` equals
-    /// plasma glucose `g = q1/vg`. The glucose masses must balance the
-    /// expression `EGP - F01 - FR`, solved by simulation in
+    /// Subcutaneous chain at rest: the depot masses hold the basal influx
+    /// such that the absorption rate matches it; plasma insulin sits at
+    /// the basal concentration, the remote actions track it, the gut is
+    /// empty, and interstitial glucose equals plasma glucose. The glucose
+    /// masses must balance endogenous production against uptake and
+    /// renal excretion, solved by simulation in
     /// [`crate::solver::basal_steady_state`].
     pub fn zero() -> Self {
         Self {
@@ -61,8 +62,9 @@ impl BodyState {
         }
     }
 
-    /// Accessible plasma glucose concentration `g_P(t)` (mmol/L),
-    /// the `q1 / V_G` of specification section 3.2D.
+    /// Accessible plasma glucose concentration `g_P(t)` (mmol/L), the
+    /// accessible-compartment concentration of specification section
+    /// 3.2D.
     #[formula_doc]
     #[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
     pub fn plasma_glucose(&self, subject: &VirtualSubject) -> f64 {

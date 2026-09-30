@@ -49,26 +49,24 @@ pub struct BodyDerivatives {
 }
 
 /// Endogenous glucose production (mmol/kg/min), the aps-style
-/// suppression model: `egp0 * 2^((x3_basal - x3)/S)`, capped at 3x basal
-/// EGP, with `S = 0.5` (mU-invariant scale) and `x3_basal` the resting
-/// value of the EGP action `sie * i_basal`. At rest the exponent is
-/// zero, so EGP equals the published basal `egp0` exactly; rising
-/// insulin action suppresses production. See module docs and
-/// [`crate::subject`] for the divergence note from the published
-/// `EGP0[1+x3]`.
+/// suppression model: an exponential fall from basal EGP as the remote
+/// EGP action rises, capped at 3x basal EGP, with a halving scale of
+/// `0.5` mU/L of insulin action. At rest (the EGP action at its basal
+/// value) the exponent is zero, so EGP equals the published basal
+/// `egp0` exactly; rising insulin action suppresses production. See
+/// module docs and [`crate::subject`] for the divergence note from the
+/// published `EGP0[1+x3]`.
 #[formula_doc]
 pub fn egp(subject: &VirtualSubject, x3: f64) -> f64 {
     let x3_basal = subject.basale_x3();
-    let uncapped =
-        subject.egp0_mmol_per_kg_min * ((x3_basal - x3) / 0.5 * LN_2).exp();
+    let uncapped = subject.egp0_mmol_per_kg_min * ((x3_basal - x3) / 0.5 * LN_2).exp();
     uncapped.min(3.0 * subject.egp0_mmol_per_kg_min)
 }
 
-/// Non-insulin-dependent glucose uptake (mmol/kg/min). The Michaelis-
-/// Menten form `F01s * G / (G + 1)` with `F01s = F01/0.85`, from
-/// Wilinska Table 1; `F01c = F01` exactly at `G = 5/0.85 = 5.88`? No:
-/// `G/(G+1) = 0.85` gives `G = 5.67` mmol/L, so basal uptake equals the
-/// published `F01` at a near-basal glucose of 5.67 mmol/L.
+/// Non-insulin-dependent glucose uptake (mmol/kg/min), the Michaelis-
+/// Menten form from Wilinska Table 1, saturated as glucose rises above
+/// the half-saturation point. Basal uptake equals the published `F01`
+/// at a near-basal glucose of 5.67 mmol/L.
 #[formula_doc]
 pub fn f01c(subject: &VirtualSubject, plasma_glucose_mmol_per_l: f64) -> f64 {
     let f01s = subject.f01_mmol_per_kg_min / 0.85;
@@ -136,9 +134,7 @@ pub fn derivatives(
     let renal = renal_excretion(subject, g);
     let ug = gut_appearance(subject, state.g2);
     let q1 = egp + ug - f01c - state.x1 * state.q1 + subject.k12_per_min * state.q2 - renal;
-    let q2 = state.x1 * state.q1
-        - state.x2 * state.q2
-        - subject.k12_per_min * state.q2;
+    let q2 = state.x1 * state.q1 - state.x2 * state.q2 - subject.k12_per_min * state.q2;
 
     let c = interstitial_rate(subject, g, state.c);
 

@@ -57,8 +57,8 @@ pub fn imm_mixture_sum(mu: &[f64; IMM_MODE_COUNT]) -> f64 {
 pub const IMM_MARKOV_TRANSITION: [[f64; IMM_MODE_COUNT]; IMM_MODE_COUNT] =
     [[0.95, 0.05, 0.05], [0.03, 0.90, 0.05], [0.02, 0.05, 0.90]];
 
-/// Prognostic weights `c_j = sum_i p[j][i] * mu[i]` (section 4.1.1),
-/// unrolled over the three modes so the crate can render each sum.
+/// Prognostic weights (section 4.1.1), unrolled over the three modes so
+/// the crate can render each sum.
 ///
 /// With a column-stochastic transition matrix and a non-negative
 /// normalized `mu` the weights are between 0 and 1 and sum to one over
@@ -73,10 +73,9 @@ pub fn imm_prognostic_weights(mu: &[f64; IMM_MODE_COUNT]) -> [f64; IMM_MODE_COUN
     c
 }
 
-/// Prognostic weight for one mode `c_j = sum_i p[j][i] * mu[i]`
-/// (section 4.1.1). Split out of [`imm_prognostic_weights`] so the crate
-/// can render the sum: the extractor does not descend into the nested
-/// loop.
+/// Prognostic weight for one mode (section 4.1.1). Split out of
+/// [`imm_prognostic_weights`] so the crate can render the sum: the
+/// extractor does not descend into the nested loop.
 #[formula_doc]
 #[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
 pub fn imm_prognostic_weight(mu: &[f64; IMM_MODE_COUNT], j: usize) -> f64 {
@@ -86,7 +85,7 @@ pub fn imm_prognostic_weight(mu: &[f64; IMM_MODE_COUNT], j: usize) -> f64 {
     c_j
 }
 
-/// Mixing probability `mu_{i|j} = p[j][i] * mu[i] / c_j` (section 4.1.1).
+/// Mixing probability of mode `i` within `j` (section 4.1.1).
 ///
 /// Only valid when `c[j] > 0.0`; otherwise any mixing is undefined and
 /// zero is returned. For a fixed `j` the mixing probabilities sum to one
@@ -119,9 +118,9 @@ pub fn imm_mixture_mean(values: &[f64; IMM_MODE_COUNT], mu: &[f64; IMM_MODE_COUN
     mu[0] * values[0] + mu[1] * values[1] + mu[2] * values[2]
 }
 
-/// Mixture-weighted covariance for scalar per-mode state estimates
-/// (section 4.1.5): `sum_j mu[j] * (P_j + (x_j - x)(x_j - x))`. Every
-/// term is a variance, so the mixture is non-negative.
+/// Mixture-weighted covariance of the per-mode state estimates about the
+/// mixture mean (section 4.1.5). Every term is a variance, so the
+/// mixture is non-negative.
 #[formula_doc]
 pub fn imm_mixture_variance(
     variances: &[f64; IMM_MODE_COUNT],
@@ -134,8 +133,7 @@ pub fn imm_mixture_variance(
         + mu[2] * (variances[2] + (means[2] - mixture_mean).powi(2))
 }
 
-/// Bayesian mode-probability update (section 4.1.4):
-/// `mu_j = c_j * Lambda_j / sum_m c_m * Lambda_m`.
+/// Bayesian mode-probability update (section 4.1.4).
 ///
 /// For non-negative likelihood values with a positive normalizer the
 /// result is a valid distribution, which the native `proptest` and
@@ -169,8 +167,8 @@ pub fn imm_likelihood_normalizer(
     total
 }
 
-/// Posterior mode probability of `j` for a positive normalizer:
-/// `mu_j = (c_j * Lambda_j) / total` (section 4.1.4). Split out of
+/// Posterior mode probability of `j` for a positive normalizer
+/// (section 4.1.4). Split out of
 /// [`imm_mode_probability_update`] so the crate can render it: the
 /// extractor does not descend into the per-mode loop.
 #[formula_doc]

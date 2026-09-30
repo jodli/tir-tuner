@@ -59,8 +59,9 @@ impl CgmSensor {
     }
 
     /// Read the interstitial glucose once. Advances the AR(1) error by
-    /// one step via [`next_error`], then
-    /// `raw = gain * ig + error`, reported value `max(raw, 0.0)`.
+    /// one step via [`next_error`], then combines the gain-scaled
+    /// interstitial value with the error and clips the reported reading
+    /// at zero.
     pub fn read(&mut self, interstitial_mmol_per_l: f64) -> SensorReading {
         let innovation = self.rng.next_normal() * self.params.noise_sd;
         let error = next_error(&self.params, self.error, innovation);
@@ -74,15 +75,14 @@ impl CgmSensor {
     }
 }
 
-/// One AR(1) error step: `e' = alpha1 * e + w`. Pure so the Kani proofs
+/// One first-order autoregressive error step. Pure so the Kani proofs
 /// can drive it with symbolic inputs.
 #[formula_doc]
 pub fn next_error(params: &SensorParams, current_error: f64, innovation: f64) -> f64 {
     params.alpha1 * current_error + innovation
 }
 
-/// The raw pre-clip reading for a given error term:
-/// `gain * interstitial + e`. Pure, ditto.
+/// The raw pre-clip reading for a given error term. Pure, ditto.
 #[formula_doc]
 pub fn gain_signal(params: &SensorParams, interstitial_mmol_per_l: f64, error: f64) -> f64 {
     params.calibration_gain * interstitial_mmol_per_l + error
@@ -144,7 +144,12 @@ mod tests {
             / (n - 1) as f64;
         let lag1 = cov / var;
         // 20k samples, sampling error ~ sqrt((1-alpha1^2)/n) < 0.02.
-        assert!((lag1 - alpha1).abs() < 0.05, "lag-1 acf {} vs {}", lag1, alpha1);
+        assert!(
+            (lag1 - alpha1).abs() < 0.05,
+            "lag-1 acf {} vs {}",
+            lag1,
+            alpha1
+        );
     }
 
     #[test]

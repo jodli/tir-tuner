@@ -6,11 +6,9 @@
 //! proportional controller, and the section 5.1 NMPC dose selector.
 //!
 //! The dose selector implements the published formulation (Hovorka et
-//! al 2004, eq 9):
-//!
-//! `min over 0 <= u(t+1) .. u(t+N) <= u_max
-//!     sum_{i=1..N} (g_IG(t+i) - w(t+i))^2
-//!   + (1/k_agr) sum_{i=1..N} ((u(t+i) - u(t+i-1)) / K_u)^2`
+//! al 2004, eq 9): the sum over the horizon of the squared deviation of
+//! the predicted glucose from the targeting trajectory, plus the
+//! `k_agr`-weighted squared rate change.
 //!
 //! `K_u = NMPC_EFFORT_UNIT_U_PER_H` is a reference delivery step that
 //! normalizes the effort term to the scale of the glucose term (see the
@@ -31,8 +29,9 @@ use crate::{
 };
 use document_formulas::formula_doc;
 
-/// Resolution of the NMPC candidate grid: candidate rates
-/// `k / NMPC_GRID_STEPS * u_max` for `k in 0..=NMPC_GRID_STEPS`.
+/// Resolution of the NMPC candidate rate grid: the grid holds
+/// `NMPC_GRID_STEPS + 1` candidate rates including the zero rate; see
+/// [`nmpc_grid_rate`].
 pub const NMPC_GRID_STEPS: usize = 6;
 
 /// Number of candidate rates on the NMPC grid
@@ -75,10 +74,9 @@ pub const TRAJECTORY_RISE_HALFTIME_MIN: f64 = 15.0;
 /// the 4h horizon, while a rate change around the operating point is a
 /// few tenths of a U/h, so the squared effort sum stays about two orders
 /// below the glucose sum for any reasonable k_agr. Measuring the rate
-/// change in reference steps `(u_j - u_{j-1}) / NMPC_EFFORT_UNIT_U_PER_H`
-/// brings the two sums to a comparable scale, which is what makes k_agr
-/// actually balance adherence against rate variation as the paper
-/// intends.
+/// change in reference steps of [`NMPC_EFFORT_UNIT_U_PER_H`] brings the
+/// two sums to a comparable scale, which is what makes k_agr actually
+/// balance adherence against rate variation as the paper intends.
 ///
 /// The value is the delivery step that moves this subject's glucose by
 /// about 1 mmol/L over the 4h prediction horizon, from the measured
@@ -197,11 +195,11 @@ pub fn moving_target_trajectory(y_start: f64, target: f64, n: usize, step_min: f
 }
 
 /// Contribution of one horizon step to the section 5.1 cost
-/// (Hovorka et al. 2004, eq 9):
+/// (Hovorka et al. 2004, eq 9): the squared deviation of the predicted
+/// glucose from the moving target trajectory, plus the squared rate
+/// change weighted by `1/k_agr`.
 ///
-/// `(g_IG(t+j) - w(t+j))^2 + (1/k_agr) * ((u(t+j) - u(t+j-1)) / K_u)^2`
-///
-/// where `g_ig` is the interstitial glucose predicted after advancing the
+/// `g_ig` is the interstitial glucose predicted after advancing the
 /// model one step under rate `u_j`. The effort term prices the change
 /// against the previous rate, normalized by the reference delivery step
 /// `K_u = NMPC_EFFORT_UNIT_U_PER_H` so both terms share a magnitude and
@@ -226,14 +224,10 @@ pub fn nmpc_step_cost(g_ig: f64, u_j: f64, w_j: f64, prev_rate: f64, k_agr: f64)
 }
 
 /// NMPC cost of a candidate rate sequence `u` against the target
-/// trajectory `w`, section 5.1:
-///
-/// `J(u) = sum_{j=1..N} (g_IG(t+j) - w(t+j))^2
-///         + (1/k_agr) sum_{j=1..N} ((u(t+j) - u(t+j-1)) / K_u)^2`
-///
-/// with `u[-1] = u_prev`, the rate infused over the previous control
-/// period. This is the sum of [`nmpc_step_cost`] over the horizon, rolling
-/// the model forward one `step_min` at a time under each rate.
+/// trajectory `w`, section 5.1: the sum of [`nmpc_step_cost`] over the
+/// horizon, rolling the model forward one `step_min` at a time under
+/// each rate, with `u[-1] = u_prev`, the rate infused over the previous
+/// control period.
 #[formula_doc]
 pub fn nmpc_sequence_cost(
     params: &HovorkaParams,
@@ -290,11 +284,10 @@ pub fn best_grid_candidate_index(costs: &[f64; NMPC_GRID_POINTS]) -> usize {
     best_index
 }
 
-/// The `k`-th candidate rate of the constant-rate grid: the linear sample
-/// `u_max * (k / NMPC_GRID_STEPS)` that the grid init of the section 5.1
-/// solver sweeps (`k = 0..=NMPC_GRID_STEPS`). Split out of
-/// [`nmpc_grid_dose`] so the crate can render the sample: the extractor
-/// does not descend into the loop.
+/// The `k`-th candidate rate of the constant-rate grid that the grid
+/// init of the section 5.1 solver sweeps (`k = 0..=NMPC_GRID_STEPS`).
+/// Split out of [`nmpc_grid_dose`] so the crate can render the sample:
+/// the extractor does not descend into the loop.
 #[formula_doc]
 #[allow(clippy::let_and_return)] // keep the assigned name as the formula symbol
 pub fn nmpc_grid_rate(k: usize, u_max: f64) -> f64 {
@@ -303,8 +296,7 @@ pub fn nmpc_grid_rate(k: usize, u_max: f64) -> f64 {
 }
 
 /// Constant-rate NMPC init: the argument of the minimum of the section
-/// 5.1 cost over the candidate grid
-/// `{ k / NMPC_GRID_STEPS * u_max : k = 0..=N }`, where the glucose
+/// 5.1 cost over the constant-rate candidate grid, where the glucose
 /// term is the summed squared deviation over the `w` trajectory rolled
 /// out at `step_min` resolution under the candidate rate. This seeds the
 /// sequence solver; the Kani suite proves the candidate rates stay in
@@ -414,7 +406,17 @@ pub fn nmpc_sequence_dose(
     horizon_min: f64,
     step_min: f64,
 ) -> f64 {
-    nmpc_sequence(params, state, y_meas, target, k_agr, u_max, u_prev, horizon_min, step_min)[0]
+    nmpc_sequence(
+        params,
+        state,
+        y_meas,
+        target,
+        k_agr,
+        u_max,
+        u_prev,
+        horizon_min,
+        step_min,
+    )[0]
 }
 
 /// True when a CGM reading triggers the mandatory insulin suspension.
@@ -689,15 +691,34 @@ mod tests {
         let dose_low = nmpc_grid_dose(&params, state, &w, u_prev, u_max, 0.5, step_min);
         let dose_high = nmpc_grid_dose(&params, state, &w, u_prev, u_max, 40.0, step_min);
         let refined_low = nmpc_sequence_dose(
-            &params, state, g, TARGET_GLUCOSE_MMOL_L, 0.5, u_max, u_prev, 240.0, step_min,
+            &params,
+            state,
+            g,
+            TARGET_GLUCOSE_MMOL_L,
+            0.5,
+            u_max,
+            u_prev,
+            240.0,
+            step_min,
         );
         let refined_high = nmpc_sequence_dose(
-            &params, state, g, TARGET_GLUCOSE_MMOL_L, 40.0, u_max, u_prev, 240.0, step_min,
+            &params,
+            state,
+            g,
+            TARGET_GLUCOSE_MMOL_L,
+            40.0,
+            u_max,
+            u_prev,
+            240.0,
+            step_min,
         );
 
         // More aggressive k_agr must pull harder: the returned dose
         // is strictly larger, and both stay within the delivery cap.
-        assert!(dose_high > dose_low, "grid dose flat: {dose_low} -> {dose_high}");
+        assert!(
+            dose_high > dose_low,
+            "grid dose flat: {dose_low} -> {dose_high}"
+        );
         assert!(
             refined_high > refined_low,
             "refined dose flat: {refined_low} -> {refined_high}"
