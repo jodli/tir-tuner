@@ -36,17 +36,17 @@
 //! off the loop degenerates to the delivered basal requirement, which is
 //! the open-loop control arm for comparisons.
 
-use tir_tuner_aps::controller::{is_hypoglycemic, nmpc_sequence_dose, NMPC_EFFORT_UNIT_U_PER_H};
-use tir_tuner_aps::hovorka::{HovorkaParams, HovorkaState};
 use tir_tuner_aps::TARGET_GLUCOSE_MMOL_L;
+use tir_tuner_aps::controller::{NMPC_EFFORT_UNIT_U_PER_H, is_hypoglycemic, nmpc_sequence_dose};
+use tir_tuner_aps::hovorka::{HovorkaParams, HovorkaState};
 use tir_tuner_body::derivative::BodyInputs;
-use tir_tuner_body::solver::{admit_state, step, with_basal_glucose, DT_MIN};
+use tir_tuner_body::solver::{DT_MIN, admit_state, step, with_basal_glucose};
 use tir_tuner_body::subject::VirtualSubject;
 use tir_tuner_cgm::device::{CgmSensor, SensorParams};
 
 use tir_tuner_common::random::SeededRng;
-use tir_tuner_common::units::mg_per_dl_to_mmol_per_l;
 use tir_tuner_common::units::MU_PER_UNIT;
+use tir_tuner_common::units::mg_per_dl_to_mmol_per_l;
 
 /// Controller sampling period in minutes: matches the CGM cadence and
 /// the aps controller's per-cycle update (Hovorka et al 2004).
@@ -90,7 +90,8 @@ pub const CONTROLLER_ESTIMATE_SMOOTHING: f64 = 0.5;
 /// terminal-node formulation: it prices the whole predicted trajectory,
 /// so it cuts corrections earlier and leaves a few percent of post-meal
 /// highs instead of chasing the spikes into lows.
-pub const CONTROLLER_KAGR_DEFAULT: f64 = 5.0 / (NMPC_EFFORT_UNIT_U_PER_H * NMPC_EFFORT_UNIT_U_PER_H);
+pub const CONTROLLER_KAGR_DEFAULT: f64 =
+    5.0 / (NMPC_EFFORT_UNIT_U_PER_H * NMPC_EFFORT_UNIT_U_PER_H);
 
 /// Number of one-minute steps used to integrate the belief model over
 /// one control period (the aps bolus convention is a per-minute influx).
@@ -143,10 +144,7 @@ pub struct SimConfig {
 impl Default for SimConfig {
     fn default() -> Self {
         Self {
-            subject: with_basal_glucose(
-                &VirtualSubject::population_mean(),
-                TARGET_GLUCOSE_MMOL_L,
-            ),
+            subject: with_basal_glucose(&VirtualSubject::population_mean(), TARGET_GLUCOSE_MMOL_L),
             admit_glucose_mg_per_dl: 100.0,
             duration_hours: 12.0,
             meals: Vec::new(),
@@ -431,9 +429,7 @@ mod tests {
     fn belief_params_match_subject_basal_insulin() {
         let subject = VirtualSubject::population_mean();
         let params = controller_model(&subject);
-        assert!(
-            (params.basal_insulin_conc() - subject.basal_insulin_concentration()).abs() < 1e-9
-        );
+        assert!((params.basal_insulin_conc() - subject.basal_insulin_concentration()).abs() < 1e-9);
     }
 
     #[test]
@@ -552,8 +548,16 @@ mod tests {
         cfg.max_delivery_u_per_h = 20.0;
         cfg.announce_meals = false;
         cfg.meals = vec![
-            Meal { start_min: 300.0, carbs_g: 60.0, duration_min: 15.0 },
-            Meal { start_min: 700.0, carbs_g: 60.0, duration_min: 15.0 },
+            Meal {
+                start_min: 300.0,
+                carbs_g: 60.0,
+                duration_min: 15.0,
+            },
+            Meal {
+                start_min: 700.0,
+                carbs_g: 60.0,
+                duration_min: 15.0,
+            },
         ];
         let closed = simulate(&cfg);
         cfg.use_controller = false;
@@ -581,10 +585,26 @@ mod tests {
         cfg.admit_glucose_mg_per_dl = 140.0;
         cfg.max_delivery_u_per_h = 20.0;
         cfg.meals = vec![
-            Meal { start_min: 360.0, carbs_g: 60.0, duration_min: 15.0 },
-            Meal { start_min: 600.0, carbs_g: 50.0, duration_min: 15.0 },
-            Meal { start_min: 840.0, carbs_g: 70.0, duration_min: 15.0 },
-            Meal { start_min: 1140.0, carbs_g: 60.0, duration_min: 15.0 },
+            Meal {
+                start_min: 360.0,
+                carbs_g: 60.0,
+                duration_min: 15.0,
+            },
+            Meal {
+                start_min: 600.0,
+                carbs_g: 50.0,
+                duration_min: 15.0,
+            },
+            Meal {
+                start_min: 840.0,
+                carbs_g: 70.0,
+                duration_min: 15.0,
+            },
+            Meal {
+                start_min: 1140.0,
+                carbs_g: 60.0,
+                duration_min: 15.0,
+            },
         ];
         let trace = simulate(&cfg);
 
@@ -600,7 +620,10 @@ mod tests {
         // prediction held 40% TIR with 39% lows; the horizon-rolled
         // loop stays comfortably above both.
         assert!(tir >= 70.0, "tuned loop drifted: TIR {tir:.1}%");
-        assert!(low <= 6.0, "tuned loop over-corrects: {low:.1}% below range");
+        assert!(
+            low <= 6.0,
+            "tuned loop over-corrects: {low:.1}% below range"
+        );
     }
 
     #[test]
@@ -608,8 +631,16 @@ mod tests {
         let mut cfg = SimConfig::default();
         cfg.duration_hours = 24.0;
         cfg.meals = vec![
-            Meal { start_min: 300.0, carbs_g: 70.0, duration_min: 20.0 },
-            Meal { start_min: 700.0, carbs_g: 60.0, duration_min: 20.0 },
+            Meal {
+                start_min: 300.0,
+                carbs_g: 70.0,
+                duration_min: 20.0,
+            },
+            Meal {
+                start_min: 700.0,
+                carbs_g: 60.0,
+                duration_min: 20.0,
+            },
         ];
         let trace = simulate(&cfg);
 
@@ -639,7 +670,10 @@ mod tests {
             is_hypoglycemic(trace.reading_mmol_per_l[0]),
             "expected hypo at admit"
         );
-        assert_eq!(trace.delivered_u_per_h[0], 0.0, "pump must not deliver on hypo admit");
+        assert_eq!(
+            trace.delivered_u_per_h[0], 0.0,
+            "pump must not deliver on hypo admit"
+        );
 
         // Invariant over a long run with heavy carbohydrate: wherever the
         // reading breaks the cutoff, delivery must be exactly zero and the
@@ -647,7 +681,11 @@ mod tests {
         let mut cfg2 = SimConfig::default();
         cfg2.duration_hours = 24.0;
         cfg2.announce_meals = false;
-        cfg2.meals = vec![Meal { start_min: 60.0, carbs_g: 100.0, duration_min: 15.0 }];
+        cfg2.meals = vec![Meal {
+            start_min: 60.0,
+            carbs_g: 100.0,
+            duration_min: 15.0,
+        }];
         cfg2.max_delivery_u_per_h = 20.0;
         cfg2.pump_error_cv = 0.0;
         let trace2 = simulate(&cfg2);

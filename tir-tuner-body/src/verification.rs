@@ -15,7 +15,7 @@
 //! threshold are the blueprint section 3.2D forms of the Hovorka model
 //! (`[W04]`).
 
-use crate::derivative::{egp, f01c, gut_appearance, renal_excretion, BodyInputs};
+use crate::derivative::{BodyInputs, egp, f01c, gut_appearance, renal_excretion};
 use crate::solver::step;
 use crate::state::BodyState;
 use crate::subject::VirtualSubject;

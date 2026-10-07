@@ -87,14 +87,14 @@
 //! the largest NMPC slice kept here.
 
 use crate::controller::{
+    DosingMode, NMPC_GRID_POINTS, NMPC_GRID_STEPS, TRAJECTORY_MAX_OFFSET_MMOL_L,
     best_grid_candidate_index, compute_nmpc_dose, compute_nmpc_dose_mode, moving_target_trajectory,
-    nmpc_sequence_cost, DosingMode, NMPC_GRID_POINTS, NMPC_GRID_STEPS, TRAJECTORY_MAX_OFFSET_MMOL_L,
+    nmpc_sequence_cost,
 };
-use crate::hovorka::{egp, EGP_MAX_FOLD_OVER_BASAL, HovorkaParams, HovorkaState};
+use crate::hovorka::{EGP_MAX_FOLD_OVER_BASAL, HovorkaParams, HovorkaState, egp};
 use crate::imm::normalize_imm_probabilities;
 use crate::{
-    EASE_OFF_TARGET_MMOL_L, HARD_HYPO_CUTOFF_MMOL_L, TARGET_GLUCOSE_MMOL_L,
-    TARGET_RANGE_MAX_MMOL_L,
+    EASE_OFF_TARGET_MMOL_L, HARD_HYPO_CUTOFF_MMOL_L, TARGET_GLUCOSE_MMOL_L, TARGET_RANGE_MAX_MMOL_L,
 };
 
 /// Bounds used by `verify_nmpc_cost_finite_nonneg` for the symbolic
@@ -335,7 +335,10 @@ pub fn verify_moving_target_trajectory_decline_bounded() {
         kani::assert(!w[i].is_infinite(), "trajectory is never infinite");
         kani::assert(w[i] >= target, "trajectory never undershoots the target");
         if i > 0 {
-            kani::assert(w[i] <= w[i - 1], "decline band is monotone toward the target");
+            kani::assert(
+                w[i] <= w[i - 1],
+                "decline band is monotone toward the target",
+            );
         }
         i += 1;
     }

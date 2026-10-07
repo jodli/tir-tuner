@@ -15,7 +15,8 @@ use std::error::Error;
 use std::fmt;
 
 static CGM_HEADER: &str = "Zeitstempel,CGM-Glukosewert (mg/dl)";
-static BOLUS_HEADER: &str = "Zeitstempel,Insulin-Typ,Blutzuckereingabe (mg/dl),Kohlenhydrataufnahme (g)";
+static BOLUS_HEADER: &str =
+    "Zeitstempel,Insulin-Typ,Blutzuckereingabe (mg/dl),Kohlenhydrataufnahme (g)";
 
 /// One CGM sample.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -58,7 +59,11 @@ fn split_row(row: &str) -> Vec<String> {
 /// surrounding pair of double quotes.
 fn parse_german_decimal(s: &str) -> Option<f64> {
     let s = s.trim();
-    let s = s.strip_prefix('"').unwrap_or(s).strip_suffix('"').unwrap_or(s);
+    let s = s
+        .strip_prefix('"')
+        .unwrap_or(s)
+        .strip_suffix('"')
+        .unwrap_or(s);
     if s.is_empty() || s == "-" {
         return None;
     }
@@ -117,9 +122,14 @@ pub fn parse_cgm(contents: &str) -> Result<Vec<CgmPoint>, ParseError> {
         if fields.len() < 2 {
             continue;
         }
-        let t = parse_timestamp(&fields[0]).ok_or_else(|| ParseError::row(line_no, "timestamp", line))?;
-        let v = parse_german_decimal(&fields[1]).ok_or_else(|| ParseError::row(line_no, "glucose", line))?;
-        out.push(CgmPoint { t_min: t, mg_per_dl: v });
+        let t = parse_timestamp(&fields[0])
+            .ok_or_else(|| ParseError::row(line_no, "timestamp", line))?;
+        let v = parse_german_decimal(&fields[1])
+            .ok_or_else(|| ParseError::row(line_no, "glucose", line))?;
+        out.push(CgmPoint {
+            t_min: t,
+            mg_per_dl: v,
+        });
     }
     out.sort_by_key(|p| p.t_min);
     Ok(out)
@@ -144,12 +154,16 @@ pub fn parse_meals(contents: &str) -> Result<Vec<MealEvent>, ParseError> {
         if fields.len() < 4 {
             continue;
         }
-        let t = parse_timestamp(&fields[0]).ok_or_else(|| ParseError::row(line_no, "timestamp", line))?;
+        let t = parse_timestamp(&fields[0])
+            .ok_or_else(|| ParseError::row(line_no, "timestamp", line))?;
         // Carrier column: Kohlenhydrataufnahme (g). Zero/empty means no
         // meal bolus; skip those (a bolus without carbs is corrective).
         if let Some(carbs) = parse_german_decimal(&fields[3]) {
             if carbs > 0.0 {
-                out.push(MealEvent { t_min: t, carbs_g: carbs });
+                out.push(MealEvent {
+                    t_min: t,
+                    carbs_g: carbs,
+                });
             }
         }
     }
@@ -170,13 +184,21 @@ pub struct ParseError {
 
 impl ParseError {
     fn row(line: usize, field: &'static str, row: &str) -> Self {
-        Self { line, field, row: row.to_string() }
+        Self {
+            line,
+            field,
+            row: row.to_string(),
+        }
     }
 }
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "line {}: could not parse {} in {:?}", self.line, self.field, self.row)
+        write!(
+            f,
+            "line {}: could not parse {} in {:?}",
+            self.line, self.field, self.row
+        )
     }
 }
 
@@ -241,6 +263,10 @@ Zeitstempel,Insulin-Typ,Blutzuckereingabe (mg/dl),Kohlenhydrataufnahme (g),Kohle
     #[test]
     fn empty_input_gives_empty_result() {
         assert!(parse_cgm("").unwrap().is_empty());
-        assert!(parse_meals("Name:REDACTED,whatever\nZeitstempel,a,b\n").unwrap().is_empty());
+        assert!(
+            parse_meals("Name:REDACTED,whatever\nZeitstempel,a,b\n")
+                .unwrap()
+                .is_empty()
+        );
     }
 }

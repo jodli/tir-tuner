@@ -3,17 +3,15 @@
 //! the closed-loop pull-down at a high admit. Run:
 //! `cargo run -p tir-tuner-cli --example kagr_sweep`
 
-use tir_tuner_aps::controller::{
-    moving_target_trajectory, nmpc_constant_cost, nmpc_grid_dose, nmpc_sequence_cost,
-    nmpc_sequence_dose, nmpc_sequence,
-};
 use tir_tuner_aps::TARGET_GLUCOSE_MMOL_L;
-use tir_tuner_cli::engine::{
-    belief_at_glucose, controller_model, simulate, Meal, SimConfig,
+use tir_tuner_aps::controller::{
+    moving_target_trajectory, nmpc_constant_cost, nmpc_grid_dose, nmpc_sequence,
+    nmpc_sequence_cost, nmpc_sequence_dose,
 };
+use tir_tuner_cli::engine::{Meal, SimConfig, belief_at_glucose, controller_model, simulate};
 use tir_tuner_common::metrics::TIME_IN_RANGE_MIN_MMOL_L;
-use tir_tuner_common::units::mg_per_dl_to_mmol_per_l;
 use tir_tuner_common::units::MU_PER_UNIT;
+use tir_tuner_common::units::mg_per_dl_to_mmol_per_l;
 
 fn metrics(trace: &tir_tuner_cli::engine::SimTrace) -> (f64, f64, f64) {
     let n = trace.reading_mmol_per_l.len() as f64;
@@ -83,25 +81,45 @@ fn main() {
         }
         println!(
             "{label} basal-step profile: {:?}",
-            profile.iter().map(|v| format!("{v:.2}")).collect::<Vec<_>>().join(" ")
+            profile
+                .iter()
+                .map(|v| format!("{v:.2}"))
+                .collect::<Vec<_>>()
+                .join(" ")
         );
     }
 
     let rest_belief = belief_at_glucose(&params, &subject, TARGET_GLUCOSE_MMOL_L);
-    for (label, u) in [("basal", subject.bir_u_per_h), ("+0.5", subject.bir_u_per_h + 0.5), ("+1.0", subject.bir_u_per_h + 1.0)] {
+    for (label, u) in [
+        ("basal", subject.bir_u_per_h),
+        ("+0.5", subject.bir_u_per_h + 0.5),
+        ("+1.0", subject.bir_u_per_h + 1.0),
+    ] {
         let mut s = rest_belief;
         let mut profile = Vec::new();
         for _ in 0..16 {
             s = s.step(&params, u, 0.0, 0.0, 15.0);
             profile.push(s.interstitial_glucose(&params));
         }
-        println!("belief rest 5.8, u={label}: {:?}", profile.iter().map(|v| format!("{v:.2}")).collect::<Vec<_>>().join(" "));
+        println!(
+            "belief rest 5.8, u={label}: {:?}",
+            profile
+                .iter()
+                .map(|v| format!("{v:.2}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
     }
 
     // Scan the belief's s_id, re-resting it on the body's resting glucose
     // (9.58), to see whether any sensitivity matches the body's +0.5
     // step response or the crash is structural.
-    for (s_scale, label) in [(0.30, "0.30x"), (0.50, "0.50x"), (0.70, "0.70x"), (1.00, "1.00x")] {
+    for (s_scale, label) in [
+        (0.30, "0.30x"),
+        (0.50, "0.50x"),
+        (0.70, "0.70x"),
+        (1.00, "1.00x"),
+    ] {
         let mut p = params;
         p.s_id = params.s_id * s_scale;
         let mut s = belief_at_glucose(&p, &subject, 9.58);
@@ -117,7 +135,13 @@ fn main() {
         }
         println!(
             "belief s_id {label} rest {rest:.2} then +0.5 8h: {}",
-            profile.iter().enumerate().filter(|(i, _)| i % 4 == 3).map(|(_, v)| format!("{v:.2}")).collect::<Vec<_>>().join(" ")
+            profile
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| i % 4 == 3)
+                .map(|(_, v)| format!("{v:.2}"))
+                .collect::<Vec<_>>()
+                .join(" ")
         );
     }
 
@@ -165,7 +189,10 @@ fn main() {
         s = tir_tuner_body::solver::step(&subject, &s, &inputs_base, dt);
     }
     println!("body settle from 140 baseline: {:.2}", s.c);
-    for (label, rate) in [("basal+0.5", subject.bir_u_per_h + 0.5), ("basal+1.0", subject.bir_u_per_h + 1.0)] {
+    for (label, rate) in [
+        ("basal+0.5", subject.bir_u_per_h + 0.5),
+        ("basal+1.0", subject.bir_u_per_h + 1.0),
+    ] {
         let mut s2 = s;
         let inputs = tir_tuner_body::derivative::BodyInputs {
             u_basal_mu_per_min: rate / 60.0 * MU_PER_UNIT,
@@ -187,7 +214,11 @@ fn main() {
     cfg.announce_meals = false;
     cfg.pump_error_cv = 0.0;
     cfg.max_delivery_u_per_h = 20.0;
-    cfg.meals = vec![Meal { start_min: 60.0, carbs_g: 60.0, duration_min: 15.0 }];
+    cfg.meals = vec![Meal {
+        start_min: 60.0,
+        carbs_g: 60.0,
+        duration_min: 15.0,
+    }];
     let t = simulate(&cfg);
     for (i, &g) in t.interstitial_mmol_per_l.iter().enumerate() {
         if i % 16 == 0 {
@@ -208,14 +239,14 @@ fn main() {
     }
     println!(
         "admit-10 with reanchor: {:?}",
-        profile.iter().map(|v| format!("{v:.2}")).collect::<Vec<_>>().join(" ")
+        profile
+            .iter()
+            .map(|v| format!("{v:.2}"))
+            .collect::<Vec<_>>()
+            .join(" ")
     );
 
-    let state = belief_at_glucose(
-        &params,
-        &subject,
-        mg_per_dl_to_mmol_per_l(180.0),
-    );
+    let state = belief_at_glucose(&params, &subject, mg_per_dl_to_mmol_per_l(180.0));
     for k_agr in [0.5, 1.0, 5.0, 40.0] {
         let dose = nmpc_sequence_dose(
             &params,
@@ -231,11 +262,23 @@ fn main() {
         println!("engine-belief k_agr {k_agr}: dose {dose:.3}");
     }
 
-    let w = moving_target_trajectory(mg_per_dl_to_mmol_per_l(180.0), TARGET_GLUCOSE_MMOL_L, 16, 15.0);
+    let w = moving_target_trajectory(
+        mg_per_dl_to_mmol_per_l(180.0),
+        TARGET_GLUCOSE_MMOL_L,
+        16,
+        15.0,
+    );
     let init = nmpc_grid_dose(&params, state, &w, subject.bir_u_per_h, 20.0, 5.0, 15.0);
     let seq = nmpc_sequence(
-        &params, state, mg_per_dl_to_mmol_per_l(180.0), TARGET_GLUCOSE_MMOL_L, 5.0, 20.0,
-        subject.bir_u_per_h, 240.0, 15.0,
+        &params,
+        state,
+        mg_per_dl_to_mmol_per_l(180.0),
+        TARGET_GLUCOSE_MMOL_L,
+        5.0,
+        20.0,
+        subject.bir_u_per_h,
+        240.0,
+        15.0,
     );
     let seq_cost = nmpc_sequence_cost(&params, state, &seq, &w, subject.bir_u_per_h, 5.0, 15.0);
     let init_const = nmpc_constant_cost(&params, state, init, &w, subject.bir_u_per_h, 5.0, 15.0);
@@ -246,17 +289,26 @@ fn main() {
         seq.fill(u);
         let c = nmpc_sequence_cost(&params, state, &seq, &w, subject.bir_u_per_h, 5.0, 15.0);
 
-    if (u - 1.5).abs() < 1e-9 || (u - 0.0).abs() < 1e-9 {
-        let mut s = state;
-        let mut profile = Vec::new();
-        for &r in &seq {
-            s = s.step(&params, r, 0.0, 0.0, 15.0);
-            profile.push(s.interstitial_glucose(&params));
+        if (u - 1.5).abs() < 1e-9 || (u - 0.0).abs() < 1e-9 {
+            let mut s = state;
+            let mut profile = Vec::new();
+            for &r in &seq {
+                s = s.step(&params, r, 0.0, 0.0, 15.0);
+                profile.push(s.interstitial_glucose(&params));
+            }
+            println!(
+                "u {u:>4}: cost {c:.2} predicted-start {:.2} .. end {:.2}: {:?}",
+                profile[0],
+                profile[15],
+                profile
+                    .iter()
+                    .enumerate()
+                    .map(|(i, v)| format!("{i}:{v:.1}"))
+                    .collect::<String>()
+            );
+        } else {
+            println!("u {u:>4}: cost {c:.2}");
         }
-        println!("u {u:>4}: cost {c:.2} predicted-start {:.2} .. end {:.2}: {:?}", profile[0], profile[15], profile.iter().enumerate().map(|(i, v)| format!("{i}:{v:.1}")).collect::<String>());
-    } else {
-        println!("u {u:>4}: cost {c:.2}");
-    }
     }
 
     for k_agr in [0.5, 1.0, 2.0, 3.0, 5.0, 8.0, 12.0, 20.0, 40.0] {
@@ -266,10 +318,26 @@ fn main() {
         cfg.admit_glucose_mg_per_dl = 140.0;
         cfg.max_delivery_u_per_h = 20.0;
         cfg.meals = vec![
-            Meal { start_min: 360.0, carbs_g: 60.0, duration_min: 15.0 },
-            Meal { start_min: 600.0, carbs_g: 50.0, duration_min: 15.0 },
-            Meal { start_min: 840.0, carbs_g: 70.0, duration_min: 15.0 },
-            Meal { start_min: 1140.0, carbs_g: 60.0, duration_min: 15.0 },
+            Meal {
+                start_min: 360.0,
+                carbs_g: 60.0,
+                duration_min: 15.0,
+            },
+            Meal {
+                start_min: 600.0,
+                carbs_g: 50.0,
+                duration_min: 15.0,
+            },
+            Meal {
+                start_min: 840.0,
+                carbs_g: 70.0,
+                duration_min: 15.0,
+            },
+            Meal {
+                start_min: 1140.0,
+                carbs_g: 60.0,
+                duration_min: 15.0,
+            },
         ];
         let trace = simulate(&cfg);
         let (tir, low, mean) = metrics(&trace);
@@ -300,7 +368,8 @@ fn main() {
             .iter()
             .cloned()
             .fold(0.0f64, f64::max);
-        let mean_delivery = trace.delivered_u_per_h.iter().sum::<f64>() / trace.delivered_u_per_h.len() as f64;
+        let mean_delivery =
+            trace.delivered_u_per_h.iter().sum::<f64>() / trace.delivered_u_per_h.len() as f64;
         println!(
             "k_agr {k_agr:>5}: descent {first:.2} -> {last:.2}  peak {peak:.2}  mean-del {mean_delivery:.2}"
         );

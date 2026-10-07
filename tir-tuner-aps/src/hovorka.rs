@@ -179,7 +179,7 @@ pub struct HovorkaState {
 
 impl HovorkaState {
     /// Instantaneous subcutaneous insulin concentration `i(t)` (mU/L),
-/// consistent with the mU mass state and with `BIC`.
+    /// consistent with the mU mass state and with `BIC`.
     pub fn insulin_conc(&self, params: &HovorkaParams) -> f64 {
         self.i2 / (params.t_max_i * params.mcr_i * params.weight_kg)
     }
@@ -327,28 +327,76 @@ mod tests {
                 for &meal in &meal_vals {
                     for &dt in &dt_vals {
                         for &v in &i_vals {
-                            check(HovorkaState { i1: v, ..mid_state }, u_basal, u_bolus, meal, dt);
-                            check(HovorkaState { i2: v, ..mid_state }, u_basal, u_bolus, meal, dt);
-                        }
-                        for &v in &a_vals {
-                            check(HovorkaState { a1: v, ..mid_state }, u_basal, u_bolus, meal, dt);
-                            check(HovorkaState { a2: v, ..mid_state }, u_basal, u_bolus, meal, dt);
-                        }
-                        for &v in &q_vals {
-                            check(HovorkaState { q1: v, ..mid_state }, u_basal, u_bolus, meal, dt);
-                            check(HovorkaState { q2: v, ..mid_state }, u_basal, u_bolus, meal, dt);
-                            check(HovorkaState { q3: v, ..mid_state }, u_basal, u_bolus, meal, dt);
-                        }
-                        for &v in &r_vals {
                             check(
-                                HovorkaState { r_d: v, ..mid_state },
+                                HovorkaState { i1: v, ..mid_state },
                                 u_basal,
                                 u_bolus,
                                 meal,
                                 dt,
                             );
                             check(
-                                HovorkaState { r_e: v, ..mid_state },
+                                HovorkaState { i2: v, ..mid_state },
+                                u_basal,
+                                u_bolus,
+                                meal,
+                                dt,
+                            );
+                        }
+                        for &v in &a_vals {
+                            check(
+                                HovorkaState { a1: v, ..mid_state },
+                                u_basal,
+                                u_bolus,
+                                meal,
+                                dt,
+                            );
+                            check(
+                                HovorkaState { a2: v, ..mid_state },
+                                u_basal,
+                                u_bolus,
+                                meal,
+                                dt,
+                            );
+                        }
+                        for &v in &q_vals {
+                            check(
+                                HovorkaState { q1: v, ..mid_state },
+                                u_basal,
+                                u_bolus,
+                                meal,
+                                dt,
+                            );
+                            check(
+                                HovorkaState { q2: v, ..mid_state },
+                                u_basal,
+                                u_bolus,
+                                meal,
+                                dt,
+                            );
+                            check(
+                                HovorkaState { q3: v, ..mid_state },
+                                u_basal,
+                                u_bolus,
+                                meal,
+                                dt,
+                            );
+                        }
+                        for &v in &r_vals {
+                            check(
+                                HovorkaState {
+                                    r_d: v,
+                                    ..mid_state
+                                },
+                                u_basal,
+                                u_bolus,
+                                meal,
+                                dt,
+                            );
+                            check(
+                                HovorkaState {
+                                    r_e: v,
+                                    ..mid_state
+                                },
                                 u_basal,
                                 u_bolus,
                                 meal,

@@ -141,7 +141,12 @@ mod tests {
             / (n - 1) as f64;
         let lag1 = cov / var;
         // 20k samples, sampling error ~ sqrt((1-alpha1^2)/n) < 0.02.
-        assert!((lag1 - alpha1).abs() < 0.05, "lag-1 acf {} vs {}", lag1, alpha1);
+        assert!(
+            (lag1 - alpha1).abs() < 0.05,
+            "lag-1 acf {} vs {}",
+            lag1,
+            alpha1
+        );
     }
 
     #[test]

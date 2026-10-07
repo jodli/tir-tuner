@@ -1,10 +1,8 @@
 use tir_tuner_body::solver::with_basal_glucose;
-use tir_tuner_cli::engine::{simulate, Meal, SimConfig};
-use tir_tuner_ingest::glooko;
-use tir_tuner_common::metrics::{
-    coefficient_of_variation, mean_glucose, time_in_range_pct,
-};
+use tir_tuner_cli::engine::{Meal, SimConfig, simulate};
+use tir_tuner_common::metrics::{coefficient_of_variation, mean_glucose, time_in_range_pct};
 use tir_tuner_common::units::mg_per_dl_to_mmol_per_l;
+use tir_tuner_ingest::glooko;
 
 use clap::Parser;
 use std::path::{Path, PathBuf};
@@ -60,7 +58,10 @@ fn simulate_export(dir: &Path, kagr: f64) -> Result<(), Box<dyn std::error::Erro
 
     let cgm_text = std::fs::read_to_string(&cgm_path)?;
     let cgm = glooko::parse_cgm(&cgm_text)?;
-    let real_mmol: Vec<f64> = cgm.iter().map(|p| mg_per_dl_to_mmol_per_l(p.mg_per_dl)).collect();
+    let real_mmol: Vec<f64> = cgm
+        .iter()
+        .map(|p| mg_per_dl_to_mmol_per_l(p.mg_per_dl))
+        .collect();
     println!(
         "real Glooko: {} samples, TIR {:.1}%, mean {:.2} mmol/L, CV {:.1}%",
         cgm.len(),
@@ -83,11 +84,21 @@ fn simulate_export(dir: &Path, kagr: f64) -> Result<(), Box<dyn std::error::Erro
                 duration_min: 15.0,
             });
         }
-        println!("meals from bolus export: {} ({} in-sim)", meals.len(), meals.iter().filter(|m| m.start_min >= 0.0 && m.start_min <= 24.0 * 60.0).count());
+        println!(
+            "meals from bolus export: {} ({} in-sim)",
+            meals.len(),
+            meals
+                .iter()
+                .filter(|m| m.start_min >= 0.0 && m.start_min <= 24.0 * 60.0)
+                .count()
+        );
     }
 
     // In-silico run over 24 hours starting at a representative admit.
-    let subject = with_basal_glucose(&tir_tuner_body::subject::VirtualSubject::population_mean(), 5.8);
+    let subject = with_basal_glucose(
+        &tir_tuner_body::subject::VirtualSubject::population_mean(),
+        5.8,
+    );
     let cfg = SimConfig {
         subject,
         admit_glucose_mg_per_dl: 140.0,

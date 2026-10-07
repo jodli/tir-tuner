@@ -359,7 +359,17 @@ pub fn nmpc_sequence_dose(
     horizon_min: f64,
     step_min: f64,
 ) -> f64 {
-    nmpc_sequence(params, state, y_meas, target, k_agr, u_max, u_prev, horizon_min, step_min)[0]
+    nmpc_sequence(
+        params,
+        state,
+        y_meas,
+        target,
+        k_agr,
+        u_max,
+        u_prev,
+        horizon_min,
+        step_min,
+    )[0]
 }
 
 /// True when a CGM reading triggers the mandatory insulin suspension.
@@ -634,15 +644,34 @@ mod tests {
         let dose_low = nmpc_grid_dose(&params, state, &w, u_prev, u_max, 0.5, step_min);
         let dose_high = nmpc_grid_dose(&params, state, &w, u_prev, u_max, 40.0, step_min);
         let refined_low = nmpc_sequence_dose(
-            &params, state, g, TARGET_GLUCOSE_MMOL_L, 0.5, u_max, u_prev, 240.0, step_min,
+            &params,
+            state,
+            g,
+            TARGET_GLUCOSE_MMOL_L,
+            0.5,
+            u_max,
+            u_prev,
+            240.0,
+            step_min,
         );
         let refined_high = nmpc_sequence_dose(
-            &params, state, g, TARGET_GLUCOSE_MMOL_L, 40.0, u_max, u_prev, 240.0, step_min,
+            &params,
+            state,
+            g,
+            TARGET_GLUCOSE_MMOL_L,
+            40.0,
+            u_max,
+            u_prev,
+            240.0,
+            step_min,
         );
 
         // More aggressive k_agr must pull harder: the returned dose
         // is strictly larger, and both stay within the delivery cap.
-        assert!(dose_high > dose_low, "grid dose flat: {dose_low} -> {dose_high}");
+        assert!(
+            dose_high > dose_low,
+            "grid dose flat: {dose_low} -> {dose_high}"
+        );
         assert!(
             refined_high > refined_low,
             "refined dose flat: {refined_low} -> {refined_high}"

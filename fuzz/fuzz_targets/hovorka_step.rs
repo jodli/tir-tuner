@@ -58,7 +58,8 @@ fuzz_target!(|input: Input| {
         bounded(input.u_bolus, 0.0, 5.0),
         bounded(input.meal, 0.0, 5.0),
         bounded(input.dt, 0.5, 3.0),
-    ) else {
+    )
+    else {
         return;
     };
 

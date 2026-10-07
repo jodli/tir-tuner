@@ -196,7 +196,10 @@ mod tests {
 
     #[test]
     fn population_mean_is_reproducible() {
-        assert_eq!(VirtualSubject::population_mean(), VirtualSubject::population_mean());
+        assert_eq!(
+            VirtualSubject::population_mean(),
+            VirtualSubject::population_mean()
+        );
     }
 
     #[test]

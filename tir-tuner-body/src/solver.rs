@@ -6,7 +6,7 @@
 //! the same primitive the aps crate proofs cover, so non-negativity and
 //! finiteness carry over here.
 
-use crate::derivative::{derivatives, BodyInputs};
+use crate::derivative::{BodyInputs, derivatives};
 use crate::state::BodyState;
 use crate::subject::VirtualSubject;
 use tir_tuner_common::euler::clamped_forward_euler;
@@ -165,7 +165,9 @@ mod tests {
                 meal_g_per_min: 0.0,
             };
             let d = derivatives(&subject, &state, &inputs);
-            for v in [d.s1, d.s2, d.i, d.x1, d.x2, d.x3, d.q1, d.q2, d.g1, d.g2, d.c] {
+            for v in [
+                d.s1, d.s2, d.i, d.x1, d.x2, d.x3, d.q1, d.q2, d.g1, d.g2, d.c,
+            ] {
                 assert!(v.abs() < 1e-6, "compartment derivative {} not at rest", v);
             }
             // The resting glucose is whatever balances production and
@@ -210,10 +212,12 @@ mod tests {
         }
         let g = state.plasma_glucose(&subject);
         assert!(g < 7.0, "glucose fell from 9.99 to {}", g);
-        let all_non_neg =
-            [state.s1, state.s2, state.i, state.x1, state.x2, state.x3, state.q1, state.q2, state.g1, state.g2, state.c]
-                .iter()
-                .all(|&v| v >= 0.0);
+        let all_non_neg = [
+            state.s1, state.s2, state.i, state.x1, state.x2, state.x3, state.q1, state.q2,
+            state.g1, state.g2, state.c,
+        ]
+        .iter()
+        .all(|&v| v >= 0.0);
         assert!(all_non_neg);
     }
 
@@ -237,7 +241,12 @@ mod tests {
             state = step(&subject, &state, inputs, DT_MIN);
             peak = peak.max(state.plasma_glucose(&subject));
         }
-        assert!(peak > baseline + 0.5, "meal peak {} over {}", peak, baseline);
+        assert!(
+            peak > baseline + 0.5,
+            "meal peak {} over {}",
+            peak,
+            baseline
+        );
     }
 
     proptest::proptest! {

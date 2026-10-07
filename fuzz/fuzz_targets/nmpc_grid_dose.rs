@@ -4,8 +4,8 @@ use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 
 use tir_tuner_aps::controller::{
-    best_grid_candidate_index, nmpc_constant_cost, nmpc_grid_dose, nmpc_sequence,
-    nmpc_sequence_cost, NMPC_GRID_POINTS, NMPC_GRID_STEPS,
+    NMPC_GRID_POINTS, NMPC_GRID_STEPS, best_grid_candidate_index, nmpc_constant_cost,
+    nmpc_grid_dose, nmpc_sequence, nmpc_sequence_cost,
 };
 use tir_tuner_aps::hovorka::{HovorkaParams, HovorkaState};
 
@@ -41,7 +41,19 @@ fn trajectory(n: usize, y_meas: f64, target: f64, _step_min: f64) -> Vec<f64> {
 }
 
 fuzz_target!(|input: Input| {
-    let (Some(q1), Some(q2), Some(q3), Some(r_d), Some(r_e), Some(y_meas), Some(target), Some(u_max), Some(u_prev), Some(k_agr), Some(step_min)) = (
+    let (
+        Some(q1),
+        Some(q2),
+        Some(q3),
+        Some(r_d),
+        Some(r_e),
+        Some(y_meas),
+        Some(target),
+        Some(u_max),
+        Some(u_prev),
+        Some(k_agr),
+        Some(step_min),
+    ) = (
         bounded(input.q1, 0.1, 30.0),
         bounded(input.q2, 0.1, 30.0),
         bounded(input.q3, 0.1, 30.0),
@@ -53,7 +65,8 @@ fuzz_target!(|input: Input| {
         bounded(input.u_prev, 0.0, 20.0),
         bounded(input.k_agr, 0.5, 50.0),
         bounded(input.step_min, 5.0, 30.0),
-    ) else {
+    )
+    else {
         return;
     };
 
@@ -75,7 +88,10 @@ fuzz_target!(|input: Input| {
     let w = trajectory(n, y_meas, target, step_min);
 
     let dose = nmpc_grid_dose(&params, state, &w, u_prev, u_max, k_agr, step_min);
-    assert!(dose >= 0.0 && dose <= u_max, "grid dose out of bounds: {dose}");
+    assert!(
+        dose >= 0.0 && dose <= u_max,
+        "grid dose out of bounds: {dose}"
+    );
 
     let mut rates = [0.0; NMPC_GRID_POINTS];
     let mut costs = [0.0; NMPC_GRID_POINTS];
@@ -83,7 +99,11 @@ fuzz_target!(|input: Input| {
         let u = u_max * (k as f64 / NMPC_GRID_STEPS as f64);
         rates[k] = u;
         costs[k] = nmpc_constant_cost(&params, state, u, &w, u_prev, k_agr, step_min);
-        assert!(costs[k].is_finite(), "grid cost is not finite: {}", costs[k]);
+        assert!(
+            costs[k].is_finite(),
+            "grid cost is not finite: {}",
+            costs[k]
+        );
         assert!(costs[k] >= 0.0, "grid cost is negative: {}", costs[k]);
     }
 
@@ -92,11 +112,24 @@ fuzz_target!(|input: Input| {
     let min = costs.iter().cloned().fold(f64::INFINITY, f64::min);
     assert_eq!(costs[best], min, "selected grid candidate is not minimal");
 
-    let seq = nmpc_sequence(&params, state, y_meas, target, k_agr, u_max, u_prev, n as f64 * step_min, step_min);
+    let seq = nmpc_sequence(
+        &params,
+        state,
+        y_meas,
+        target,
+        k_agr,
+        u_max,
+        u_prev,
+        n as f64 * step_min,
+        step_min,
+    );
     assert_eq!(seq.len(), n, "sequence length mismatch");
     for &u in &seq {
         assert!(u.is_finite(), "sequence rate not finite: {u}");
-        assert!((0.0..=u_max).contains(&u), "sequence rate out of bounds: {u}");
+        assert!(
+            (0.0..=u_max).contains(&u),
+            "sequence rate out of bounds: {u}"
+        );
     }
     let seq_cost = nmpc_sequence_cost(&params, state, &seq, &w, u_prev, k_agr, step_min);
     assert!(seq_cost.is_finite(), "sequence cost not finite: {seq_cost}");

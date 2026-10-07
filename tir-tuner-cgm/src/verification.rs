@@ -14,7 +14,7 @@
 //! `[F14]` and `[B08]`; the scenario noise uses
 //! `SENSOR_NOISE_SD_MMOL_L`, per `[W10]`.
 
-use super::device::{gain_signal, next_error, SensorParams};
+use super::device::{SensorParams, gain_signal, next_error};
 
 /// Upper bound on the noise standard deviation covered by the proofs.
 const NOISE_SD_MAX: f64 = 2.0;
@@ -76,7 +76,10 @@ pub fn verify_reported_glucose_is_clipped_at_zero() {
     let reported = raw.max(0.0);
 
     kani::assert(reported >= 0.0, "reported glucose is never negative");
-    kani::assert(!reported.is_nan() && !reported.is_infinite(), "reported glucose stays finite");
+    kani::assert(
+        !reported.is_nan() && !reported.is_infinite(),
+        "reported glucose stays finite",
+    );
 }
 
 /// Proof 3: with the device floor in force, the reported reading is the

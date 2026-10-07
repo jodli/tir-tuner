@@ -56,8 +56,8 @@ pub struct BodyDerivatives {
 /// `EGP0[1+x3]`.
 pub fn egp(subject: &VirtualSubject, x3: f64) -> f64 {
     let x3_basal = subject.basale_x3();
-    let uncapped = subject.egp0_mmol_per_kg_min
-        * ((x3_basal - x3) / 0.5 * std::f64::consts::LN_2).exp();
+    let uncapped =
+        subject.egp0_mmol_per_kg_min * ((x3_basal - x3) / 0.5 * std::f64::consts::LN_2).exp();
     uncapped.min(3.0 * subject.egp0_mmol_per_kg_min)
 }
 
@@ -120,15 +120,10 @@ pub fn derivatives(
     let ug = gut_appearance(subject, state.g2);
 
     // Glucose masses: accessible Q1, non-accessible Q2.
-    let q1 = egp(subject, state.x3)
-        + ug
-        - f01c(subject, g)
-        - state.x1 * state.q1
+    let q1 = egp(subject, state.x3) + ug - f01c(subject, g) - state.x1 * state.q1
         + subject.k12_per_min * state.q2
         - renal_excretion(subject, g);
-    let q2 = state.x1 * state.q1
-        - state.x2 * state.q2
-        - subject.k12_per_min * state.q2;
+    let q2 = state.x1 * state.q1 - state.x2 * state.q2 - subject.k12_per_min * state.q2;
 
     let c = interstitial_rate(subject, g, state.c);
 
