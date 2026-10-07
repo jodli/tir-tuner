@@ -14,6 +14,7 @@ tir-tuner-ingest = { path = "../tir-tuner-ingest" }
 tir-tuner-store = { path = "../tir-tuner-store" }
 tir-tuner-analysis = { path = "../tir-tuner-analysis" }
 tir-tuner-advisor = { path = "../tir-tuner-advisor" }
+clap = { version = "4.6.7", features = ["derive"] }
 
 [lints]
 workspace = true
