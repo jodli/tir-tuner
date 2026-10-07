@@ -91,7 +91,7 @@ mod tests {
 
     #[test]
     fn reading_clips_at_zero() {
-        let mut sensor = CgmSensor::new(SensorParams::default(), 1);
+        let sensor = CgmSensor::new(SensorParams::default(), 1);
         // Noise pulls below zero only if the error exceeds the glucose;
         // drive it far negative by feeding a large innovation sequence
         // and confirm the floor still holds.

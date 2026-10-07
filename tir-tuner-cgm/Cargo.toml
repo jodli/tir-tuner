@@ -1,9 +1,9 @@
 [package]
 name = "tir-tuner-cgm"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Sensor model turning interstitial glucose into a noise-corrupted CGM reading"
-license = "MIT OR Apache-2.0"
+license.workspace = true
 
 [lib]
 name = "tir_tuner_cgm"
@@ -14,5 +14,5 @@ tir-tuner-common = { path = "../tir-tuner-common" }
 [dev-dependencies]
 proptest = "1"
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+[lints]
+workspace = true

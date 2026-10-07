@@ -1,9 +1,9 @@
 [package]
 name = "tir-tuner-cli"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Time-in-range tuner CLI: replay Glooko data through the verified closed-loop stack"
-license = "MIT OR Apache-2.0"
+license.workspace = true
 
 [dependencies]
 tir-tuner-aps = { path = "../tir-tuner-aps" }
@@ -14,3 +14,6 @@ tir-tuner-ingest = { path = "../tir-tuner-ingest" }
 tir-tuner-store = { path = "../tir-tuner-store" }
 tir-tuner-analysis = { path = "../tir-tuner-analysis" }
 tir-tuner-advisor = { path = "../tir-tuner-advisor" }
+
+[lints]
+workspace = true

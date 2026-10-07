@@ -277,7 +277,7 @@ fn main() {
             .delivered_u_per_h
             .iter()
             .enumerate()
-            .filter(|(_, &r)| r > 1.6)
+            .filter(|&(_, &r)| r > 1.6)
             .map(|(i, &r)| format!("t={}min:{r:.2}", i * 15))
             .collect();
         println!(
