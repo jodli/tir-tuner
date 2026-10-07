@@ -1,6 +1,6 @@
 use tir_tuner_body::solver::with_basal_glucose;
 use tir_tuner_cli::engine::{simulate, Meal, SimConfig};
-use tir_tuner_cli::glooko;
+use tir_tuner_ingest::glooko;
 use tir_tuner_common::metrics::{
     coefficient_of_variation, mean_glucose, time_in_range_pct,
 };
@@ -13,14 +13,25 @@ fn main() {
     }
 }
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let ingest = std::env::args()
-        .nth(1)
-        .unwrap_or_else(|| "/Users/jan-olaf.becker/repos/personal/tir-tuner/ingest/2026-08-05".into());
-    let dir = std::path::Path::new(&ingest);
+const USAGE: &str = "usage: tir-tuner-cli <ingest|report|recommend|settings|simulate> [args]";
 
-    let kagr = std::env::args()
-        .nth(2)
+fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match args.first().map(String::as_str) {
+        Some(cmd @ ("ingest" | "report" | "recommend" | "settings")) => {
+            Err(format!("{cmd}: not implemented").into())
+        }
+        Some("simulate") => simulate_export(&args[1..]),
+        _ => Err(USAGE.into()),
+    }
+}
+
+/// `simulate <export-dir> [kagr]`: replays one Glooko export through the closed loop.
+fn simulate_export(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let dir = std::path::Path::new(args.first().ok_or("simulate: missing export dir")?);
+
+    let kagr = args
+        .get(1)
         .map(|s| s.parse::<f64>())
         .transpose()?
         .unwrap_or(tir_tuner_cli::engine::CONTROLLER_KAGR_DEFAULT);

@@ -1,0 +1,12 @@
+[package]
+name = "tir-tuner-advisor"
+version.workspace = true
+edition.workspace = true
+description = "Optional LLM reasoning over analysis results"
+license.workspace = true
+
+[dependencies]
+tir-tuner-analysis = { path = "../tir-tuner-analysis" }
+
+[lints]
+workspace = true

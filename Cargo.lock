@@ -265,6 +265,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "tir-tuner-advisor"
+version = "0.1.0"
+dependencies = [
+ "tir-tuner-analysis",
+]
+
+[[package]]
+name = "tir-tuner-analysis"
+version = "0.1.0"
+dependencies = [
+ "tir-tuner-common",
+ "tir-tuner-store",
+]
+
+[[package]]
 name = "tir-tuner-aps"
 version = "0.1.0"
 dependencies = [
@@ -292,10 +307,14 @@ dependencies = [
 name = "tir-tuner-cli"
 version = "0.1.0"
 dependencies = [
+ "tir-tuner-advisor",
+ "tir-tuner-analysis",
  "tir-tuner-aps",
  "tir-tuner-body",
  "tir-tuner-cgm",
  "tir-tuner-common",
+ "tir-tuner-ingest",
+ "tir-tuner-store",
 ]
 
 [[package]]
@@ -303,6 +322,17 @@ name = "tir-tuner-common"
 version = "0.1.0"
 dependencies = [
  "proptest",
+]
+
+[[package]]
+name = "tir-tuner-ingest"
+version = "0.1.0"
+
+[[package]]
+name = "tir-tuner-store"
+version = "0.1.0"
+dependencies = [
+ "tir-tuner-ingest",
 ]
 
 [[package]]

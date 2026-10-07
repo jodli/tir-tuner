@@ -1,0 +1,12 @@
+[package]
+name = "tir-tuner-store"
+version.workspace = true
+edition.workspace = true
+description = "Rolling event store for ingested Glooko data"
+license.workspace = true
+
+[dependencies]
+tir-tuner-ingest = { path = "../tir-tuner-ingest" }
+
+[lints]
+workspace = true

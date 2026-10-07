@@ -1,0 +1,11 @@
+[package]
+name = "tir-tuner-ingest"
+version.workspace = true
+edition.workspace = true
+description = "Glooko CSV export parser"
+license.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

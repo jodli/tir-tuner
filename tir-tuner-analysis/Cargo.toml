@@ -1,0 +1,13 @@
+[package]
+name = "tir-tuner-analysis"
+version.workspace = true
+edition.workspace = true
+description = "Deterministic CR/CF analysis over the store"
+license.workspace = true
+
+[dependencies]
+tir-tuner-common = { path = "../tir-tuner-common" }
+tir-tuner-store = { path = "../tir-tuner-store" }
+
+[lints]
+workspace = true

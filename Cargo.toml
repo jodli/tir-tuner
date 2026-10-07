@@ -1,3 +1,21 @@
 [workspace]
-members = ["tir-tuner-aps", "tir-tuner-cli", "tir-tuner-common", "tir-tuner-body", "tir-tuner-cgm"]
+members = [
+    "tir-tuner-advisor",
+    "tir-tuner-analysis",
+    "tir-tuner-aps",
+    "tir-tuner-body",
+    "tir-tuner-cgm",
+    "tir-tuner-cli",
+    "tir-tuner-common",
+    "tir-tuner-ingest",
+    "tir-tuner-store",
+]
 resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }

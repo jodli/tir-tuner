@@ -10,3 +10,7 @@ tir-tuner-aps = { path = "../tir-tuner-aps" }
 tir-tuner-body = { path = "../tir-tuner-body" }
 tir-tuner-cgm = { path = "../tir-tuner-cgm" }
 tir-tuner-common = { path = "../tir-tuner-common" }
+tir-tuner-ingest = { path = "../tir-tuner-ingest" }
+tir-tuner-store = { path = "../tir-tuner-store" }
+tir-tuner-analysis = { path = "../tir-tuner-analysis" }
+tir-tuner-advisor = { path = "../tir-tuner-advisor" }

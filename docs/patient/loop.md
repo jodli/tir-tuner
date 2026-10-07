@@ -4,7 +4,7 @@ lang: en
 alt: de/loop.html
 sources:
   - tir-tuner-cli/src/engine.rs
-  - tir-tuner-cli/src/glooko.rs
+  - tir-tuner-ingest/src/glooko.rs
   - tir-tuner-common/src/metrics.rs
 ---
 
