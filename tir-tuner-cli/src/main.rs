@@ -3,11 +3,21 @@ use tir_tuner_cli::engine::{Meal, SimConfig, simulate};
 use tir_tuner_common::metrics::{coefficient_of_variation, mean_glucose, time_in_range_pct};
 use tir_tuner_common::units::mg_per_dl_to_mmol_per_l;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use std::path::{Path, PathBuf};
+use tir_tuner_store::Store;
 
 #[derive(Parser)]
 #[command(about = "Tunes carb ratio and correction factor from Glooko exports")]
+struct Cli {
+    /// The event store
+    #[arg(long, global = true, default_value = "tir-tuner.duckdb")]
+    db: PathBuf,
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
 enum Command {
     /// Redact a Glooko export (zip or directory), archive it and read it
     Ingest {
@@ -37,23 +47,23 @@ enum Command {
 }
 
 fn main() {
-    if let Err(e) = run(Command::parse()) {
+    if let Err(e) = run(Cli::parse()) {
         eprintln!("tir-tuner-cli: {e}");
         std::process::exit(1);
     }
 }
 
-fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
-    match command {
+fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
+    match cli.command {
         Command::Simulate { dir, kagr } => simulate_export(&dir, kagr),
-        Command::Ingest { source, archive } => ingest(&source, &archive),
+        Command::Ingest { source, archive } => ingest(&source, &archive, &cli.db),
         Command::Report { .. } => Err("report: not implemented".into()),
         Command::Recommend { .. } => Err("recommend: not implemented".into()),
         Command::Settings => Err("settings: not implemented".into()),
     }
 }
 
-fn ingest(source: &Path, archive: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn ingest(source: &Path, archive: &Path, db: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let (dir, export) = tir_tuner_ingest::ingest(source, archive)?;
     let days = export
         .cgm
@@ -73,6 +83,16 @@ fn ingest(source: &Path, archive: &Path) -> Result<(), Box<dyn std::error::Error
         export.boluses.len() - meals,
         export.basal.len(),
     );
+
+    let mut store = Store::open(db)?;
+    let new = store.insert(&export)?;
+    println!(
+        "new in store: {} CGM, {} fingerstick, {} boluses, {} basal segments",
+        new.cgm, new.bg, new.boluses, new.basal
+    );
+    if let Some((first, last)) = store.span()? {
+        println!("store covers {first} .. {last}");
+    }
     Ok(())
 }
 

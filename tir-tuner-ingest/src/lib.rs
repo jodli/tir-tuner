@@ -82,9 +82,21 @@ fn parse(source: &Path, files: &Files) -> Result<Export, Error> {
     }
     let (start, end) = range.ok_or_else(|| Error::NoData(source.into()))?;
 
+    // Exports sometimes repeat a row verbatim.
     rows.bg.sort_by_key(|r| r.at);
-    rows.boluses.sort_by_key(|r| r.at);
-    rows.basal.sort_by_key(|r| r.at);
+    rows.bg.dedup();
+    rows.boluses.sort_by(|a, b| {
+        (a.at.cmp(&b.at))
+            .then(a.carbs_g.total_cmp(&b.carbs_g))
+            .then(a.units.total_cmp(&b.units))
+    });
+    rows.boluses.dedup();
+    rows.basal.sort_by(|a, b| {
+        (a.at, a.minutes)
+            .cmp(&(b.at, b.minutes))
+            .then(a.rate_u_h.total_cmp(&b.rate_u_h))
+    });
+    rows.basal.dedup();
     Ok(Export {
         start,
         end,

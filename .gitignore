@@ -6,3 +6,6 @@
 /tools/__pycache__
 /ingest
 .env
+*.duckdb
+*.duckdb.wal
+*.duckdb.bak-*

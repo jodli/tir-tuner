@@ -6,6 +6,11 @@ description = "Rolling event store for ingested Glooko data"
 license.workspace = true
 
 [dependencies]
+chrono.workspace = true
+duckdb.workspace = true
+refinery = "0.10.0"
+refinery-core = "0.10.0"
+time = "0.3"
 tir-tuner-common = { path = "../tir-tuner-common" }
 
 [lints]
