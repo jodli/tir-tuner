@@ -15,7 +15,15 @@ use migrate::Duck;
 
 refinery::embed_migrations!("migrations");
 
-pub type Error = Box<dyn std::error::Error>;
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error(transparent)]
+    Db(#[from] duckdb::Error),
+    #[error("migration failed")]
+    Migration(#[from] refinery::Error),
+    #[error("backup to {0} failed")]
+    Backup(PathBuf, #[source] std::io::Error),
+}
 
 /// New rows per table from one insert.
 #[derive(Debug, Default, PartialEq)]
@@ -55,7 +63,8 @@ impl Store {
             && current < latest
         {
             conn.execute_batch("CHECKPOINT")?;
-            std::fs::copy(path, backup_path(path, current))?;
+            let backup = backup_path(path, current);
+            std::fs::copy(path, &backup).map_err(|e| Error::Backup(backup, e))?;
         }
         // Grouped: all pending migrations commit together or not at all.
         runner.set_grouped(true).run(&mut Duck(&mut conn))?;

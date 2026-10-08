@@ -46,24 +46,42 @@ enum Command {
     },
 }
 
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error(transparent)]
+    Ingest(#[from] tir_tuner_ingest::Error),
+    #[error("{0}")]
+    Store(PathBuf, #[source] tir_tuner_store::Error),
+    #[error("{0}: not implemented")]
+    NotImplemented(&'static str),
+    #[error("{0}: no CGM data")]
+    NoCgm(PathBuf),
+}
+
 fn main() {
     if let Err(e) = run(Cli::parse()) {
-        eprintln!("tir-tuner-cli: {e}");
+        let mut msg = e.to_string();
+        let mut cause = std::error::Error::source(&e);
+        while let Some(c) = cause {
+            msg += &format!(": {c}");
+            cause = c.source();
+        }
+        eprintln!("tir-tuner-cli: {msg}");
         std::process::exit(1);
     }
 }
 
-fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
+fn run(cli: Cli) -> Result<(), Error> {
     match cli.command {
         Command::Simulate { dir, kagr } => simulate_export(&dir, kagr),
         Command::Ingest { source, archive } => ingest(&source, &archive, &cli.db),
-        Command::Report { .. } => Err("report: not implemented".into()),
-        Command::Recommend { .. } => Err("recommend: not implemented".into()),
-        Command::Settings => Err("settings: not implemented".into()),
+        Command::Report { .. } => Err(Error::NotImplemented("report")),
+        Command::Recommend { .. } => Err(Error::NotImplemented("recommend")),
+        Command::Settings => Err(Error::NotImplemented("settings")),
     }
 }
 
-fn ingest(source: &Path, archive: &Path, db: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn ingest(source: &Path, archive: &Path, db: &Path) -> Result<(), Error> {
     let (dir, export) = tir_tuner_ingest::ingest(source, archive)?;
     let days = export
         .cgm
@@ -84,19 +102,20 @@ fn ingest(source: &Path, archive: &Path, db: &Path) -> Result<(), Box<dyn std::e
         export.basal.len(),
     );
 
-    let mut store = Store::open(db)?;
-    let new = store.insert(&export)?;
+    let store_err = |e| Error::Store(db.into(), e);
+    let mut store = Store::open(db).map_err(store_err)?;
+    let new = store.insert(&export).map_err(store_err)?;
     println!(
         "new in store: {} CGM, {} fingerstick, {} boluses, {} basal segments",
         new.cgm, new.bg, new.boluses, new.basal
     );
-    if let Some((first, last)) = store.span()? {
+    if let Some((first, last)) = store.span().map_err(store_err)? {
         println!("store covers {first} .. {last}");
     }
     Ok(())
 }
 
-fn simulate_export(dir: &Path, kagr: f64) -> Result<(), Box<dyn std::error::Error>> {
+fn simulate_export(dir: &Path, kagr: f64) -> Result<(), Error> {
     let export = tir_tuner_ingest::read_export(dir)?;
     let cgm = &export.cgm;
     let real_mmol: Vec<f64> = cgm
@@ -112,7 +131,7 @@ fn simulate_export(dir: &Path, kagr: f64) -> Result<(), Box<dyn std::error::Erro
     );
 
     // Meals relative to the CGM start.
-    let cgm_start = cgm.first().ok_or("no CGM data")?.at;
+    let cgm_start = cgm.first().ok_or_else(|| Error::NoCgm(dir.into()))?.at;
     let meals: Vec<Meal> = export
         .boluses
         .iter()

@@ -46,7 +46,8 @@ pub(crate) struct Rows {
     pub basal: Vec<BasalSegment>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("line {line}: {msg}")]
 pub struct FormatError {
     pub line: u64,
     pub msg: String,

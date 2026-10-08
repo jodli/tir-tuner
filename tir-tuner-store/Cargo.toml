@@ -6,6 +6,7 @@ description = "Rolling event store for ingested Glooko data"
 license.workspace = true
 
 [dependencies]
+thiserror.workspace = true
 chrono.workspace = true
 duckdb.workspace = true
 refinery = "0.10.0"

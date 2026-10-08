@@ -6,6 +6,7 @@ description = "Reads, redacts and archives Glooko exports"
 license.workspace = true
 
 [dependencies]
+thiserror.workspace = true
 chrono.workspace = true
 tir-tuner-common = { path = "../tir-tuner-common" }
 csv = "1.4.0"

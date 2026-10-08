@@ -3,7 +3,6 @@
 mod glooko;
 mod redact;
 
-use std::fmt;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -13,30 +12,20 @@ pub use glooko::FormatError;
 use glooko::{Rows, Table};
 
 /// Why an export could not be read.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
-    Io(PathBuf, std::io::Error),
-    Format(PathBuf, FormatError),
-    /// No Glooko CSV found.
+    #[error("{0}")]
+    Io(PathBuf, #[source] std::io::Error),
+    #[error("{0}: not a readable zip")]
+    Zip(PathBuf, #[source] zip::result::ZipError),
+    #[error("{0}")]
+    Format(PathBuf, #[source] FormatError),
+    #[error("{0}: no Glooko export found")]
     NoData(PathBuf),
     /// Files in one export cover different date ranges, so it's several exports.
+    #[error("{0}: files from more than one export")]
     MixedExports(PathBuf),
 }
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io(p, e) => write!(f, "{}: {e}", p.display()),
-            Self::Format(p, e) => write!(f, "{}:{}: {}", p.display(), e.line, e.msg),
-            Self::NoData(p) => write!(f, "{}: no Glooko export found", p.display()),
-            Self::MixedExports(p) => {
-                write!(f, "{}: files from more than one export", p.display())
-            }
-        }
-    }
-}
-
-impl std::error::Error for Error {}
 
 /// CSV files of one export, paths relative to its root.
 type Files = Vec<(PathBuf, String)>;
@@ -140,10 +129,11 @@ fn read_dir(dir: &Path) -> Result<Files, Error> {
 fn read_zip(path: &Path) -> Result<Files, Error> {
     let io = |e: std::io::Error| Error::Io(path.into(), e);
     let file = std::fs::File::open(path).map_err(io)?;
-    let mut zip = zip::ZipArchive::new(file).map_err(|e| io(e.into()))?;
+    let zip_err = |e| Error::Zip(path.into(), e);
+    let mut zip = zip::ZipArchive::new(file).map_err(zip_err)?;
     let mut out = Vec::new();
     for i in 0..zip.len() {
-        let mut entry = zip.by_index(i).map_err(|e| io(e.into()))?;
+        let mut entry = zip.by_index(i).map_err(zip_err)?;
         // enclosed_name rejects paths escaping the target dir.
         let Some(rel) = entry.enclosed_name() else {
             continue;

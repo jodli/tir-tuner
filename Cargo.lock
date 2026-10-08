@@ -1749,6 +1749,7 @@ name = "tir-tuner-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "thiserror",
  "tir-tuner-advisor",
  "tir-tuner-analysis",
  "tir-tuner-aps",
@@ -1773,6 +1774,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "csv",
+ "thiserror",
  "tir-tuner-common",
  "zip 8.6.0",
 ]
@@ -1785,6 +1787,7 @@ dependencies = [
  "duckdb",
  "refinery",
  "refinery-core",
+ "thiserror",
  "time",
  "tir-tuner-common",
 ]
