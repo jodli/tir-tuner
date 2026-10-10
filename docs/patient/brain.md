@@ -7,6 +7,7 @@ sources:
   - tir-tuner-aps/src/controller.rs
   - tir-tuner-aps/src/hovorka.rs
   - tir-tuner-aps/src/imm.rs
+  - tir-tuner-aps/src/kalman.rs
 ---
 
 # The brain
@@ -44,7 +45,7 @@ To simulate the next four hours, the controller needs a picture of the body it i
 Two details matter:
 
 - **The picture is deliberately approximate.** The controller's model is a simplified sketch of the person it doses, and the loop is tested against the mismatch, because the real system lives with it.
-- **The picture is re-anchored constantly.** Every control period, the controller blends the real sensor reading with its model's own estimate. The blend is 50/50: the new reading at half weight, the model's prediction at half weight. A single bad or noisy reading cannot jerk the whole decision to an extreme, but the model does keep correcting toward reality.
+- **The picture is corrected constantly.** Every control period, the controller weighs the new sensor reading against what its model expected. It knows how noisy the sensor is and that a sensor error tends to persist for a while, so a single odd reading moves its picture only a little, while readings that keep pointing the same way move it a lot. It also keeps three versions of its picture: a calm one for quiet hours and two that react faster, for when something unexpected like an unannounced meal is going on. Whichever version explained the recent readings best gets the most say.
 
 This is why the pump does not panic at one weird low reading: a single reading is information, not the truth. The hard safety rules below are separate from this smoothing, and the controller cannot override them.
 
@@ -86,7 +87,7 @@ Every reading shifts those probabilities. The mode that explained the last readi
 
 The algorithm keeps several versions of the world in its head at once and shifts trust to whichever explains your readings best.
 
-In this project's own loop, the multi-model idea appears in the simpler 50/50 form described above. The full three-filter bookkeeping, with its Bayesian and Markov rules, is formally verified, and it is the estimation structure the real CamAPS uses.
+This project's loop runs that three-filter scheme as the patent describes it. How noisy each version assumes the world to be is not published, so those numbers are this project's own choice.
 
 ## The watchdog before every dose
 

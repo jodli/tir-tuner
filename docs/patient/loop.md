@@ -48,7 +48,7 @@ Two versions of the body run in a simulation, and they are not identical:
 - The **body** is the truth of the simulation. It is the full virtual patient with its own, possibly sampled, parameters.
 - The **belief** is the controller's model of that body. It is a simplified sketch, deliberately not equal to the body, recalibrated so its resting glucose settles on the same target as the body's.
 
-The controller acts on the belief, which is wrong in ways that matter, and the loop still has to work. This split is the same design choice made in the real system, and it is the reason the simulation is a test of robustness rather than a self-consistency check. The belief is re-anchored on each real reading (50/50 blend), so the map keeps correcting itself as the day runs.
+The controller acts on the belief, which is wrong in ways that matter, and the loop still has to work. This split is the same design choice made in the real system, and it is the reason the simulation is a test of robustness rather than a self-consistency check. The belief is corrected on each real reading, weighted by how much the sensor and the model can be trusted, so the map keeps correcting itself as the day runs.
 
 ## Your own day, replayed
 

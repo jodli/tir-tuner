@@ -48,7 +48,7 @@ In einer Simulation laufen zwei Versionen des Körpers, und sie sind nicht ident
 - Der **Körper** ist in der Simulation die Wahrheit: der vollständige virtuelle Patient, mit seinen eigenen, möglicherweise zufällig gezogenen Parametern.
 - Die **Annahme** ist das Bild, das sich die Steuerung von diesem Körper macht: eine vereinfachte Skizze, absichtlich nicht identisch mit dem Körper, und so kalibriert, dass ihre Ruheglukose auf demselben Ziel liegt wie die des Körpers.
 
-Die Steuerung handelt nach der Annahme, auch wenn diese deutlich danebenliegt, und der Regelkreis muss trotzdem funktionieren. Diese Trennung ist dieselbe Konstruktionsentscheidung wie im echten System; sie ist der Grund, warum die Simulation eine Prüfung der Robustheit ist und kein reiner Selbsttest. Bei jedem echten Wert wird die Annahme neu ausgerichtet (50/50-Mischung), sodass sich das Bild im Lauf des Tages selbst korrigiert.
+Die Steuerung handelt nach der Annahme, auch wenn diese deutlich danebenliegt, und der Regelkreis muss trotzdem funktionieren. Diese Trennung ist dieselbe Konstruktionsentscheidung wie im echten System; sie ist der Grund, warum die Simulation eine Prüfung der Robustheit ist und kein reiner Selbsttest. Bei jedem echten Wert wird die Annahme korrigiert, gewichtet danach, wie sehr Sensor und Modell zu trauen ist, sodass sich das Bild im Lauf des Tages selbst korrigiert.
 
 ## Ihr eigener Tag, wiederholt
 

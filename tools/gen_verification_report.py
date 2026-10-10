@@ -19,7 +19,7 @@ OUT = REPO / "docs" / "verification_report.html"
 
 # Crate -> source files (relative to the crate root), display order.
 CRATE_FILES = {
-    "tir-tuner-aps": ["lib.rs", "hovorka.rs", "controller.rs", "imm.rs"],
+    "tir-tuner-aps": ["lib.rs", "hovorka.rs", "controller.rs", "imm.rs", "kalman.rs"],
     "tir-tuner-common": ["lib.rs", "units.rs", "euler.rs", "metrics.rs", "random.rs"],
     "tir-tuner-body": ["lib.rs", "subject.rs", "state.rs", "derivative.rs", "solver.rs"],
     "tir-tuner-cgm": ["lib.rs", "device.rs"],
@@ -276,7 +276,10 @@ CONSTANT_NOTES = {
     "HYPO_CUTOFF_MMOL_L": ([], "Own: no source has a suspend threshold."),
     "EASE_OFF_SUSPEND_MMOL_L": (["W22", "W22B"], "Ease-off suspension."),
     "BOOST_FACTOR": (["W22B"], "About 35% more, above target only."),
-    "REANCHOR_GAIN": ([], "Own stand-in for the patent's Kalman/IMM update."),
+    "MODE_PROCESS_SD": (["CA2345"], "sigma_w per IMM mode; the patent gives none. Ours."),
+    "U_S_HALFTIME_MIN": (["CA2345"], "Eq 57's u_S halftime; the patent gives none. Ours."),
+    "SENSOR_ERROR_SD_MG_DL": (["B08"], "The filter's CGM error SD, B08 p6."),
+    "SENSOR_ERROR_AR": (["B08"], "The filter's CGM error correlation, B08 eq 7."),
     "GRID_STEPS": ([], "Own optimizer."),
     "GRID_POINTS": ([], "GRID_STEPS + 1."),
     "IMM_MODE_COUNT": (["CA2345"], "N; the patent gives no value."),
@@ -557,9 +560,10 @@ descent replaces Marquardt; the first rate is applied.</td>
 <tr><td>Auto mode variants</td><td>Applied to the NMPC rate: Boost &times;1.35 above target, Ease-off
 suspends below 7.0 mmol/L and raises the target (value ours), no insulin below the hypo cutoff (ours).</td>
 <td>{ref_keys(['W22'])}{ref_keys(['W22B'])}</td></tr>
-<tr><td>IMM bookkeeping</td><td>Bayesian mode-probability update, mixing of per-mode estimates, Markov
-transition matrix (values ours).</td>
-<td>{ref_keys(['CA2345'])} US8977504B2 eq 65-82</td></tr>
+<tr><td>IMM filter</td><td>Three Kalman filters on [q1, q2, q3, u_S] plus a CGM error state, differing in
+&sigma;_w; mixing, likelihood and mode-probability update. &sigma;_w, the Markov matrix and the u_S halftime are ours,
+the error state's SD and correlation are B08's.</td>
+<td>{ref_keys(['CA2345'])}{ref_keys(['B08'])} US8977504B2 eq 53-82</td></tr>
 </table>
 
 <h3>Operating parameters and safety thresholds</h3>
@@ -610,9 +614,8 @@ safety invariants the native suite checks.</p>
 {section("6. Tooling", tool_cmds)}
 
 {section("7. Out of scope and future work", inline("""\
-Not implemented: the patent's per-mode Kalman filters (state and covariance mixing, prediction, update,
-likelihood), the estimation of u_S and bioavailability, and the Bayesian adaptation of the controller's
-parameters. The crate covers the IMM probability arithmetic only. Marquardt minimization is replaced by a
+The crate runs the patent's IMM filter with three modes and a CGM error state. Not implemented: the
+estimation of bioavailability and the Bayesian adaptation of the controller's parameters. Marquardt minimization is replaced by a
 grid seed plus coordinate descent. Every number in the controller is traced in `docs/sources.toml`, where
 our own choices have status `assumption`."""))}
 

@@ -25,6 +25,7 @@ files = [
   "tir-tuner-aps/src/hovorka.rs",
   "tir-tuner-aps/src/controller.rs",
   "tir-tuner-aps/src/imm.rs",
+  "tir-tuner-aps/src/kalman.rs",
   "tir-tuner-body/src/derivative.rs",
   "tir-tuner-body/src/pump.rs",
   "tir-tuner-body/src/solver.rs",
@@ -345,11 +346,26 @@ status = "assumption"
 note = "The lowest personal target, 4.4 (ware2022-target-range). No source has a suspend threshold. The manual (p70) only says insulin may be reduced further when glucose is low or falling fast."
 
 [[claim]]
-id = "own-reanchor"
+id = "own-kf-sensor-sd"
+source = "breton2008"
+at = "p6"
+values = [11.0]
+status = "derived"
+note = "B08's error SD, taken by the filter as the CGM error of a Gaussian AR(1) with eq 7's 0.7. The patent assumes white measurement noise (eq 62) and gives no value."
+
+[[claim]]
+id = "own-imm-process"
 source = "own"
-values = [0.5]
+values = [1e-5, 3e-4, 3e-3]
 status = "assumption"
-note = "Stand-in for the patent's Kalman/IMM update (eq 72-77)."
+note = "sigma_w per IMM mode (us504 p14, eq 65 without values). Swept on the simulation: best estimate error both with and without an unannounced meal."
+
+[[claim]]
+id = "own-us-halftime"
+source = "own"
+values = [15.0]
+status = "assumption"
+note = "u_s regression halftime without measurements (us504 p14, eq 57 without a value). Longer halftimes help unannounced meals and deepen the dip after bolused ones; 15 min keeps the closed loop level with the old fixed gain."
 
 [[claim]]
 id = "ware2022-ease-off"
@@ -376,7 +392,7 @@ note = "'approximately 35%', glucose-responsive, inactive once target is reached
 [[claim]]
 id = "own-imm"
 source = "own"
-values = [3, 0.95, 0.05, 0.05, 0.03, 0.90, 0.05, 0.02, 0.05, 0.90]
+values = [3, 0.99, 0.005]
 status = "assumption"
 note = "The patent (us504 p14, eq 65) defines N models and the transition matrix without values."
 

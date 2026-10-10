@@ -60,13 +60,14 @@ The patent names the parameters without values. Two sets exist in the code:
 
 ## 3. Belief update
 
-The patent estimates the state with an interacting multiple model (IMM) bank of Kalman filters (eq 65-82). That isn't implemented. Each period the belief instead takes half of the interstitial error [own-reanchor]:
+`tir-tuner-aps/src/kalman.rs` runs the patent's interacting multiple model filter (eq 53-82) on the subset state `[q1, q2, q3, u_S]` (eq 46, without the bioavailability `F`):
 
-$$\Delta g = 0.5\,(z - g_{IG}), \qquad q_1 \mathrel{+}= \Delta g\,V_G, \quad q_2 \mathrel{+}= \Delta g\,V_G \tfrac{k_{21}}{k_{12}}, \quad q_3 \mathrel{+}= \Delta g\,V_G$$
+* **Predict** (eq 53-59, 70-71): the belief is stepped through the period with the known inputs. The map is affine in the subset states, so unit steps give the transition matrix `F` exactly (eq 55 allows numerical coefficients). The `u_S` shock enters where a unit `u_S` does (eq 56, 59).
+* **Update** (eq 60-62, 72-77): the reading is `q3 / V_G` (eq 61) plus a CGM error state. The patent takes the measurement noise as white (eq 62); the simulated sensor's error is B08's AR(1), and a white-noise filter reads its runs as glucose changes. So ours carries the error as a fifth state with B08's 0.7 per period [b08-eq7] and SD 11 mg/dL [own-kf-sensor-sd].
+* **Modes** (eq 65-69, 79-82): three filters that differ in `σ_w` [own-imm-process], mixed and weighted by their likelihood. Mode count and transition matrix are ours [own-imm].
+* **Horizon:** no measurement arrives in the prediction, so the NMPC lets `u_S` regress to zero (eq 57) with our halftime [own-us-halftime].
 
-All three masses shift by the same amount, so the belief keeps its plasma-interstitial gradient. The update has no model of sensor noise, so the NMPC partly follows CGM noise.
-
-`tir-tuner-aps/src/imm.rs` implements the IMM's probability arithmetic only: prognostic weights (eq 67), mixing probabilities (eq 66), mode probability update (eq 80) and scalar mixture mean and variance (eq 81-82). The per-mode filters, the likelihood (eq 79) and the estimation of `u_S` and `F` are missing, and nothing in the simulation calls the module. The mode count (3) and the Markov matrix are ours; the patent defines both without values [own-imm].
+On its own model with B08 noise the estimate beats the raw reading (`estimator_beats_the_raw_reading`). The dips that remain after bolused meals come from the NMPC's overshoot and the belief's model mismatch (section 8), not from the estimate.
 
 ---
 
@@ -132,7 +133,7 @@ Kani proves bounded symbolic statements; long `f64` chains, the full horizon and
 
 ## 8. Open
 
-The assumptions are marked where they apply: the oracle belief (2.1), the re-anchor (3), `k_agr` and the solver (4), the hypo cutoff and the Ease-off target (5). Not covered there:
+The assumptions are marked where they apply: the oracle belief (2.1), the filter's noise values (3), `k_agr` and the solver (4), the hypo cutoff and the Ease-off target (5). Not covered there:
 
 1. **Control cadence:** CamAPS FX adjusts every 8-12 min (ware2022 p4); the code uses H04's 15 min, which the sensor model also needs.
 2. **No adaptive learning.** CamAPS learns daily insulin needs, diurnal variations and meal patterns (ware2022 p4); none of it is published in detail.

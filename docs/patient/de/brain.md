@@ -7,6 +7,7 @@ sources:
   - tir-tuner-aps/src/controller.rs
   - tir-tuner-aps/src/hovorka.rs
   - tir-tuner-aps/src/imm.rs
+  - tir-tuner-aps/src/kalman.rs
 ---
 
 # Das Gehirn
@@ -44,7 +45,7 @@ Um die nächsten vier Stunden durchzurechnen, braucht die Steuerung ein Bild des
 Zwei Einzelheiten zählen:
 
 - **Das Bild ist bewusst grob.** Das Modell der Steuerung ist eine vereinfachte Skizze des Menschen, dem sie Insulin gibt. Der Regelkreis wird genau gegen diese Abweichung getestet, denn das echte System muss mit ihr leben.
-- **Das Bild wird laufend an der Realität nachgeführt.** In jeder Regelperiode mischt die Steuerung den echten Sensorwert mit dem Wert, den ihr Modell erwartet, und zwar zu gleichen Teilen: neuer Messwert zur Hälfte, Modellvorhersage zur Hälfte. Ein einzelner schlechter oder verrauschter Wert kann die Entscheidung nicht in ein Extrem treiben, und trotzdem bleibt das Modell ständig an der Wirklichkeit ausgerichtet.
+- **Das Bild wird laufend korrigiert.** In jeder Regelperiode vergleicht die Steuerung den neuen Sensorwert mit dem, was ihr Modell erwartet hat. Sie weiß, wie stark der Sensor rauscht und dass ein Sensorfehler eine Weile anhält. Ein einzelner seltsamer Wert verschiebt ihr Bild deshalb nur wenig, Werte, die immer wieder in dieselbe Richtung zeigen, dagegen stark. Außerdem führt sie drei Versionen ihres Bildes: eine ruhige für normale Stunden und zwei, die schneller reagieren, wenn etwas Unerwartetes passiert, etwa eine nicht eingegebene Mahlzeit. Die Version, die die letzten Werte am besten erklärt hat, hat das meiste Gewicht.
 
 Deshalb gerät die Pumpe bei einem einzelnen ungewöhnlich niedrigen Wert nicht in Panik: Ein einzelner Wert ist Information, nicht die Wahrheit. Die harten Sicherheitsregeln weiter unten sind von dieser Glättung getrennt, und die Steuerung kann sie nicht aushebeln.
 
@@ -86,7 +87,7 @@ Jeder neue Wert verschiebt diese Wahrscheinlichkeiten: Der Modus, der den letzte
 
 Der Algorithmus hält also mehrere Versionen der Welt gleichzeitig im Kopf und vertraut im Lauf des Tages derjenigen immer mehr, die Ihre Werte am besten erklärt.
 
-In diesem Projekt steckt die Multi-Modell-Idee in der einfacheren 50/50-Form von oben. Die vollständige Drei-Filter-Berechnung mit ihren Bayes- und Markov-Regeln ist formal verifiziert; sie ist dieselbe Schätzstruktur, die das echte CamAPS verwendet.
+Dieses Projekt rechnet mit genau diesem Drei-Filter-Schema, wie es im Patent steht. Wie viel Rauschen jede Version annimmt, ist nicht veröffentlicht; diese Zahlen hat das Projekt selbst gewählt.
 
 ## Der Sicherheitswächter vor jeder Dosis
 

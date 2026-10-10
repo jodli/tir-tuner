@@ -9,6 +9,10 @@
 use tir_tuner_common::euler::clamped_forward_euler;
 use tir_tuner_common::units::{MIN_PER_HOUR, MMOL_PER_GRAM_CHO, MU_PER_UNIT};
 
+/// Halftime (min) at which `u_S` regresses to zero without a measurement,
+/// eq 57. The patent gives no value. src: own-us-halftime
+pub const U_S_HALFTIME_MIN: f64 = 15.0;
+
 /// Basal plasma insulin `BIC` (mU/L), US8977504B2 eq 14.
 pub fn basal_insulin_conc(bir_u_per_h: f64, mcr_i: f64, weight_kg: f64) -> f64 {
     MU_PER_UNIT * bir_u_per_h / (MIN_PER_HOUR * mcr_i * weight_kg)
@@ -125,8 +129,8 @@ pub struct HovorkaState {
     pub q2: f64,
     /// Interstitial glucose (mmol/kg), what the CGM reads.
     pub q3: f64,
-    /// Unexplained glucose influx `u_S` (mmol/kg/min), patent eq 13. Held
-    /// constant here; nothing estimates it yet.
+    /// Unexplained glucose influx `u_S` (mmol/kg/min), patent eq 13,
+    /// estimated by [`crate::kalman`]. Held by [`HovorkaState::step`].
     pub u_s: f64,
 }
 
@@ -224,6 +228,20 @@ impl HovorkaState {
         }
     }
 
+    /// [`HovorkaState::step`] without a measurement at its end: `u_S`
+    /// regresses toward zero with [`U_S_HALFTIME_MIN`] (eq 57).
+    pub fn step_unmeasured(
+        &self,
+        params: &HovorkaParams,
+        u_basal: f64,
+        meal_g_per_min: f64,
+        dt: f64,
+    ) -> HovorkaState {
+        let mut s = self.step(params, u_basal, meal_g_per_min, dt);
+        s.u_s *= (-std::f64::consts::LN_2 * dt / U_S_HALFTIME_MIN).exp();
+        s
+    }
+
     /// Plasma glucose (mmol/L), patent eq 11.
     pub fn plasma_glucose(&self, params: &HovorkaParams) -> f64 {
         self.q1 / params.v_g
@@ -254,6 +272,30 @@ mod tests {
         };
         let expected = 5.551 * 50.0 / (p.weight_kg * p.t_max_g);
         assert!((s.gut_absorption(&p) - expected).abs() < 1e-4);
+    }
+
+    /// `resting_at` holds plasma glucose still on basal insulin.
+    #[test]
+    fn resting_at_holds_glucose() {
+        let p = HovorkaParams::hovorka_2004(70.0, 0.8).resting_at(7.0);
+        let s = HovorkaState::basal(&p, 7.0);
+        assert!(s.derivative(&p, p.bir, 0.0).q1.abs() < 1e-15);
+    }
+
+    /// Eq 57: without measurements `u_S` halves every halftime.
+    #[test]
+    fn us504_u_s_regresses_with_its_halftime() {
+        let p = params();
+        let mut s = HovorkaState {
+            u_s: 0.01,
+            ..HovorkaState::basal(&p, 6.0)
+        };
+        // Three steps, so dt itself counts, not just their number.
+        let dt = U_S_HALFTIME_MIN / 3.0;
+        for _ in 0..3 {
+            s = s.step_unmeasured(&p, p.bir, 0.0, dt);
+        }
+        assert!((s.u_s - 0.005).abs() < 1e-12);
     }
 
     /// Patent eq 12: EGP_B at BIC, half of it one I_1/2 higher.

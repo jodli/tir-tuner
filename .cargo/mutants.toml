@@ -11,6 +11,7 @@ examine_globs = [
   "tir-tuner-aps/src/hovorka.rs",
   "tir-tuner-aps/src/controller.rs",
   "tir-tuner-aps/src/imm.rs",
+  "tir-tuner-aps/src/kalman.rs",
   "tir-tuner-body/src/derivative.rs",
   "tir-tuner-body/src/pump.rs",
   "tir-tuner-body/src/solver.rs",
@@ -23,11 +24,14 @@ test_package = ["tir-tuner-body", "tir-tuner-cgm", "tir-tuner-bolus", "tir-tuner
 # positions: update them when these lines move.
 exclude_re = [
   # g == target lands on target in either branch.
-  "controller.rs:127:21: replace > with >= in trajectory$",
+  "controller.rs:116:21: replace > with >= in trajectory$",
   # Divides by ROLLOUT_STEP_MIN = 1.
-  "controller.rs:185:39: replace / with \\* in Nmpc::cost$",
+  "controller.rs:175:39: replace / with \\* in Nmpc::cost$",
   # An equal-cost move changes nothing but the pass count.
-  "controller.rs:243:26: replace < with <= in Nmpc::sequence$",
+  "controller.rs:233:26: replace < with <= in Nmpc::sequence$",
+  # Weights sum to 1, so sum w (m_i + x_i)(m_j - x_j) is still the covariance.
+  "kalman.rs:185:58: replace - with \\+ in mixture$",
+  "kalman.rs:185:76: replace - with \\+ in mixture$",
   "HovorkaParams::hovorka_2004",
   # Surplus exactly 0 at a midpoint: either branch keeps the root bracketed.
   "solver.rs:58:25: replace > with >= in resting_insulin$",

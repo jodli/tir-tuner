@@ -6,8 +6,8 @@
 //!
 //! * [`hovorka`]: the patent's glucoregulatory model.
 //! * [`controller`]: eq 9 NMPC, the Auto mode variants, the hypo cutoff.
-//! * [`imm`]: the patent's interacting multiple model bookkeeping, not yet
-//!   wired into the simulation.
+//! * [`kalman`]: the patent's IMM filter, eq 53-82.
+//! * [`imm`]: its mode-probability arithmetic, eq 66-67 and 80.
 //! * [`AutoMode`]: personal target and weight in the controller's units.
 //!
 //! Kani proofs live in [`verification`] (`cargo kani`).
@@ -15,6 +15,7 @@
 pub mod controller;
 pub mod hovorka;
 pub mod imm;
+pub mod kalman;
 mod settings;
 
 pub use settings::AutoMode;

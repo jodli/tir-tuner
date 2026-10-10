@@ -10,7 +10,7 @@ use crate::controller::{
     ROLLOUT_STEP_MIN, TRAJECTORY_STEEP_ABOVE_MMOL_L, argmin, trajectory,
 };
 use crate::hovorka::{HovorkaParams, HovorkaState, egp};
-use crate::imm::normalize_imm_probabilities;
+use crate::imm::imm_mode_probability_update;
 use tir_tuner_common::settings::AUTO_TARGET_MMOL_L;
 
 /// Above any CGM reading in mmol/L.
@@ -144,18 +144,19 @@ pub fn verify_trajectory_decline_bounded() {
     }
 }
 
-/// Normalizing a non-negative mode probability mixture keeps every entry
-/// non-negative.
+/// Eq 80 with non-negative weights and likelihoods gives non-negative
+/// mode probabilities.
 #[kani::proof]
-pub fn verify_imm_probability_normalization() {
-    let mut mu: [f64; 3] = kani::any();
-    for m in mu {
-        kani::assume(m >= 0.0 && m <= 1.0);
+pub fn verify_imm_mode_update_non_negative() {
+    let c: [f64; 3] = kani::any();
+    let l: [f64; 3] = kani::any();
+    for (c, l) in c.iter().zip(&l) {
+        kani::assume(*c >= 0.0 && *c <= 1.0 && *l >= 0.0 && *l <= 1.0);
     }
-    kani::assume(mu[0] + mu[1] + mu[2] > 0.001);
-    normalize_imm_probabilities(&mut mu);
-    for m in mu {
-        kani::assert(m >= 0.0, "stays non-negative");
+    if let Some(mu) = imm_mode_probability_update(&l, &c) {
+        for m in mu {
+            kani::assert(m >= 0.0, "stays non-negative");
+        }
     }
 }
 

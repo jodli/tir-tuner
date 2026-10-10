@@ -2,7 +2,7 @@
 //!
 //! The subject starts at rest at the admit glucose, on the basal that holds
 //! it there (W10 p7). Every control period the CGM reads the interstitial
-//! compartment, the reading is blended into the controller's belief, the
+//! compartment, the patent's IMM filter updates the controller's belief, the
 //! NMPC picks a rate and the Auto mode variant adjusts it. The pump delivers
 //! it with W10's error, and the body integrates meals and boluses at their
 //! own minute. The controller hears of announced meals and every bolus.
@@ -14,8 +14,11 @@
 
 use chrono::{NaiveTime, TimeDelta};
 use tir_tuner_aps::AutoMode;
-use tir_tuner_aps::controller::{Mode, Nmpc, ROLLOUT_STEP_MIN, reanchor};
+#[cfg(test)]
+use tir_tuner_aps::controller::CONTROL_PERIOD_MIN;
+use tir_tuner_aps::controller::{Mode, Nmpc, ROLLOUT_STEP_MIN};
 use tir_tuner_aps::hovorka::{HovorkaParams, HovorkaState};
+use tir_tuner_aps::kalman::Estimator;
 use tir_tuner_body::pump::{DELIVERY_ERROR_CV, Pump};
 use tir_tuner_body::solver::{DT_MIN, rest_state, step};
 use tir_tuner_body::subject::{Oscillation, VirtualSubject, W10_WEIGHT_KG, meal_bio_factor};
@@ -158,6 +161,28 @@ pub fn controller_model(
     }
 }
 
+/// The belief over one period: announced carbs and programmed boluses in
+/// its first minute, the rate throughout.
+fn propagate_period(
+    params: &HovorkaParams,
+    b: HovorkaState,
+    rate_u_per_h: f64,
+    bolus_u: f64,
+    carbs_g: f64,
+    steps: usize,
+) -> HovorkaState {
+    let mut b = b.step(
+        params,
+        rate_u_per_h + bolus_u * MIN_PER_HOUR / ROLLOUT_STEP_MIN,
+        carbs_g / ROLLOUT_STEP_MIN,
+        ROLLOUT_STEP_MIN,
+    );
+    for _ in 1..steps {
+        b = b.step(params, rate_u_per_h, 0.0, ROLLOUT_STEP_MIN);
+    }
+    b
+}
+
 /// Boluses at the subject's Walsh ratio, scaled by `factor`, for the
 /// announced meals.
 pub fn icr_boluses(subject: &VirtualSubject, meals: &[Meal], factor: f64) -> Vec<Bolus> {
@@ -191,7 +216,7 @@ pub fn simulate(cfg: &SimConfig) -> SimTrace {
     let mut state = rest_state(&cfg.subject, admit);
     let basal_u_per_h = cfg.subject.rate_for_insulin(state.i);
     let params = controller_model(&cfg.subject, basal_u_per_h, admit, cfg.auto.weight_kg());
-    let mut belief = HovorkaState::basal(&params, admit);
+    let mut estimator = Estimator::new(&params, HovorkaState::basal(&params, admit));
 
     let mut sensor = CgmSensor::new(cfg.sensor, cfg.sensor_seed);
     let mut pump = Pump::new(cfg.pump_seed, cfg.pump_error_cv);
@@ -226,14 +251,16 @@ pub fn simulate(cfg: &SimConfig) -> SimTrace {
     let mut last_rate_u_per_h = basal_u_per_h;
     while t < total_min {
         let reading = sensor.read(MmolL(state.c)).to_mmol_l().0;
-        reanchor(&mut belief, &params, reading);
+        estimator.update(&params, reading);
 
         let personal = cfg
             .auto
             .target_mmol_l(cfg.start_time + TimeDelta::minutes(t as i64));
         let target = cfg.mode.target(personal);
         let rate_u_per_h = if cfg.use_controller {
-            let nmpc = cfg.nmpc.dose(&params, belief, target, last_rate_u_per_h);
+            let nmpc = cfg
+                .nmpc
+                .dose(&params, estimator.state, target, last_rate_u_per_h);
             cfg.mode.rate(nmpc, reading, target, cfg.nmpc.u_max)
         } else if Mode::Standard.suspended(reading) {
             0.0
@@ -284,15 +311,16 @@ pub fn simulate(cfg: &SimConfig) -> SimTrace {
             .filter(|b| within(b.start_min, t, period_min))
             .map(|b| b.units)
             .sum();
-        belief = belief.step(
-            &params,
-            rate_u_per_h + known_bolus * MIN_PER_HOUR / ROLLOUT_STEP_MIN,
-            known_carbs / ROLLOUT_STEP_MIN,
-            ROLLOUT_STEP_MIN,
-        );
-        for _ in 1..belief_steps {
-            belief = belief.step(&params, rate_u_per_h, 0.0, ROLLOUT_STEP_MIN);
-        }
+        estimator.predict(period_min, |b| {
+            propagate_period(
+                &params,
+                b,
+                rate_u_per_h,
+                known_bolus,
+                known_carbs,
+                belief_steps,
+            )
+        });
 
         trace.t_min.push(t);
         trace.reading_mmol_per_l.push(reading);
@@ -340,6 +368,55 @@ mod tests {
             pump_error_cv: 0.0,
             ..SimConfig::default()
         }
+    }
+
+    /// The estimator on its own model, B08 noise, 60 g unannounced at 5 h:
+    /// RMS error of the estimate and of the raw reading over 16 seeds, and
+    /// the quiet mode's mean weight after the meal.
+    fn estimate_vs_reading(meal_g: f64) -> (f64, f64, f64) {
+        let subject = VirtualSubject::nominal(W10_WEIGHT_KG);
+        let rest = 5.8;
+        let basal = subject.resting_basal_u_per_h(rest);
+        let p = controller_model(&subject, basal, rest, W10_WEIGHT_KG);
+        let period = CONTROL_PERIOD_MIN;
+        let steps = (period / ROLLOUT_STEP_MIN) as usize;
+        let step = |b, carbs| propagate_period(&p, b, basal, 0.0, carbs, steps);
+        let (mut est, mut read, mut quiet, mut n, mut n_after) = (0.0, 0.0, 0.0, 0.0, 0.0);
+        for seed in 1..=16 {
+            let mut truth = HovorkaState::basal(&p, rest);
+            let mut e = Estimator::new(&p, truth);
+            let mut sensor = CgmSensor::new(SensorModel::Breton2008, seed);
+            for k in 0..64 {
+                let g = truth.interstitial_glucose(&p);
+                let r = sensor.read(MmolL(g)).to_mmol_l().0;
+                e.update(&p, r);
+                if k >= 4 {
+                    est += (e.state.interstitial_glucose(&p) - g).powi(2);
+                    read += (r - g).powi(2);
+                    n += 1.0;
+                }
+                if k > 22 && k < 40 {
+                    quiet += e.mode_probabilities()[0];
+                    n_after += 1.0;
+                }
+                truth = step(truth, if k == 20 { meal_g } else { 0.0 });
+                e.predict(period, |b| step(b, 0.0));
+            }
+        }
+        ((est / n).sqrt(), (read / n).sqrt(), quiet / n_after)
+    }
+
+    #[test]
+    fn estimator_beats_the_raw_reading() {
+        let (est, read, quiet) = estimate_vs_reading(0.0);
+        assert!(
+            est < 0.7 * read,
+            "no meal: estimate {est:.3} vs reading {read:.3}"
+        );
+        assert!(quiet > 0.5, "no meal: quiet mode at {quiet:.2}");
+        let (est, read, quiet) = estimate_vs_reading(60.0);
+        assert!(est < read, "meal: estimate {est:.3} vs reading {read:.3}");
+        assert!(quiet < 0.5, "meal: quiet mode still at {quiet:.2}");
     }
 
     #[test]
@@ -464,9 +541,9 @@ mod tests {
         assert_eq!(tbr_pct(&ig), 0.0, "noise-free meal went below 70 mg/dL");
         let max = ig.iter().copied().fold(0.0, f64::max);
         assert!(max <= 14.0, "announced meal spiked to {max:.2}");
-        // B08 noise reaches the NMPC through reanchor, which has no noise
-        // model: 1 of 16 seeds dips to 3.86 (controller slice). Battelino's
-        // level 2 (54 mg/dL) must still hold.
+        // With B08 noise the NMPC's overshoot after meals (k_agr, model
+        // mismatch) dips some seeds below 3.9. Battelino's level 2
+        // (54 mg/dL) must still hold.
         for seed in 1..=4 {
             let min = bolused_meal(SensorModel::Breton2008, seed)
                 .into_iter()

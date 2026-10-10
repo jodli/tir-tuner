@@ -64,10 +64,6 @@ pub const EASE_OFF_SUSPEND_MMOL_L: f64 = 7.0;
 /// src: ware2022b-boost
 pub const BOOST_FACTOR: f64 = 1.35;
 
-/// Share of the CGM error the belief takes each period. Our stand-in for
-/// the patent's Kalman/IMM update (eq 72-77). src: own-reanchor
-pub const REANCHOR_GAIN: f64 = 0.5;
-
 /// User-selected Auto mode variants.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -104,13 +100,6 @@ impl Mode {
         let rate = if boosted { nmpc * BOOST_FACTOR } else { nmpc };
         rate.clamp(0.0, u_max)
     }
-}
-
-/// Move the belief's glucose toward the reading by [`REANCHOR_GAIN`] of the
-/// interstitial error, keeping its plasma-interstitial gradient.
-pub fn reanchor(state: &mut HovorkaState, params: &HovorkaParams, reading: f64) {
-    let error = reading - state.interstitial_glucose(params);
-    state.shift_glucose(params, REANCHOR_GAIN * error);
 }
 
 /// The moving target trajectory, H04 section 3.3 and Fig 4: `w[0]` is
@@ -172,7 +161,8 @@ impl Default for Nmpc {
 impl Nmpc {
     /// Eq 9 cost of rates `u` (one per sample, U/h) against trajectory `w`
     /// (`n + 1` points, `w[0]` now): squared plasma glucose error at
-    /// `t + i`, plus rate changes from `u_prev` weighted `1 / k_agr`.
+    /// `t + i`, plus rate changes from `u_prev` weighted `1 / k_agr`. No
+    /// measurement arrives in the horizon, so `u_s` regresses (eq 57).
     pub fn cost(
         &self,
         params: &HovorkaParams,
@@ -188,7 +178,7 @@ impl Nmpc {
         let mut sum = 0.0;
         for (&rate, &target) in u.iter().zip(&w[1..]) {
             for _ in 0..substeps {
-                s = s.step(params, rate, 0.0, ROLLOUT_STEP_MIN);
+                s = s.step_unmeasured(params, rate, 0.0, ROLLOUT_STEP_MIN);
             }
             let err = s.plasma_glucose(params) - target;
             sum += err * err + (rate - prev) * (rate - prev) / self.k_agr;
@@ -307,17 +297,6 @@ mod tests {
         assert_eq!(nmpc.grid_rate(0), 0.0);
         assert_eq!(nmpc.grid_rate(GRID_STEPS / 2), nmpc.u_max / 2.0);
         assert_eq!(nmpc.grid_rate(GRID_STEPS), nmpc.u_max);
-    }
-
-    /// Half the interstitial error goes in, the gradient stays.
-    #[test]
-    fn reanchor_shifts_by_half_the_error() {
-        let p = params();
-        let mut s = HovorkaState::basal(&p, 6.0);
-        s.q1 += 0.1 * p.v_g;
-        reanchor(&mut s, &p, 8.0);
-        assert!((s.interstitial_glucose(&p) - 7.0).abs() < 1e-12);
-        assert!((s.plasma_glucose(&p) - 7.1).abs() < 1e-12);
     }
 
     /// Eq 9 compares the prediction at `t + i` with the target at `t + i`:
