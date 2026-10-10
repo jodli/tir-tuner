@@ -25,6 +25,11 @@ files = [
   "tir-tuner-aps/src/hovorka.rs",
   "tir-tuner-aps/src/controller.rs",
   "tir-tuner-aps/src/imm.rs",
+  "tir-tuner-body/src/derivative.rs",
+  "tir-tuner-body/src/pump.rs",
+  "tir-tuner-body/src/solver.rs",
+  "tir-tuner-body/src/state.rs",
+  "tir-tuner-body/src/subject.rs",
 ]
 # Literals allowed anywhere. Everything else is a named, tagged const.
 allowed = [0, 1]
@@ -39,6 +44,11 @@ definition = "Unit definitions (SI prefixes, clock)"
 user = "The user, in conversation"
 h04 = "Hovorka R et al. Nonlinear model predictive control of glucose concentration in subjects with type 1 diabetes. Physiol Meas 2004;25(4):905-920. doi:10.1088/0967-3334/25/4/010"
 us504 = "US8977504B2, Hovorka R. Substance monitoring and control in human or animal bodies (US member of the CA2702345C family)"
+h02 = "Hovorka R et al. Partitioning glucose distribution/transport, disposal, and endogenous production during IVGTT. Am J Physiol Endocrinol Metab 2002;282(5):E992-E1007. doi:10.1152/ajpendo.00304.2001"
+heise2017csii = "Heise T et al. Pharmacological properties of faster-acting insulin aspart vs insulin aspart in patients with type 1 diabetes receiving continuous subcutaneous insulin infusion. Diabetes Obes Metab 2017;19(2):208-215. doi:10.1111/dom.12803"
+walsh2011 = "Walsh J, Roberts R, Bailey T. Guidelines for optimal bolus calculator settings in adults. J Diabetes Sci Technol 2011;5(1):129-135. doi:10.1177/193229681100500118"
+ypsopump-ifu = "mylife YpsoPump Gebrauchsanweisung, German edition (ypsopump_ifu_de.pdf)"
+math = "Mathematics"
 wilinska2010 = "Wilinska ME et al. Simulation environment to evaluate closed-loop insulin delivery systems in type 1 diabetes. J Diabetes Sci Technol 2010;4(1):132-144. doi:10.1177/193229681000400117"
 own = "Our own choice, no source"
 
@@ -365,3 +375,130 @@ source = "own"
 values = [3, 0.95, 0.05, 0.05, 0.03, 0.90, 0.05, 0.02, 0.05, 0.90]
 status = "assumption"
 note = "The patent (us504 p14, eq 65) defines N models and the transition matrix without values."
+
+# Virtual patient (tir-tuner-body)
+
+[[claim]]
+id = "w10-population"
+source = "wilinska2010"
+at = "p6"
+values = [74.9]
+status = "source"
+note = "Mean body weight of the 18 virtual subjects (74.9 +- 14.4 kg). The sets aren't published."
+
+[[claim]]
+id = "w10-table1"
+source = "wilinska2010"
+at = "p6, Table 1"
+values = [11.1e-3, 16.9e-3, 0.060, 18.41e-4, 5.05e-4, 0.019, 0.0034, 0.056, 0.024]
+status = "source"
+note = "F01, EGP0, k12, SIT, SID, SIE, kb1-kb3. Means of marginal lognormals; W10 gives no SDs, so the subject has no spread here."
+
+[[claim]]
+id = "w10-table2"
+source = "wilinska2010"
+at = "p7, Table 2"
+values = [0.15, 0.12, 0.14, 9.0, 0.01, 40.0, 0.0933]
+status = "source"
+note = "VG, VI, ke, R_thr, R_cl, tmax, ka_int: means, or medians of the lognormal priors (ka_int = exp(-2.372))."
+
+[[claim]]
+id = "w10-bio"
+source = "wilinska2010"
+at = "p7, Table 2"
+values = [0.95]
+status = "derived"
+note = "Mean of Bio ~ U(70%, 120%)."
+
+[[claim]]
+id = "w10-ug-ceil"
+source = "wilinska2010"
+at = "p13"
+values = [0.0275]
+status = "derived"
+note = "Mean of UG_ceil ~ U(0.02, 0.035) mmol/kg/min."
+
+[[claim]]
+id = "w10-oscillation"
+source = "wilinska2010"
+at = "p6; Tables 1-2"
+values = [0.05, 180.0, 12]
+status = "source"
+note = "5% amplitude, 3 h period, phases U[0, 3 h]; 12 parameters marked oscillatory (F01, EGP0, k12, SID, SIE, SIT, kb1-3, ka, ke, ka_int)."
+
+[[claim]]
+id = "w10-bio-interoccasion"
+source = "wilinska2010"
+at = "p7, Table 2 footnote"
+values = [0.2]
+status = "derived"
+note = "'An additional 20% interoccasion variability'. The distribution isn't given; we draw normal with CV 20%, floored at 0."
+
+[[claim]]
+id = "h04-egp"
+source = "h04"
+at = "p3, eq 1"
+status = "source"
+note = "EGP0 [1 - x3], as H02 eq 7 (p5); floored at 0 as W10 p12. W10 prints 1 + x3, a sign typo."
+
+[[claim]]
+id = "w10-f01c"
+source = "wilinska2010"
+at = "p12"
+values = [0.85]
+status = "source"
+note = "F01c = F01/0.85 G/(G+1). H04 eq 2 has a piecewise form instead."
+
+[[claim]]
+id = "heise-fiasp-ka"
+source = "heise2017csii"
+at = "p5, Table 1"
+values = [0.0207]
+status = "derived"
+note = "Least-squares fit of W10's two-depot chain (ke 0.14) to Fiasp by CSII: tEarly50 20.7, tmax 56.6, tLate50 137.4 min. The fit gives 18.4 / 56.6 / 137.6; the two-depot shape rises too early. W10's lispro ka is 0.018."
+
+[[claim]]
+id = "walsh-basal-share"
+source = "walsh2011"
+at = "p3, eq 1"
+values = [0.48]
+status = "source"
+note = "Basal = TDD x 0.48."
+
+[[claim]]
+id = "walsh-carb-factor"
+source = "walsh2011"
+at = "p3, eq 2"
+values = [5.7, 10.0]
+status = "derived"
+note = "CarbF (g/U) = 5.7 x weight(kg) / TDD, from the subject's resting basal at the default target via eq 1; ratios are per 10 g. W10's population 1.7 U/10 g is a mean over subjects and takes the mean subject to 2.8 mmol/L after 60 g."
+
+[[claim]]
+id = "own-body-step"
+source = "own"
+values = [0.25]
+status = "assumption"
+note = "W10 doesn't give its solver. Clamped Euler; the fastest rate (ke 0.14/min) times 0.25 min is 0.035."
+
+[[claim]]
+id = "math-bisection"
+source = "math"
+values = [60]
+status = "source"
+note = "Bisection midpoint; 60 halvings of [0, 1/SIE] reach f64 resolution."
+
+[[claim]]
+id = "w10-pump-error"
+source = "wilinska2010"
+at = "p3, p7"
+values = [0.05]
+status = "source"
+note = "Zero mean, uncorrelated, CV 5% for infusion and bolus. W10's min/max bracket has no values. YpsoPump IFU p185 states +-5% for basal and 6 U boluses."
+
+[[claim]]
+id = "ypsopump-bolus-speed"
+source = "ypsopump-ifu"
+at = "p185"
+values = [6.6]
+status = "derived"
+note = "'Abgabegeschwindigkeit waehrend Abgabe: 0,11 U/Sekunde', x 60 s."

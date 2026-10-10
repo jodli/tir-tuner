@@ -23,6 +23,9 @@ pub const MU_PER_UNIT: f64 = 1000.0;
 /// Minutes per hour, for U/h rates in per-minute models. src: clock
 pub const MIN_PER_HOUR: f64 = 60.0;
 
+/// Hours per day, for daily insulin totals. src: clock
+pub const HOURS_PER_DAY: f64 = 24.0;
+
 /// Glucose concentration, mg/dL: what the CGM, the export and the mg/dL app
 /// show.
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]

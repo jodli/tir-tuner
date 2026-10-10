@@ -43,7 +43,7 @@ Die Kurznamen der Kompartimente: `s1`, `s2` (Insulin unter der Haut), `i` (Insul
 
 ## Insulin braucht Zeit
 
-Wenn die Pumpe Insulin abgibt, landet es nicht sofort im Blut. Es sammelt sich unter der Haut, wandert durch zwei Depot-Kompartimente und kommt erst dann im Blut an; etwa 55 Minuten nach der Abgabe erreicht die Wirkung ihren Höhepunkt. Über dieselbe Zeitspanne baut sie sich auf und wieder ab. In diesem Modell kann keine Behandlung das Insulin schneller wirken lassen.
+Wenn die Pumpe Insulin abgibt, landet es nicht sofort im Blut. Es sammelt sich unter der Haut, wandert durch zwei Depot-Kompartimente und kommt erst dann im Blut an. Bei Fiasp erreicht der Spiegel im Blut etwa 57 Minuten nach einem Bolus seinen Höhepunkt (Heise 2017). Über dieselbe Zeitspanne baut sie sich auf und wieder ab. In diesem Modell kann keine Behandlung das Insulin schneller wirken lassen.
 
 Diese Verzögerung erklärt den Großteil des Diabetesmanagements. Ein Bolus zur Mahlzeit ist eine Wette auf eine Wirkungsspitze, die erst fast eine Stunde später eintrifft. Die Hauptaufgabe der Pumpe ist es, mit dieser Verzögerung umzugehen.
 
@@ -59,7 +59,7 @@ Jeder Effekt wird von der Insulinkonzentration angetrieben, aber jeder bewegt si
 
 ## Die Leber hört nie auf
 
-Die Leber bildet von sich aus Zucker; das lässt sich nicht abschalten. Die Grundproduktion liegt im Modell bei etwa 0,0169 mmol pro Kilogramm pro Minute; ohne Insulin kann sie auf das Dreifache steigen. Nichts anderes im Körper kann sie ersetzen. Deshalb steigt der Blutzucker bei Typ-1-Diabetes über Nacht: Ohne Basalinsulin arbeitet die Leber weiter, und nichts hält sie zurück.
+Die Leber bildet von sich aus Zucker; das lässt sich nicht abschalten. Ganz ohne Insulin bildet die Leber im Modell etwa 0,0169 mmol pro Kilogramm pro Minute (Wilinska 2010, Tabelle 1). Insulin senkt das linear, wie bei Hovorka 2004, und genug Insulin schaltet sie ganz ab. Nichts anderes im Körper kann sie ersetzen. Deshalb steigt der Blutzucker bei Typ-1-Diabetes über Nacht: Ohne Basalinsulin arbeitet die Leber weiter, und nichts hält sie zurück.
 
 Basalinsulin wirkt genau gegen diesen Anstieg. Es läuft kontinuierlich, ein Hintergrundsignal, das die Leber in Schach hält, anders als die größeren Dosen zu den Mahlzeiten. Das Modell nennt diesen konstanten Bedarf Basalinsulinbedarf (BIR); er gehört zu den wenigen Zahlen, die einen Menschen beschreiben.
 
@@ -84,21 +84,22 @@ Deshalb steigt sehr hoher Zucker von selbst nicht unbegrenzt weiter: Oberhalb de
 
 Bei konstantem Basalinsulin und ohne Mahlzeiten erzeugt die Leber eine feste Menge, während das Gewebe eine feste Menge verbraucht. Der Punkt, an dem sich beides ausgleicht, ist die Ruheglukose: das Niveau, auf dem ein Mensch ohne Essen und ohne Aktivität verharrt.
 
-Der Simulator kalibriert jeden virtuellen Menschen so, dass sich die Ruheglukose beim Therapieziel von 5,8 mmol/L einpendelt: Er justiert die Basalrate, bis der Ruhepunkt stimmt, so wie ein Arzt die Basalrate einer echten Pumpe einstellt. In diesem Projekt gilt "Ihre Basalrate bestimmt Ihr Ruheniveau" also wörtlich: Die Rate wird so berechnet, dass der Ruhepunkt genau auf dem Ziel liegt.
+Der Simulator rechnet andersherum, wie Wilinska 2010: Er nimmt den Zucker, mit dem ein Tag beginnt, und berechnet die Basalrate, die den Menschen dort hält. Ein nachgespielter Tag beginnt beim ersten CGM-Wert, in Ruhe. Danach entscheidet der geschlossene Regelkreis.
 
-## Keine zwei Menschen sind gleich
+## Ein Mensch, auf dich skaliert
 
-Das Modell beschreibt keinen durchschnittlichen Menschen, sondern einen virtuellen Probanden: einen vollständigen Parametersatz aus veröffentlichten Populationsverteilungen, mit festem Seed, sodass sich dieselbe Person exakt reproduzieren lässt. Die Streuung ist echt, und jeder Parameter verschiebt den Verlauf eines Tages:
+Wilinska 2010 hat 18 virtuelle Menschen gebaut, aber nur die Mittelwerte veröffentlicht. Der Simulator hat deshalb einen: den Durchschnittsmenschen, auf ein Körpergewicht skaliert. Beim Nachspielen gilt das Gewicht aus deinen Einstellungen.
 
-| Parameter | Populationsmittel (mit Streuung) | Was er ändert |
+| Teil | Wert | Quelle |
 |---|---|---|
-| Körpergewicht | 74,9 kg (SD 14,4) | Verteilungsvolumen, Dosisskalierung |
-| Täglicher Insulinbedarf | 0,35 U/kg (SD 0,14) | Basalbedarf, Gesamtskalierung |
-| Kohlenhydratfaktor (ICR) | 1,7 U pro 10 g (SD 1,0) | wie viel Bolus eine Mahlzeit erfordert |
-| Insulinabsorptionsgeschwindigkeit | variiert pro Proband | wie schnell eine Dosis wirkt |
-| Insulinsensitivitäten | unterschiedlich pro Proband | wie stark Insulin wirkt |
+| Insulinempfindlichkeit, Leber, Zuckeraufnahme | die veröffentlichten Mittelwerte | Wilinska 2010, Tabellen 1-2 |
+| Insulinaufnahme | Fiasp: Spitze nach etwa 57 min | angepasst an Heise 2017 (Fiasp per Pumpe) |
+| KE-Faktor für simulierte Mahlzeiten | etwa 1,1 U pro 10 g | aus der eigenen Basalrate, Walsh 2011 |
+| Bolusgeschwindigkeit | 0,11 U pro Sekunde | YpsoPump-Gebrauchsanweisung |
 
-Wer Insulin schneller aufnimmt, schwerer ist oder mehr Insulin braucht, hat einen anderen Tag. Der geschlossene Regelkreis ist auf genau diese Streuung ausgelegt, denn eine echte Population sieht genauso aus. Wenn die anderen Seiten von "dem Probanden" schreiben, ist damit ein bestimmter virtueller Mensch gemeint.
+Kein Tag läuft zweimal gleich. Das Modell hat das eingebaut: Zwölf seiner Parameter schwanken über drei Stunden um 5 %, jeder in seinem eigenen Takt, und dieselbe Mahlzeit kann 20 % mehr oder weniger Zucker bringen als beim letzten Mal (beides Wilinska 2010). Die Pumpe gibt bis auf 5 % genau ab, was sie soll.
+
+Wenn die anderen Seiten von "dem Probanden" sprechen, ist dieser eine virtuelle Mensch gemeint. Er ist nicht an dich angepasst: Er hat dein Gewicht, aber die Insulinempfindlichkeit des Durchschnitts.
 
 ## Das fehlende Signal
 

@@ -43,7 +43,7 @@ Their short names are `s1`, `s2` (insulin under the skin), `i` (insulin in the b
 
 ## Insulin takes time to arrive
 
-When a pump delivers insulin, it does not land in the blood. It sits under the skin, passes through two depot compartments, and only then reaches the blood, with peak absorption about 55 minutes after delivery. That concentration is what acts on the body, and it builds up and fades over that timescale. In this model, no treatment can make insulin act faster.
+When a pump delivers insulin, it does not land in the blood. It sits under the skin, passes through two depot compartments, and only then reaches the blood. For Fiasp the level in the blood peaks about 57 minutes after a bolus (Heise 2017). That concentration is what acts on the body, and it builds up and fades over that timescale. In this model, no treatment can make insulin act faster.
 
 This delay explains most of diabetes management. A bolus at the start of a meal is a bet about a peak that arrives almost an hour later. The pump's main job is to manage this delay.
 
@@ -59,7 +59,7 @@ Each effect is driven by the insulin concentration, but each moves at its own sp
 
 ## The liver never stops
 
-The liver produces sugar on its own, and that production is not optional. The model's default resting production is about 0.0169 mmol per kg per minute, and when insulin is absent it can climb to three times that. Nothing else in the body can replace it. This is why blood sugar rises overnight with type 1 diabetes: with no basal insulin, the liver keeps producing and nothing holds it back.
+The liver produces sugar on its own, and that production is not optional. Without any insulin the model's liver makes about 0.0169 mmol per kg per minute (Wilinska 2010, Table 1). Insulin lowers that in a straight line, as in Hovorka 2004, and enough insulin shuts it off completely. Nothing else in the body can replace it. This is why blood sugar rises overnight with type 1 diabetes: with no basal insulin, the liver keeps producing and nothing holds it back.
 
 Basal insulin targets exactly that rise. It is delivered continuously, the background signal that keeps the liver in check, unlike the larger doses given with meals. The model's term for the constant need is the basal insulin requirement (BIR), and it is one of the few numbers that defines a person.
 
@@ -84,21 +84,22 @@ That is why very high sugar tends to stop climbing on its own: past the threshol
 
 Deliver a constant basal insulin and give no food, and the liver produces a fixed amount while the tissues use a fixed amount. Where those balance is the resting glucose, the level a person without meals and without activity would sit at.
 
-The simulator calibrates every virtual person so that resting glucose settles on the treatment target of 5.8 mmol/L. It adjusts the basal rate until the resting point matches, the same way a clinician sets a real pump's basal rate. In this project, "your basal rate sets your resting level" is literal: the rate is computed so the resting point lands on the target.
+The simulator works the other way round, as Wilinska 2010 does: it takes the glucose a day starts at and computes the basal rate that holds the person there. A replayed day starts at your first CGM reading, at rest. From then on the closed loop decides.
 
-## No two people are alike
+## One person, scaled to you
 
-The model does not describe a generic person. It describes a virtual subject, a complete parameter set drawn from published population distributions, seeded so the same person can be reproduced exactly. The variations are real, and each one shifts how a day runs:
+Wilinska 2010 built 18 virtual people but published only the averages, so the simulator has one: the average person, scaled to a body weight. A replay uses the weight from your settings.
 
-| Parameter | Population mean (with spread) | What it changes |
+| Part | Value | Source |
 |---|---|---|
-| Body weight | 74.9 kg (sd 14.4) | distribution volume, dose scaling |
-| Daily insulin need | 0.35 U/kg (sd 0.14) | basal requirement, overall scale |
-| Carb ratio (ICR) | 1.7 U per 10 g (sd 1.0) | how much bolus a meal needs |
-| Insulin absorption speed | varies per subject | how fast a dose takes effect |
-| Insulin sensitivities | differ per subject | how strongly insulin acts |
+| Insulin sensitivities, liver, glucose uptake | the published averages | Wilinska 2010, Tables 1-2 |
+| Insulin absorption | Fiasp: peak at about 57 min | fitted to Heise 2017 (Fiasp by pump) |
+| Carb ratio for simulated meals | about 1.1 U per 10 g | from the person's own basal, Walsh 2011 |
+| Bolus speed | 0.11 U per second | YpsoPump manual |
 
-A faster absorber, a heavier body, a higher insulin need: each one changes the shape of the day. The closed loop is tuned against this kind of spread, because a real population looks exactly like this. When the docs on the other pages say "the subject", they mean one specific virtual person.
+Nobody's day runs the same twice. The model has this built in: twelve of its parameters drift up and down by 5% over three hours, each on its own rhythm, and the same meal can bring 20% more or less sugar than the last time (both Wilinska 2010). The pump delivers within 5% of what it's told.
+
+When the other pages say "the subject", they mean this one virtual person. It is not fitted to you: it has your weight, but the average person's insulin sensitivity.
 
 ## The missing signal
 

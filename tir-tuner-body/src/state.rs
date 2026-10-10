@@ -1,49 +1,37 @@
-//! The eleven-compartment physiological state.
-//!
-//! Compartments in order: subcutaneous insulin depots `s1`/`s2` (mU),
-//! plasma insulin `i` (mU/L), remote actions `x1`/`x2`/`x3` (mU/L),
-//! glucose masses `q1`/`q2` (mmol/kg), gut stores `g1`/`g2` (mmol),
-//! interstitial glucose `c` (mmol/L).
+//! The eleven-compartment state of Wilinska 2010's model.
 
 use crate::subject::VirtualSubject;
+use tir_tuner_common::units::MMOL_PER_GRAM_CHO;
 
-/// Full glucoregulatory state of a virtual subject.
+/// Glucoregulatory state of a virtual subject.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BodyState {
-    /// Subcutaneous insulin mass, depot 1 (mU).
+    /// Subcutaneous insulin, depot 1 (mU).
     pub s1: f64,
-    /// Subcutaneous insulin mass, depot 2 (mU).
+    /// Subcutaneous insulin, depot 2 (mU).
     pub s2: f64,
-    /// Plasma insulin concentration (mU/L).
+    /// Plasma insulin (mU/L).
     pub i: f64,
-    /// Remote insulin action on glucose transport (mU/L).
+    /// Insulin action on glucose transport (/min).
     pub x1: f64,
-    /// Remote insulin action on glucose disposal (mU/L).
+    /// Insulin action on glucose disposal (/min).
     pub x2: f64,
-    /// Remote insulin action on EGP suppression (mU/L).
+    /// Insulin action on EGP (dimensionless).
     pub x3: f64,
     /// Accessible glucose mass (mmol/kg).
     pub q1: f64,
     /// Non-accessible glucose mass (mmol/kg).
     pub q2: f64,
-    /// Gut glucose store, absorption depot 1 (mmol).
+    /// Gut glucose, compartment 1 (mmol).
     pub g1: f64,
-    /// Gut glucose store, absorption depot 2 (mmol).
+    /// Gut glucose, compartment 2 (mmol).
     pub g2: f64,
-    /// Interstitial glucose concentration (mmol/L).
+    /// Interstitial glucose (mmol/L).
     pub c: f64,
 }
 
 impl BodyState {
-    /// The basal steady state: no insulin bolus, no meal, plasma and
-    /// glucose compartments at rest.
-    ///
-    /// Subcutaneous chain at rest: `s2 = s1 = u_basal/ka` with `u_basal`
-    /// the basal mass rate (mU/min); plasma `i = u/(vi*w*ke)`; remote
-    /// actions track `i`; gut empty; interstitial glucose `c` equals
-    /// plasma glucose `g = q1/vg`. The glucose masses must balance the
-    /// expression `EGP - F01 - FR`, solved by simulation in
-    /// [`crate::solver::basal_steady_state`].
+    /// Every compartment empty.
     pub fn zero() -> Self {
         Self {
             s1: 0.0,
@@ -60,29 +48,32 @@ impl BodyState {
         }
     }
 
-    /// Accessible plasma glucose concentration (mmol/L).
+    /// Plasma glucose `G = Q1 / VG` (mmol/L).
     pub fn plasma_glucose(&self, subject: &VirtualSubject) -> f64 {
         self.q1 / subject.vg_l_per_kg
+    }
+
+    /// A meal of `carbs_g`: W10's `Bio D(t)` into the first gut compartment,
+    /// as an impulse. `bio_factor` is this meal's interoccasion variation.
+    pub fn eat(&mut self, subject: &VirtualSubject, carbs_g: f64, bio_factor: f64) {
+        self.g1 += subject.bio_fraction * bio_factor * carbs_g * MMOL_PER_GRAM_CHO;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::subject::W10_WEIGHT_KG;
 
     #[test]
-    fn zero_state_gives_zero_plasma_glucose() {
-        let subject = VirtualSubject::population_mean();
-        assert_eq!(BodyState::zero().plasma_glucose(&subject), 0.0);
-    }
-
-    #[test]
-    fn plasma_glucose_inverts_distribution_volume() {
-        let subject = VirtualSubject::population_mean();
-        let state = BodyState {
-            q1: 0.75,
-            ..BodyState::zero()
-        };
-        assert!((state.plasma_glucose(&subject) - 5.0).abs() < 1e-12);
+    fn meal_lands_in_gut_at_bioavailability() {
+        let s = VirtualSubject::nominal(W10_WEIGHT_KG);
+        let mut state = BodyState::zero();
+        state.eat(&s, 60.0, 1.1);
+        assert!((state.g1 - 0.95 * 1.1 * 60.0 * 1000.0 / 180.156).abs() < 1e-9);
+        assert_eq!(state.g2, 0.0);
+        let before = state.g1;
+        state.eat(&s, 10.0, 1.0);
+        assert!((state.g1 - before - 0.95 * 10.0 * 1000.0 / 180.156).abs() < 1e-9);
     }
 }

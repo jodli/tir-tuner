@@ -1,235 +1,178 @@
-//! Continuous-time right-hand sides of the physiological model.
+//! Right-hand sides of Wilinska 2010's model (Appendix, p12-13), per minute.
 //!
-//! All rates are expressed per minute. The inputs are the subcutaneous
-//! insulin influx `u_basal_mu_per_min` (mU/min, basal plus any bolus
-//! spread over the time step) and the meal carbohydrate intake
-//! `meal_g_per_min`. The gut stores are in mmol of glucose, so the meal
-//! grams are converted with `MMOL_PER_GRAM_CHO`.
+//! The only continuous input is the subcutaneous insulin influx (mU/min).
+//! Meals enter as an impulse into the gut, see [`BodyState::eat`].
 
 use crate::state::BodyState;
 use crate::subject::VirtualSubject;
-use tir_tuner_common::units::MMOL_PER_GRAM_CHO;
 
-/// Inputs to the body over one time step.
+/// Time derivatives of the eleven compartments (per minute).
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct BodyInputs {
-    /// Subcutaneous insulin injection rate (mU/min).
-    pub u_basal_mu_per_min: f64,
-    /// Meal carbohydrate intake (g/min).
-    pub meal_g_per_min: f64,
-}
-
-/// Time derivatives of all eleven compartments (per minute).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[allow(missing_docs)]
 pub struct BodyDerivatives {
-    /// Rate of change of the subcutaneous insulin mass, depot 1 (mU/min).
     pub s1: f64,
-    /// Rate of change of the subcutaneous insulin mass, depot 2 (mU/min).
     pub s2: f64,
-    /// Rate of change of plasma insulin (mU/L/min).
     pub i: f64,
-    /// Rate of change of the remote insulin action on transport (mU/L/min).
     pub x1: f64,
-    /// Rate of change of the remote insulin action on disposal (mU/L/min).
     pub x2: f64,
-    /// Rate of change of the remote insulin action on EGP (mU/L/min).
     pub x3: f64,
-    /// Rate of change of the accessible glucose mass (mmol/kg/min).
     pub q1: f64,
-    /// Rate of change of the non-accessible glucose mass (mmol/kg/min).
     pub q2: f64,
-    /// Rate of change of the gut glucose store, depot 1 (mmol/min).
     pub g1: f64,
-    /// Rate of change of the gut glucose store, depot 2 (mmol/min).
     pub g2: f64,
-    /// Rate of change of interstitial glucose (mmol/L/min).
     pub c: f64,
 }
 
-/// Endogenous glucose production (mmol/kg/min), the aps-style
-/// suppression model: `egp0 * 2^((x3_basal - x3)/S)`, capped at 3x basal
-/// EGP, with `S = 0.5` (mU-invariant scale) and `x3_basal` the resting
-/// value of the EGP action `sie * i_basal`. At rest the exponent is
-/// zero, so EGP equals the published basal `egp0` exactly; rising
-/// insulin action suppresses production. See module docs and
-/// [`crate::subject`] for the divergence note from the published
-/// `EGP0[1+x3]`.
+/// Endogenous glucose production (mmol/kg/min), `EGP0 (1 - x3)` floored at
+/// zero. W10 prints `1 + x3`, a sign typo against H02 eq 7 and H04 eq 1.
+/// src: h04-egp
 pub fn egp(subject: &VirtualSubject, x3: f64) -> f64 {
-    let x3_basal = subject.basale_x3();
-    let uncapped =
-        subject.egp0_mmol_per_kg_min * ((x3_basal - x3) / 0.5 * std::f64::consts::LN_2).exp();
-    uncapped.min(3.0 * subject.egp0_mmol_per_kg_min)
+    (subject.egp0_mmol_per_kg_min * (1.0 - x3)).max(0.0)
 }
 
-/// Non-insulin-dependent glucose uptake (mmol/kg/min). The Michaelis-
-/// Menten form `F01s * G / (G + 1)` with `F01s = F01/0.85`, from
-/// Wilinska Table 1; `F01c = F01` exactly at `G = 5/0.85 = 5.88`? No:
-/// `G/(G+1) = 0.85` gives `G = 5.67` mmol/L, so basal uptake equals the
-/// published `F01` at a near-basal glucose of 5.67 mmol/L.
+/// Share of `F01` taken up at the glucose where `G/(G+1)` equals it.
+/// src: w10-f01c
+pub(crate) const F01_SATURATION: f64 = 0.85;
+
+/// Non-insulin-dependent glucose uptake (mmol/kg/min), `F01/0.85 G/(G+1)`.
 pub fn f01c(subject: &VirtualSubject, plasma_glucose_mmol_per_l: f64) -> f64 {
-    let f01s = subject.f01_mmol_per_kg_min / 0.85;
-    f01s * plasma_glucose_mmol_per_l / (plasma_glucose_mmol_per_l + 1.0)
+    subject.f01_mmol_per_kg_min / F01_SATURATION * plasma_glucose_mmol_per_l
+        / (plasma_glucose_mmol_per_l + 1.0)
 }
 
-/// Renal glucose excretion (mmol/kg/min), zero below the renal threshold.
+/// Renal glucose excretion (mmol/kg/min), zero below the threshold. W10 p12.
 pub fn renal_excretion(subject: &VirtualSubject, plasma_glucose_mmol_per_l: f64) -> f64 {
-    if plasma_glucose_mmol_per_l > subject.r_thr_mmol_per_l {
-        subject.r_cl_per_min
-            * (plasma_glucose_mmol_per_l - subject.r_thr_mmol_per_l)
-            * subject.vg_l_per_kg
-    } else {
-        0.0
-    }
+    (subject.r_cl_per_min
+        * (plasma_glucose_mmol_per_l - subject.r_thr_mmol_per_l)
+        * subject.vg_l_per_kg)
+        .max(0.0)
 }
 
-/// Gut time-to-maximum (min). Above the flux ceiling Wilinska 2010 (p12-13)
-/// stretches it to `G2 / UG_ceil` for the whole chain, so absorption slows
-/// and no carbs are lost.
-pub fn gut_t_max(subject: &VirtualSubject, g2_mmol: f64) -> f64 {
-    let ceil_mmol_per_min = subject.ug_ceil_mmol_per_kg_min * subject.weight_kg;
-    if g2_mmol / subject.t_max_g_min > ceil_mmol_per_min {
-        g2_mmol / ceil_mmol_per_min
-    } else {
-        subject.t_max_g_min
-    }
+/// Gut absorption at gut mass `g2_mmol`: time-to-maximum (min) and the
+/// glucose appearance (mmol/kg/min). Above the flux ceiling W10 (p12-13)
+/// stretches `t_max` to `G2 / UG_ceil` for the whole chain, so absorption
+/// slows and no carbs are lost.
+pub fn gut(subject: &VirtualSubject, g2_mmol: f64) -> (f64, f64) {
+    let w = subject.weight_kg;
+    let t_max = subject
+        .t_max_g_min
+        .max(g2_mmol / (subject.ug_ceil_mmol_per_kg_min * w));
+    let ug = (g2_mmol / (subject.t_max_g_min * w)).min(subject.ug_ceil_mmol_per_kg_min);
+    (t_max, ug)
 }
 
-/// Gut glucose appearance rate (mmol/kg/min), at most `ug_ceil`.
-pub fn gut_appearance(subject: &VirtualSubject, g2_mmol: f64) -> f64 {
-    g2_mmol / (gut_t_max(subject, g2_mmol) * subject.weight_kg)
-}
-
-/// Interstitial glucose equilibration rate (mmol/L per min).
-pub fn interstitial_rate(subject: &VirtualSubject, plasma: f64, interstitial: f64) -> f64 {
-    subject.ka_int_per_min * (plasma - interstitial)
-}
-
-/// Full right-hand side of the ODE system.
+/// The full right-hand side under insulin influx `u_mu_per_min`.
 pub fn derivatives(
     subject: &VirtualSubject,
     state: &BodyState,
-    inputs: &BodyInputs,
+    u_mu_per_min: f64,
 ) -> BodyDerivatives {
     let g = state.plasma_glucose(subject);
-
-    // Subcutaneous insulin absorption (Depot 1 -> Depot 2 -> plasma).
-    let s1 = inputs.u_basal_mu_per_min - subject.ka_per_min * state.s1;
-    let s2 = subject.ka_per_min * (state.s1 - state.s2);
-    let i = subject.ka_per_min * state.s2 / (subject.vi_l_per_kg * subject.weight_kg)
-        - subject.ke_per_min * state.i;
-
-    // Remote insulin actions relax to the plasma insulin concentration.
-    let x1 = subject.kb1_per_min * (subject.sit_per_mu_l * state.i - state.x1);
-    let x2 = subject.kb2_per_min * (subject.sid_per_mu_l * state.i - state.x2);
-    let x3 = subject.kb3_per_min * (subject.sie_per_mu_l * state.i - state.x3);
-
-    // Gut chain with the meal input gated by bioavailability.
-    let gut_input_mmol_per_min = subject.bio_fraction * inputs.meal_g_per_min * MMOL_PER_GRAM_CHO;
-    let t_max = gut_t_max(subject, state.g2);
-    let g1 = gut_input_mmol_per_min - state.g1 / t_max;
-    let g2 = (state.g1 - state.g2) / t_max;
-
-    let ug = gut_appearance(subject, state.g2);
-
-    // Glucose masses: accessible Q1, non-accessible Q2.
+    let ka = subject.ka_per_min;
+    let (t_max, ug) = gut(subject, state.g2);
     let q1 = egp(subject, state.x3) + ug - f01c(subject, g) - state.x1 * state.q1
         + subject.k12_per_min * state.q2
         - renal_excretion(subject, g);
-    let q2 = state.x1 * state.q1 - state.x2 * state.q2 - subject.k12_per_min * state.q2;
-
-    let c = interstitial_rate(subject, g, state.c);
-
     BodyDerivatives {
-        s1,
-        s2,
-        i,
-        x1,
-        x2,
-        x3,
+        s1: u_mu_per_min - ka * state.s1,
+        s2: ka * (state.s1 - state.s2),
+        i: ka * state.s2 / (subject.vi_l_per_kg * subject.weight_kg) - subject.ke_per_min * state.i,
+        x1: subject.kb1_per_min * (subject.sit_per_mu_l * state.i - state.x1),
+        x2: subject.kb2_per_min * (subject.sid_per_mu_l * state.i - state.x2),
+        x3: subject.kb3_per_min * (subject.sie_per_mu_l * state.i - state.x3),
         q1,
-        q2,
-        g1,
-        g2,
-        c,
+        q2: state.x1 * state.q1 - (state.x2 + subject.k12_per_min) * state.q2,
+        g1: -state.g1 / t_max,
+        g2: (state.g1 - state.g2) / t_max,
+        c: subject.ka_int_per_min * (g - state.c),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::subject::W10_WEIGHT_KG;
 
-    fn mean_state() -> (VirtualSubject, BodyState) {
-        (VirtualSubject::population_mean(), BodyState::zero())
+    fn subject() -> VirtualSubject {
+        VirtualSubject::nominal(W10_WEIGHT_KG)
     }
 
     #[test]
-    fn f01c_is_michaelis_menten() {
-        let (subject, _) = mean_state();
-        // F01s * G/(G+1); equals F01 at G = 5.67 (where G/(G+1) = 0.85).
-        let f01 = subject.f01_mmol_per_kg_min;
-        let g_bal = 0.85 / (1.0 - 0.85);
-        assert!((f01c(&subject, g_bal) - f01).abs() < 1e-12);
-        // Saturates at F01s, never above.
-        assert!(f01c(&subject, 1e9) <= f01 / 0.85 + 1e-12);
-        assert_eq!(f01c(&subject, 0.0), 0.0);
+    fn h04_egp_falls_linearly_to_zero() {
+        let s = subject();
+        assert_eq!(egp(&s, 0.0), 16.9e-3);
+        assert!((egp(&s, 0.25) - 16.9e-3 * 0.75).abs() < 1e-15);
+        assert_eq!(egp(&s, 1.0), 0.0);
+        assert_eq!(egp(&s, 1.5), 0.0);
     }
 
     #[test]
-    fn renal_excretion_drops_out_below_threshold() {
-        let (subject, _) = mean_state();
-        assert_eq!(renal_excretion(&subject, 8.9), 0.0);
-        assert!(renal_excretion(&subject, 10.0) > 0.0);
+    fn w10_f01c_is_f01_at_g_5_67() {
+        let s = subject();
+        let g = 0.85 / 0.15;
+        assert!((f01c(&s, g) - 11.1e-3).abs() < 1e-15);
+        assert!((f01c(&s, 1.0) - 11.1e-3 / 0.85 / 2.0).abs() < 1e-15);
     }
 
     #[test]
-    fn egp_suppresses_with_insulin_action() {
-        let (subject, _) = mean_state();
-        let low = egp(&subject, 0.0);
-        let basal_x3 = subject.basale_x3();
-        let high = egp(&subject, basal_x3 * 10.0);
-        // Zero insulin action still raises EGP above basal (Hepatic
-        // glucose output rises without insulin), but stays capped.
-        assert!(low > subject.egp0_mmol_per_kg_min);
-        assert!(low <= 3.0 * subject.egp0_mmol_per_kg_min);
-        assert!(high < subject.egp0_mmol_per_kg_min);
-        // Anchor: at the basal action the production equals basal EGP.
-        assert!((egp(&subject, basal_x3) - subject.egp0_mmol_per_kg_min).abs() < 1e-9);
+    fn w10_renal_excretion_above_threshold() {
+        let s = subject();
+        assert_eq!(renal_excretion(&s, 8.0), 0.0);
+        assert!((renal_excretion(&s, 11.0) - 0.01 * 2.0 * 0.15).abs() < 1e-15);
     }
 
     #[test]
-    fn gut_appearance_is_capped() {
-        let (subject, _) = mean_state();
-        assert!(gut_appearance(&subject, 1e6) <= subject.ug_ceil_mmol_per_kg_min + 1e-12);
-        assert_eq!(gut_appearance(&subject, 0.0), 0.0);
+    fn w10_gut_ceiling_stretches_t_max() {
+        let s = subject();
+        // Below the ceiling: UG = G2 / (t_max w).
+        let (t, ug) = gut(&s, 10.0);
+        assert_eq!(t, 40.0);
+        assert!((ug - 10.0 / (40.0 * W10_WEIGHT_KG)).abs() < 1e-15);
+        // Above it: the flux sits at the ceiling and t_max = G2 / UG_ceil.
+        let g2 = 500.0;
+        let (t, ug) = gut(&s, g2);
+        assert!((ug - 0.0275).abs() < 1e-15);
+        assert!((t - g2 / (0.0275 * W10_WEIGHT_KG)).abs() < 1e-9);
     }
 
-    proptest::proptest! {
-        #[test]
-        fn derivatives_finite_for_bounded_states(
-            s1 in 0.0f64..100.0,
-            s2 in 0.0f64..100.0,
-            i in 0.0f64..200.0,
-            q1 in 0.1f64..20.0,
-            q2 in 0.0f64..20.0,
-            g1 in 0.0f64..150.0,
-            g2 in 0.0f64..150.0,
-            c in 0.0f64..20.0,
-            meal in 0.0f64..5.0,
-            u in 0.0f64..500.0,
-        ) {
-            let subject = VirtualSubject::population_mean();
-            let state = BodyState {
-                s1, s2, i,
-                x1: subject.sit_per_mu_l * i,
-                x2: subject.sid_per_mu_l * i,
-                x3: subject.sie_per_mu_l * i,
-                q1, q2, g1, g2, c,
-            };
-            let inputs = BodyInputs { u_basal_mu_per_min: u, meal_g_per_min: meal };
-            let d = derivatives(&subject, &state, &inputs);
-            for v in [d.s1, d.s2, d.i, d.x1, d.x2, d.x3, d.q1, d.q2, d.g1, d.g2, d.c] {
-                assert!(v.is_finite());
-            }
-        }
+    /// W10 p12: one rate `ka` for both depots, `ka S2 / VI` into plasma.
+    #[test]
+    fn w10_insulin_chain() {
+        let s = subject();
+        let state = BodyState {
+            s1: 30.0,
+            s2: 20.0,
+            i: 10.0,
+            ..BodyState::zero()
+        };
+        let d = derivatives(&s, &state, 5.0);
+        assert!((d.s1 - (5.0 - 0.0207 * 30.0)).abs() < 1e-12);
+        assert!((d.s2 - 0.0207 * 10.0).abs() < 1e-12);
+        assert!((d.i - (0.0207 * 20.0 / (0.12 * W10_WEIGHT_KG) - 0.14 * 10.0)).abs() < 1e-12);
+        assert!((d.x3 - 0.024 * 0.019 * 10.0).abs() < 1e-15);
+    }
+
+    /// W10 p12: Q2 exchange and the gut chain.
+    #[test]
+    fn w10_glucose_and_gut_flows() {
+        let s = subject();
+        let state = BodyState {
+            x1: 0.01,
+            x2: 0.002,
+            q1: 0.9,
+            q2: 0.5,
+            g1: 20.0,
+            g2: 8.0,
+            c: 5.0,
+            ..BodyState::zero()
+        };
+        let d = derivatives(&s, &state, 0.0);
+        assert!((d.q2 - (0.01 * 0.9 - (0.002 + 0.06) * 0.5)).abs() < 1e-15);
+        assert!((d.g1 + 20.0 / 40.0).abs() < 1e-15);
+        assert!((d.g2 - 12.0 / 40.0).abs() < 1e-15);
+        assert!((d.c - 0.0933 * (6.0 - 5.0)).abs() < 1e-12);
+        let ug = 8.0 / (40.0 * W10_WEIGHT_KG);
+        let want = 16.9e-3 + ug - f01c(&s, 6.0) - 0.01 * 0.9 + 0.06 * 0.5;
+        assert!((d.q1 - want).abs() < 1e-15);
     }
 }

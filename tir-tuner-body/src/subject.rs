@@ -1,193 +1,225 @@
-//! Virtual subject parameterization (Wilinska et al. 2010, Tables 1-2).
+//! The virtual subject: Wilinska 2010's nominal parameters (Tables 1-2) and
+//! its intra-subject oscillation.
 //!
-//! A [`VirtualSubject`] bundles the fixed published parameter values with
-//! a deterministic sample of the population distributions, so every
-//! subject is reproducible from its seed. The country of the distributions
-//! comes from the paper; the sampler here is a straightforward seeded
-//! normal/uniform draw over the published moments (see `cohort`).
-//!
-//! # Model divergences from the published text
-//!
-//! * EGP: Wilinska prints `EGP = EGP0[1+x3]`, which would raise liver
-//!   glucose output as insulin action grows. Insulin suppresses EGP, so
-//!   the sign is treated as a typo. This crate uses the exponential
-//!   suppression `egp0 * 2^((i_basal - x3)/0.5)`, capped at 3x basal EGP,
-//!   the same philosophy as the aps crate and the physiologically
-//!   intended direction.
-//! * Renal excretion is applied to the accessible glucose `G` through
-//!   the `R_cl (G - R_thr) VG` form, not the piecewise-linear Hovorka
-//!   original.
-//! * Gut absorption carries the meal bioavailability on the input side
-//!   and clamps the appearance rate at `UG_ceil` (per-AUC discretized
-//!   with a `bio` draw as published).
-//!
-//! Compartment conventions (matching the Cambridge simulator):
-//! subcutaneous insulin masses `s1`/`s2` in mU, plasma insulin `i` and
-//! actions `x1`/`x2`/`x3` in mU/L, glucose masses `q1`/`q2` in mmol/kg,
-//! gut stores `g1`/`g2` in mmol, interstitial glucose `c` in mmol/L.
-//! Insulin concentrations are read in U/L; the ingestion input is grams
-//! of carbohydrate per minute.
+//! W10 publishes only the population means and priors, not its 18 subjects,
+//! so there is one nominal subject, scaled to a body weight.
 
 use tir_tuner_common::random::SeededRng;
-use tir_tuner_common::units::MU_PER_UNIT;
+use tir_tuner_common::settings::DEFAULT_TARGET_MMOL_L;
+use tir_tuner_common::units::{HOURS_PER_DAY, MIN_PER_HOUR, MU_PER_UNIT};
+
+/// W10 population mean body weight (kg). src: w10-population
+pub const W10_WEIGHT_KG: f64 = 74.9;
+
+/// Basal share of the total daily dose. src: walsh-basal-share
+const WALSH_BASAL_SHARE: f64 = 0.48;
+/// Carb factor `CarbF = 5.7 weight(kg) / TDD` (g/U). src: walsh-carb-factor
+const WALSH_CARB_FACTOR_G_PER_KG: f64 = 5.7;
+/// Grams per carb-ratio unit, "U per 10 g". src: walsh-carb-factor
+pub const ICR_GRAMS: f64 = 10.0;
+
+/// src: w10-table1
+const F01_MMOL_PER_KG_MIN: f64 = 11.1e-3;
+/// src: w10-table1
+const EGP0_MMOL_PER_KG_MIN: f64 = 16.9e-3;
+/// src: w10-table1
+const K12_PER_MIN: f64 = 0.060;
+/// src: w10-table1
+const SIT_PER_MU_L: f64 = 18.41e-4;
+/// src: w10-table1
+const SID_PER_MU_L: f64 = 5.05e-4;
+/// src: w10-table1
+const SIE_PER_MU_L: f64 = 0.019;
+/// src: w10-table1
+const KB1_PER_MIN: f64 = 0.0034;
+/// src: w10-table1
+const KB2_PER_MIN: f64 = 0.056;
+/// src: w10-table1
+const KB3_PER_MIN: f64 = 0.024;
+
+/// src: w10-table2
+const VG_L_PER_KG: f64 = 0.15;
+/// src: w10-table2
+const VI_L_PER_KG: f64 = 0.12;
+/// src: w10-table2
+const KE_PER_MIN: f64 = 0.14;
+/// src: w10-table2
+const R_THR_MMOL_L: f64 = 9.0;
+/// src: w10-table2
+const R_CL_PER_MIN: f64 = 0.01;
+/// src: w10-table2
+const T_MAX_G_MIN: f64 = 40.0;
+/// Median of W10's lognormal prior, exp(-2.372). src: w10-table2
+const KA_INT_PER_MIN: f64 = 0.0933;
+/// Mean of W10's U(70%, 120%). src: w10-bio
+const BIO_FRACTION: f64 = 0.95;
+/// Mean of W10's U(0.02, 0.035) mmol/kg/min. src: w10-ug-ceil
+const UG_CEIL_MMOL_PER_KG_MIN: f64 = 0.0275;
+/// Fiasp absorption rate (/min), fitted to Heise 2017 CSII. src: heise-fiasp-ka
+const KA_FIASP_PER_MIN: f64 = 0.0207;
 
 /// Parameters of a virtual subject.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct VirtualSubject {
-    /// Body weight (kg). Population 74.9 +/- 14.4.
+    /// Body weight (kg).
     pub weight_kg: f64,
-    /// Basal insulin requirement (U/h). Population daily dose 0.35 +/-
-    /// 0.14 U/kg/d, scaled to the day.
-    pub bir_u_per_h: f64,
-    /// Carbohydrate-to-insulin ratio (U per 10 g). Population 1.7 +/- 1.0.
-    pub icr_u_per_10g_cho: f64,
-
-    /// Glucose distribution volume (L/kg). Sampled log-normal around 0.15.
+    /// Glucose distribution volume (L/kg).
     pub vg_l_per_kg: f64,
-    /// Insulin distribution volume (L/kg). Normal 0.12 +/- 0.012.
+    /// Insulin distribution volume (L/kg).
     pub vi_l_per_kg: f64,
-    /// Insulin clearance rate (1/min). Normal 0.14 +/- 0.035.
+    /// Insulin elimination rate (/min).
     pub ke_per_min: f64,
-    /// Subcutaneous insulin absorption rate (1/min). Normal 0.018 +/-
-    /// 0.0045.
+    /// Subcutaneous insulin absorption rate (/min).
     pub ka_per_min: f64,
-    /// Rate constant for gut-to-plasma inter-compartment transfer (1/min).
-    /// Fixed 0.060.
+    /// Transfer from the non-accessible to the accessible glucose mass (/min).
     pub k12_per_min: f64,
-
-    /// Insulin action gain for glucose transport (units of x1 per mU/L).
-    /// Fixed 18.41e-4.
+    /// Insulin sensitivity of glucose transport (/min per mU/L).
     pub sit_per_mu_l: f64,
-    /// Insulin action gain for glucose disposal (units of x2 per mU/L).
-    /// Fixed 5.05e-4.
+    /// Insulin sensitivity of glucose disposal (/min per mU/L).
     pub sid_per_mu_l: f64,
-    /// Insulin action gain for EGP suppression (units of x3 per mU/L).
-    /// Fixed 0.019.
+    /// Insulin sensitivity of EGP suppression (per mU/L).
     pub sie_per_mu_l: f64,
-    /// Rate constant for x1 approach to equilibrium (1/min). Fixed 0.0034.
+    /// Rate of the insulin action on transport (/min).
     pub kb1_per_min: f64,
-    /// Rate constant for x2 approach to equilibrium (1/min). Fixed 0.056.
+    /// Rate of the insulin action on disposal (/min).
     pub kb2_per_min: f64,
-    /// Rate constant for x3 approach to equilibrium (1/min). Fixed 0.024.
+    /// Rate of the insulin action on EGP (/min).
     pub kb3_per_min: f64,
-
-    /// Non-insulin-dependent glucose uptake at basal glucose (mmol/kg/min).
-    /// Fixed 11.1 / 1000.
+    /// Non-insulin-dependent glucose flux (mmol/kg/min).
     pub f01_mmol_per_kg_min: f64,
-    /// Basal endogenous glucose production (mmol/kg/min). Fixed 16.9 / 1000.
+    /// EGP extrapolated to zero insulin (mmol/kg/min).
     pub egp0_mmol_per_kg_min: f64,
-    /// Renal glucose excretion threshold (mmol/L). Normal 9 +/- 1.5.
+    /// Renal threshold (mmol/L).
     pub r_thr_mmol_per_l: f64,
-    /// Renal glucose excretion rate (1/min). Normal 0.01 +/- 0.025,
-    /// clamped to non-negative.
+    /// Renal clearance (/min).
     pub r_cl_per_min: f64,
-
-    /// Meal bioavailability fraction, 0.70-1.20 (100% + 20%). Intra-subject
-    /// variation is applied as an extra +-20% draw in the engine.
+    /// Carb bioavailability.
     pub bio_fraction: f64,
-    /// Peak gut absorption time (min). Log-normal median exp(3.689) ~ 40.
+    /// Time-to-maximum of gut absorption (min).
     pub t_max_g_min: f64,
-    /// Upper cap on the gut glucose appearance rate (mmol/kg/min),
-    /// uniform 0.02-0.035.
+    /// Ceiling of the gut glucose flux (mmol/kg/min).
     pub ug_ceil_mmol_per_kg_min: f64,
-    /// Interstitial glucose equilibration rate (1/min). Log-normal median
-    /// exp(-2.372) ~ 0.093.
+    /// Plasma to interstitial glucose transfer (/min).
     pub ka_int_per_min: f64,
 }
 
 impl VirtualSubject {
-    /// The population-mean subject: every parameter at its published
-    /// typical value, no sampling. Used as the deterministic default.
-    pub fn population_mean() -> Self {
+    /// W10's nominal subject at `weight_kg`, with Fiasp absorption.
+    pub fn nominal(weight_kg: f64) -> Self {
         Self {
-            weight_kg: 74.9,
-            bir_u_per_h: 0.35 * 74.9 / 24.0, // 1.09 U/h
-            icr_u_per_10g_cho: 1.7,
-            vg_l_per_kg: 0.15,
-            vi_l_per_kg: 0.12,
-            ke_per_min: 0.14,
-            ka_per_min: 0.018,
-            k12_per_min: 0.060,
-            sit_per_mu_l: 18.41e-4,
-            sid_per_mu_l: 5.05e-4,
-            sie_per_mu_l: 0.019,
-            kb1_per_min: 0.0034,
-            kb2_per_min: 0.056,
-            kb3_per_min: 0.024,
-            f01_mmol_per_kg_min: 11.1e-3,
-            egp0_mmol_per_kg_min: 16.9e-3,
-            r_thr_mmol_per_l: 9.0,
-            r_cl_per_min: 0.01,
-            bio_fraction: 1.0,
-            t_max_g_min: 40.0,
-            ug_ceil_mmol_per_kg_min: 0.028,
-            ka_int_per_min: 0.093,
+            weight_kg,
+            vg_l_per_kg: VG_L_PER_KG,
+            vi_l_per_kg: VI_L_PER_KG,
+            ke_per_min: KE_PER_MIN,
+            ka_per_min: KA_FIASP_PER_MIN,
+            k12_per_min: K12_PER_MIN,
+            sit_per_mu_l: SIT_PER_MU_L,
+            sid_per_mu_l: SID_PER_MU_L,
+            sie_per_mu_l: SIE_PER_MU_L,
+            kb1_per_min: KB1_PER_MIN,
+            kb2_per_min: KB2_PER_MIN,
+            kb3_per_min: KB3_PER_MIN,
+            f01_mmol_per_kg_min: F01_MMOL_PER_KG_MIN,
+            egp0_mmol_per_kg_min: EGP0_MMOL_PER_KG_MIN,
+            r_thr_mmol_per_l: R_THR_MMOL_L,
+            r_cl_per_min: R_CL_PER_MIN,
+            bio_fraction: BIO_FRACTION,
+            t_max_g_min: T_MAX_G_MIN,
+            ug_ceil_mmol_per_kg_min: UG_CEIL_MMOL_PER_KG_MIN,
+            ka_int_per_min: KA_INT_PER_MIN,
         }
     }
 
-    /// Basal steady-state plasma insulin concentration (mU/L) for the
-    /// subject's basal requirement.
-    ///
-    /// From the insulin ODEs at steady state: `s1 = s2 = u/ka`,
-    /// `i = ka*s2/(vi*w*ke) = u/(vi*w*ke)`, with `u` the basal mass
-    /// rate (mU/min).
-    pub fn basal_insulin_concentration(&self) -> f64 {
-        let u_per_min = self.bir_u_per_h / 60.0 * MU_PER_UNIT;
-        u_per_min / (self.vi_l_per_kg * self.weight_kg * self.ke_per_min)
+    /// Insulin flux (mU/min) that holds plasma insulin at `i_mu_per_l`.
+    pub fn insulin_flux(&self, i_mu_per_l: f64) -> f64 {
+        i_mu_per_l * self.vi_l_per_kg * self.weight_kg * self.ke_per_min
     }
 
-    /// Basal steady-state value of insulin action `x3` (mU/L), used as
-    /// the EGP anchor.
-    pub fn basale_x3(&self) -> f64 {
-        self.sie_per_mu_l * self.basal_insulin_concentration()
+    /// Basal (U/h) that holds glucose at rest at `g_mmol_per_l`.
+    pub fn resting_basal_u_per_h(&self, g_mmol_per_l: f64) -> f64 {
+        self.rate_for_insulin(crate::solver::resting_insulin(self, g_mmol_per_l))
+    }
+
+    /// Insulin-to-carb ratio (U per 10 g) for simulated meal boluses, Walsh
+    /// 2011 eq 1-2 from the basal at the default target. W10's population
+    /// 1.7 is a mean over subjects and overdoses the mean subject.
+    pub fn walsh_icr(&self) -> f64 {
+        let tdd_u =
+            self.resting_basal_u_per_h(DEFAULT_TARGET_MMOL_L) * HOURS_PER_DAY / WALSH_BASAL_SHARE;
+        ICR_GRAMS * tdd_u / (WALSH_CARB_FACTOR_G_PER_KG * self.weight_kg)
+    }
+
+    /// The bolus (U) the Walsh ratio gives for `carbs_g`.
+    pub fn meal_bolus_u(&self, carbs_g: f64) -> f64 {
+        carbs_g / ICR_GRAMS * self.walsh_icr()
+    }
+
+    /// Steady-state plasma insulin (mU/L) under `bir_u_per_h`.
+    pub fn insulin_at_rate(&self, bir_u_per_h: f64) -> f64 {
+        bir_u_per_h / MIN_PER_HOUR * MU_PER_UNIT
+            / (self.vi_l_per_kg * self.weight_kg * self.ke_per_min)
+    }
+
+    /// The infusion (U/h) that holds plasma insulin at `i_mu_per_l`.
+    pub fn rate_for_insulin(&self, i_mu_per_l: f64) -> f64 {
+        self.insulin_flux(i_mu_per_l) / MU_PER_UNIT * MIN_PER_HOUR
+    }
+
+    /// This subject at `t_min` with W10's oscillation applied.
+    pub fn oscillated(&self, osc: &Oscillation, t_min: f64) -> Self {
+        let [f01, egp0, k12, sid, sie, sit, kb1, kb2, kb3, ka, ke, ka_int] =
+            osc.phase_min.map(|phase| {
+                let angle = std::f64::consts::TAU * (t_min + phase) / OSCILLATION_PERIOD_MIN;
+                1.0 + OSCILLATION_AMPLITUDE * angle.sin()
+            });
+        Self {
+            f01_mmol_per_kg_min: self.f01_mmol_per_kg_min * f01,
+            egp0_mmol_per_kg_min: self.egp0_mmol_per_kg_min * egp0,
+            k12_per_min: self.k12_per_min * k12,
+            sid_per_mu_l: self.sid_per_mu_l * sid,
+            sie_per_mu_l: self.sie_per_mu_l * sie,
+            sit_per_mu_l: self.sit_per_mu_l * sit,
+            kb1_per_min: self.kb1_per_min * kb1,
+            kb2_per_min: self.kb2_per_min * kb2,
+            kb3_per_min: self.kb3_per_min * kb3,
+            ka_per_min: self.ka_per_min * ka,
+            ke_per_min: self.ke_per_min * ke,
+            ka_int_per_min: self.ka_int_per_min * ka_int,
+            ..*self
+        }
     }
 }
 
-fn clamp(v: f64, lo: f64, hi: f64) -> f64 {
-    v.max(lo).min(hi)
+/// Amplitude of the sinusoidal parameter oscillation. src: w10-oscillation
+const OSCILLATION_AMPLITUDE: f64 = 0.05;
+/// Period of the oscillation (min). src: w10-oscillation
+const OSCILLATION_PERIOD_MIN: f64 = 180.0;
+/// Parameters W10 Tables 1-2 mark oscillatory. src: w10-oscillation
+pub const OSCILLATING_PARAMETERS: usize = 12;
+
+/// Per-parameter phases of W10's oscillation, each from U[0, 3 h].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Oscillation {
+    /// Phase (min) per oscillating parameter, in [`VirtualSubject::oscillated`]'s order.
+    pub phase_min: [f64; OSCILLATING_PARAMETERS],
 }
 
-fn log_normal(rng: &mut SeededRng, mean_ln: f64, sdev_ln: f64) -> f64 {
-    (mean_ln + sdev_ln * rng.next_normal()).exp()
-}
-
-/// A deterministic cohort of `n` subjects drawn from the published
-/// population distributions, seeded so the same `seed` always yields the
-/// same subjects. Bounded parameters are clamped to physiological range.
-pub fn cohort(n: usize, seed: u64) -> Vec<VirtualSubject> {
-    let premium = VirtualSubject::population_mean();
-    let mut rng = SeededRng::new(seed);
-    let mut out = Vec::with_capacity(n);
-    for _ in 0..n {
-        let weight = clamp(rng.next_normal_mean(74.9, 14.4), 30.0, 150.0);
-        // Daily dose 0.35 +/- 0.14 U/kg/d, clamped positive.
-        let daily_per_kg = (rng.next_normal_mean(0.35, 0.14)).max(0.05);
-        out.push(VirtualSubject {
-            weight_kg: weight,
-            bir_u_per_h: daily_per_kg * weight / 24.0,
-            icr_u_per_10g_cho: clamp(rng.next_normal_mean(1.7, 1.0), 0.5, 5.0),
-            vg_l_per_kg: clamp(log_normal(&mut rng, -1.897, 0.23), 0.08, 0.30),
-            vi_l_per_kg: clamp(rng.next_normal_mean(0.12, 0.012), 0.05, 0.25),
-            ke_per_min: clamp(rng.next_normal_mean(0.14, 0.035), 0.02, 0.35),
-            ka_per_min: clamp(rng.next_normal_mean(0.018, 0.0045), 0.002, 0.08),
-            k12_per_min: premium.k12_per_min,
-            sit_per_mu_l: premium.sit_per_mu_l,
-            sid_per_mu_l: premium.sid_per_mu_l,
-            sie_per_mu_l: premium.sie_per_mu_l,
-            kb1_per_min: premium.kb1_per_min,
-            kb2_per_min: premium.kb2_per_min,
-            kb3_per_min: premium.kb3_per_min,
-            f01_mmol_per_kg_min: premium.f01_mmol_per_kg_min,
-            egp0_mmol_per_kg_min: premium.egp0_mmol_per_kg_min,
-            r_thr_mmol_per_l: clamp(rng.next_normal_mean(9.0, 1.5), 5.0, 12.0),
-            r_cl_per_min: clamp(rng.next_normal_mean(0.01, 0.025), 0.0, 0.3),
-            bio_fraction: clamp(0.7 + rng.next_f64() * 0.5, 0.4, 1.5),
-            t_max_g_min: clamp(log_normal(&mut rng, 3.689, 0.25), 20.0, 120.0),
-            ug_ceil_mmol_per_kg_min: 0.02 + rng.next_f64() * 0.015,
-            ka_int_per_min: clamp(log_normal(&mut rng, -2.372, 1.09), 0.02, 0.6),
-        });
+impl Oscillation {
+    /// Phases drawn from U[0, 3 h].
+    pub fn draw(rng: &mut SeededRng) -> Self {
+        Self {
+            phase_min: std::array::from_fn(|_| rng.next_f64() * OSCILLATION_PERIOD_MIN),
+        }
     }
-    out
+}
+
+/// Interoccasion CV of the meal bioavailability. W10 gives the 20%, not the
+/// distribution. src: w10-bio-interoccasion
+const BIO_INTEROCCASION_CV: f64 = 0.2;
+
+/// One meal's bioavailability factor around 1, floored at 0.
+pub fn meal_bio_factor(rng: &mut SeededRng) -> f64 {
+    rng.next_normal_mean(1.0, BIO_INTEROCCASION_CV).max(0.0)
 }
 
 #[cfg(test)]
@@ -195,36 +227,85 @@ mod tests {
     use super::*;
 
     #[test]
-    fn population_mean_is_reproducible() {
-        assert_eq!(
-            VirtualSubject::population_mean(),
-            VirtualSubject::population_mean()
-        );
+    fn walsh_icr_from_the_resting_basal() {
+        let s = VirtualSubject::nominal(50.0);
+        let carb_factor = 5.7 * 50.0 / (s.resting_basal_u_per_h(5.8) * 24.0 / 0.48);
+        assert!((s.walsh_icr() - 10.0 / carb_factor).abs() < 1e-12);
+        assert!((s.meal_bolus_u(60.0) - 6.0 * s.walsh_icr()).abs() < 1e-12);
+        // Per-kg model: the ratio doesn't depend on weight.
+        let w10 = VirtualSubject::nominal(W10_WEIGHT_KG).walsh_icr();
+        assert!((w10 - s.walsh_icr()).abs() < 1e-9, "{w10}");
     }
 
     #[test]
-    fn cohort_is_deterministic() {
-        let a = cohort(4, 7);
-        let b = cohort(4, 7);
-        assert_eq!(a, b);
+    fn rate_and_insulin_are_inverse() {
+        let s = VirtualSubject::nominal(50.0);
+        // 1 U/h = 16.67 mU/min over 0.12 * 50 * 0.14 L/min.
+        assert!((s.insulin_at_rate(1.0) - 1000.0 / 60.0 / 0.84).abs() < 1e-9);
+        assert!((s.rate_for_insulin(10.0) - 10.0 * 0.84 * 60.0 / 1000.0).abs() < 1e-12);
     }
 
     #[test]
-    fn cohort_clamps_physiological() {
-        for s in cohort(100, 1) {
-            assert!(s.weight_kg >= 30.0 && s.weight_kg <= 150.0);
-            assert!(s.bir_u_per_h > 0.0);
-            assert!(s.t_max_g_min >= 20.0 && s.t_max_g_min <= 120.0);
-            assert!(s.ug_ceil_mmol_per_kg_min >= 0.02 && s.ug_ceil_mmol_per_kg_min <= 0.035);
+    fn w10_oscillation_is_5_percent_over_3_hours() {
+        let s = VirtualSubject::nominal(W10_WEIGHT_KG);
+        let osc = Oscillation {
+            phase_min: [0.0; OSCILLATING_PARAMETERS],
+        };
+        // Peak a quarter period in, back to nominal after a full one.
+        assert!((s.oscillated(&osc, 45.0).sie_per_mu_l - 0.019 * 1.05).abs() < 1e-12);
+        assert!((s.oscillated(&osc, 180.0).ka_int_per_min - 0.0933).abs() < 1e-12);
+        // Stationary parameters don't move.
+        assert_eq!(s.oscillated(&osc, 45.0).vg_l_per_kg, 0.15);
+    }
+
+    #[test]
+    fn each_oscillating_parameter_has_its_own_phase() {
+        let s = VirtualSubject::nominal(W10_WEIGHT_KG);
+        let ratios = |o: VirtualSubject| {
+            [
+                o.f01_mmol_per_kg_min / s.f01_mmol_per_kg_min,
+                o.egp0_mmol_per_kg_min / s.egp0_mmol_per_kg_min,
+                o.k12_per_min / s.k12_per_min,
+                o.sid_per_mu_l / s.sid_per_mu_l,
+                o.sie_per_mu_l / s.sie_per_mu_l,
+                o.sit_per_mu_l / s.sit_per_mu_l,
+                o.kb1_per_min / s.kb1_per_min,
+                o.kb2_per_min / s.kb2_per_min,
+                o.kb3_per_min / s.kb3_per_min,
+                o.ka_per_min / s.ka_per_min,
+                o.ke_per_min / s.ke_per_min,
+                o.ka_int_per_min / s.ka_int_per_min,
+            ]
+        };
+        for k in 0..OSCILLATING_PARAMETERS {
+            let mut phase_min = [0.0; OSCILLATING_PARAMETERS];
+            phase_min[k] = 45.0;
+            let r = ratios(s.oscillated(&Oscillation { phase_min }, 0.0));
+            for (j, v) in r.iter().enumerate() {
+                let want = if j == k { 1.05 } else { 1.0 };
+                assert!((v - want).abs() < 1e-12, "phase {k}, parameter {j}: {v}");
+            }
         }
     }
 
     #[test]
-    fn basal_insulin_concentration_uses_basal_rate() {
-        let s = VirtualSubject::population_mean();
-        let bir_u_h = s.bir_u_per_h;
-        let u_per_min = bir_u_h / 60.0 * 1000.0;
-        let expected = u_per_min / (s.vi_l_per_kg * s.weight_kg * s.ke_per_min);
-        assert!((s.basal_insulin_concentration() - expected).abs() < 1e-12);
+    fn w10_phases_are_uniform_over_3_hours() {
+        let mut rng = SeededRng::new(5);
+        let phases: Vec<f64> = (0..500)
+            .flat_map(|_| Oscillation::draw(&mut rng).phase_min)
+            .collect();
+        assert!(phases.iter().all(|p| (0.0..180.0).contains(p)));
+        let mean = phases.iter().sum::<f64>() / phases.len() as f64;
+        assert!((mean - 90.0).abs() < 2.0, "mean {mean}");
+    }
+
+    #[test]
+    fn w10_meal_bioavailability_varies_20_percent() {
+        let mut rng = SeededRng::new(6);
+        let f: Vec<f64> = (0..20_000).map(|_| meal_bio_factor(&mut rng)).collect();
+        let mean = f.iter().sum::<f64>() / f.len() as f64;
+        let sd = (f.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / f.len() as f64).sqrt();
+        assert!((mean - 1.0).abs() < 0.01, "mean {mean}");
+        assert!((sd - 0.2).abs() < 0.01, "sd {sd}");
     }
 }

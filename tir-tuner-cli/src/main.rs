@@ -1,16 +1,16 @@
-use tir_tuner_body::solver::with_basal_glucose;
-use tir_tuner_cli::engine::{Meal, SimConfig, simulate};
+use tir_tuner_body::subject::{VirtualSubject, W10_WEIGHT_KG};
+use tir_tuner_cli::engine::{Bolus, Meal, SimConfig, simulate};
 use tir_tuner_common::data::BolusKind;
 use tir_tuner_common::metrics::{
     coefficient_of_variation, mean_glucose, time_below_range_pct, time_in_range_pct,
 };
-use tir_tuner_common::units::{MgDl, mg_dl_series};
+use tir_tuner_common::units::{HOURS_PER_DAY, MIN_PER_HOUR, MgDl, mg_dl_series};
 
 use chrono::NaiveDateTime;
 use clap::{Parser, Subcommand};
 use std::path::{Path, PathBuf};
+use tir_tuner_aps::AutoMode;
 use tir_tuner_aps::controller::Nmpc;
-use tir_tuner_aps::{AutoMode, TARGET_GLUCOSE_MMOL_L};
 use tir_tuner_cli::settings_file;
 use tir_tuner_store::{ProfileChanges, Store};
 
@@ -204,40 +204,47 @@ fn simulate_export(dir: &Path, kagr: f64, db: &Path) -> Result<(), Error> {
     let real: Vec<MgDl> = cgm.iter().map(|r| MgDl(r.mg_dl)).collect();
     print_metrics("real Glooko", &real);
 
-    // Everything eaten, hypo treatments included, relative to the CGM start.
-    let cgm_start = cgm.first().ok_or_else(|| Error::NoCgm(dir.into()))?.at;
+    // The day replayed: every logged meal and hypo treatment (the app knows
+    // them) and every bolus, relative to the first CGM reading.
+    let first = cgm.first().ok_or_else(|| Error::NoCgm(dir.into()))?;
+    let cgm_start = first.at;
+    let minutes = |at: NaiveDateTime| (at - cgm_start).num_minutes() as f64;
     let meals: Vec<Meal> = export
         .boluses
         .iter()
         .filter(|b| b.kind() != BolusKind::Correction)
         .map(|b| Meal {
-            start_min: (b.at - cgm_start).num_minutes() as f64,
+            start_min: minutes(b.at),
             carbs_g: b.carbs_g,
-            duration_min: 15.0,
+            announced: true,
         })
         .collect();
+    let boluses: Vec<Bolus> = export
+        .boluses
+        .iter()
+        .filter(|b| b.units > 0.0)
+        .map(|b| Bolus {
+            start_min: minutes(b.at),
+            units: b.units,
+        })
+        .collect();
+    let in_day = |m: f64| (0.0..HOURS_PER_DAY * MIN_PER_HOUR).contains(&m);
     println!(
-        "meals from bolus export: {} ({} in-sim)",
-        meals.len(),
-        meals
-            .iter()
-            .filter(|m| m.start_min >= 0.0 && m.start_min <= 24.0 * 60.0)
-            .count()
+        "replaying {} meals and {} boluses of the first 24 h",
+        meals.iter().filter(|m| in_day(m.start_min)).count(),
+        boluses.iter().filter(|b| in_day(b.start_min)).count(),
     );
 
-    // In-silico run over 24 hours starting at a representative admit.
-    let subject = with_basal_glucose(
-        &tir_tuner_body::subject::VirtualSubject::population_mean(),
-        TARGET_GLUCOSE_MMOL_L,
-    );
     let history = Store::open(db)
         .and_then(|s| s.profiles())
         .map_err(in_db(db))?;
     let auto = match history.at(cgm_start) {
         Some((_, p)) => AutoMode::new(p.auto()),
         None => {
-            println!("no settings stored for {cgm_start}, using the default target and weight");
-            AutoMode::without_personal_target(subject.weight_kg)
+            println!(
+                "no settings stored for {cgm_start}, using the default target and W10's weight"
+            );
+            AutoMode::without_personal_target(W10_WEIGHT_KG)
         }
     };
     println!(
@@ -246,12 +253,13 @@ fn simulate_export(dir: &Path, kagr: f64, db: &Path) -> Result<(), Error> {
         auto.weight_kg()
     );
     let cfg = SimConfig {
-        subject,
+        subject: VirtualSubject::nominal(auto.weight_kg()),
         auto,
         start_time: cgm_start.time(),
-        admit_glucose_mg_per_dl: 140.0,
-        duration_hours: 24.0,
+        admit_glucose_mg_per_dl: first.mg_dl,
+        duration_hours: HOURS_PER_DAY,
         meals,
+        boluses,
         nmpc: Nmpc {
             k_agr: kagr,
             ..Nmpc::default()
@@ -259,7 +267,10 @@ fn simulate_export(dir: &Path, kagr: f64, db: &Path) -> Result<(), Error> {
         ..SimConfig::default()
     };
     let trace = simulate(&cfg);
-
+    println!(
+        "virtual subject: {} kg, resting basal {:.2} U/h",
+        cfg.subject.weight_kg, trace.resting_basal_u_per_h
+    );
     print_metrics(
         "sim (closed loop)",
         &mg_dl_series(&trace.reading_mmol_per_l),

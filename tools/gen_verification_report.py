@@ -270,7 +270,6 @@ DOCUMENTS = [
 # Constant name -> (reference keys, annotation). The extracted doc
 # comment is shown in the table; this adds the citation and the role.
 CONSTANT_NOTES = {
-    "TARGET_GLUCOSE_MMOL_L": (["W22"], "Default glucose target."),
     "CONTROL_PERIOD_MIN": (["W04"], "One reading, one rate."),
     "HORIZON_MIN": (["W04"], "Prediction horizon N."),
     "MAX_RATE_U_PER_H": (["W04"], "H04 rate bound; CamAPS sets it per person."),

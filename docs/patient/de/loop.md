@@ -26,21 +26,20 @@ flowchart LR
     V -.Abgaben.- T[(Spur: TIR, Mittelwert, CV)]
 ```
 
-Mahlzeiten sind es, die aus der Simulation einen Tag machen. Sie geben dem Modell eine Mahlzeit als zeitlich begrenzte Kohlenhydrat-Eingabe an: Startzeit, Menge in Gramm und Dauer. Die Mahlzeit wandert durch den Magen-Darm-Trakt und verhält sich genau so, wie es [Der Körper](body.md) beschreibt.
+Mahlzeiten sind es, die aus der Simulation einen Tag machen. Eine Mahlzeit ist eine Menge Kohlenhydrate in Gramm zu einem Zeitpunkt. Sie wandert durch den Magen-Darm-Trakt und verhält sich genau so, wie es [Der Körper](body.md) beschreibt.
 
 ## Mahlzeiten und Boli
 
-Je nach Konfiguration der Simulation kann die Pumpe auf eine Mahlzeit auf dreierlei Weise reagieren:
+Eine Mahlzeit ist angekündigt oder nicht:
 
-1. **Angekündigt.** Der Kohlenhydratfaktor (ICR) bestimmt den Bolus zu Beginn der Mahlzeit. Standardmäßig gibt die Pumpe zu Mahlzeitenbeginn 80 % des vollen ICR-Bolus ab; den Rest übernimmt der geschlossene Regelkreis.
-2. **Nicht angekündigt.** Ein Bolus bleibt aus; der Regelkreis sieht den Zucker steigen und korrigiert von selbst.
-3. **Offener Regelkreis.** Die Steuerung ist abgeschaltet, und die Pumpe gibt nur ihre konstante Basalrate ab; die Hypoglykämie-Unterbrechung bleibt aktiv.
+1. **Angekündigt.** Die Mahlzeit wurde in der App eingegeben, die Steuerung kennt ihre Kohlenhydrate. Ein nachgespielter Tag kündigt jede protokollierte Mahlzeit an und spielt deine echten Boli zu ihrer Minute ab.
+2. **Nicht angekündigt.** Die Steuerung weiß nichts davon; sie sieht den Zucker steigen und korrigiert von selbst.
 
-Der Vergleich ist der Sinn der Tests in diesem Projekt: Bei gleichen Mahlzeiten und gleichem Probanden schneidet der geschlossene Regelkreis besser ab als die reine Basalvariante. In der Standardeinstellung erreicht er in der Simulation 89,2 % Zeit im Zielbereich an einem Tag mit zwei Mahlzeiten und 75,0 % Zeit im Zielbereich (3,1 % unterhalb des Zielbereichs) an einem Tag mit vier Mahlzeiten, der aus echten Pumpdaten abgespielt wird.
+Mit abgeschalteter Steuerung (offener Regelkreis) gibt die Pumpe die Basalrate ab, die den Startzucker hält; die Hypoglykämie-Unterbrechung bleibt aktiv. Bei gleichen Mahlzeiten und gleichem Probanden schneidet der geschlossene Regelkreis besser ab als diese reine Basalvariante.
 
 ## Die Pumpe ist ungenau
 
-Auch die Pumpe ist im Modell nicht perfekt: Die abgegebene Rate weicht um ein paar Prozent von der verordneten ab, standardmäßig mit einem Variationskoeffizienten von 5 %. Jede Pumpe hat diese Unvollkommenheit, und der Regelkreis muss mit ihr leben. Der Sensor rauscht ebenfalls, wie die [Sensorseite](sensor.md) erklärt, und der Körper ist im Modell der Steuerung nur angenähert, wie die [Gehirnseite](brain.md) beschreibt. In einem Lauf wirken alle drei zusammen, so wie an einem echten Tag.
+Auch die Pumpe ist im Modell nicht perfekt, wie bei Wilinska 2010: Was sie abgibt, weicht mit einem Variationskoeffizienten von 5 % von dem ab, was sie soll, bei der Basalrate wie bei Boli. Ein Bolus läuft mit den 0,11 U pro Sekunde der YpsoPump. Jede Pumpe hat diese Unvollkommenheit, und der Regelkreis muss mit ihr leben. Der Sensor rauscht ebenfalls, wie die [Sensorseite](sensor.md) erklärt, und der Körper ist im Modell der Steuerung nur angenähert, wie die [Gehirnseite](brain.md) beschreibt. In einem Lauf wirken alle drei zusammen, so wie an einem echten Tag.
 
 ## Das Modell gegen die Landkarte
 

@@ -22,9 +22,6 @@ pub use settings::AutoMode;
 #[cfg(kani)]
 pub mod verification;
 
-/// Default glucose target (mmol/L), used where no personal target is set.
-pub const TARGET_GLUCOSE_MMOL_L: f64 = tir_tuner_common::settings::DEFAULT_TARGET_MMOL_L;
-
 /// Shared configuration for the native `proptest` property suite.
 #[cfg(test)]
 pub(crate) mod test_support {
@@ -35,10 +32,10 @@ pub(crate) mod test_support {
     /// well under the fast budget.
     pub fn config() -> ProptestConfig {
         let mut config = ProptestConfig::default();
-        if let Ok(value) = std::env::var("TIR_TUNER_SOAK_ITERS") {
-            if let Ok(cases) = value.parse::<u32>() {
-                config.cases = cases;
-            }
+        if let Ok(value) = std::env::var("TIR_TUNER_SOAK_ITERS")
+            && let Ok(cases) = value.parse::<u32>()
+        {
+            config.cases = cases;
         }
         config
     }

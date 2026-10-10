@@ -26,21 +26,20 @@ flowchart LR
     V -.deliveries.- T[(Trace: TIR, mean, CV)]
 ```
 
-Food is what turns the simulation into a day. Meals are given to the model as time-gated carbohydrate inputs with a start time, an amount in grams, and a duration. The meal enters through the gut and behaves exactly as described in [the body](body.md).
+Food is what turns the simulation into a day. A meal is an amount of carbohydrate in grams at a moment in time. It enters through the gut and behaves exactly as described in [the body](body.md).
 
 ## Meals and boluses
 
-When a meal happens, the pump can do three different things depending on how the simulation is configured:
+A meal is either announced or not:
 
-1. **Fully announced**: the carb ratio (ICR) is used to prescribe a bolus at meal start. In the default setting, 80% of the full ICR bolus is delivered at meal start, and the closed loop handles the rest.
-2. **Unannounced**: no bolus at all, the loop sees the sugar rise and corrects on its own.
-3. **Open loop**: the controller is switched off, and the pump delivers its constant basal rate with the hypoglycemia suspension still active.
+1. **Announced**: the meal was entered in the app, so the controller knows its carbs. A replayed day announces every logged meal and replays your real boluses at their minute.
+2. **Unannounced**: the controller doesn't know; it sees the sugar rise and corrects on its own.
 
-The comparison is the point of the tests in this project. On the same meals and the same subject, the closed loop beats the basal-only arm. At the default settings, in simulation, the closed loop holds 89.2% time in range on a two-meal control day, and 75.0% time in range (3.1% below range) on a four-meal day replayed from real pump data.
+With the controller switched off (open loop) the pump delivers the basal that holds the start glucose, with the hypoglycemia suspension still active. On the same meals and the same subject, the closed loop beats that basal-only arm.
 
 ## The pump is approximate
 
-The pump is modeled with a small delivery error: the delivered rate differs from the commanded rate by a few percent, 5% coefficient of variation by default. Every pump has this imperfection, and the loop has to tolerate it. The sensor is noisy too, as [the sensor page](sensor.md) explained, and the body itself is only approximated by the controller's model, as [the brain page](brain.md) described. A run uses all three at once, like a real day.
+The pump is modeled with a small delivery error, as in Wilinska 2010: what it delivers differs from what it was told by 5% coefficient of variation, for the basal rate and for boluses. A bolus runs at the YpsoPump's 0.11 U per second. Every pump has this imperfection, and the loop has to tolerate it. The sensor is noisy too, as [the sensor page](sensor.md) explained, and the body itself is only approximated by the controller's model, as [the brain page](brain.md) described. A run uses all three at once, like a real day.
 
 ## The model versus the map
 
