@@ -7,8 +7,8 @@
 //! it with W10's error, and the body integrates meals and boluses at their
 //! own minute. The controller hears of announced meals and every bolus.
 //!
-//! The belief model is built from the plant subject's own parameters (an
-//! oracle: CamAPS starts from weight and TDD and learns). With
+//! The belief model is built from the Auto mode's weight and TDD, not from
+//! the plant subject; unlike CamAPS it doesn't learn. With
 //! `use_controller` off the pump delivers the resting basal, the open-loop
 //! arm.
 
@@ -507,7 +507,7 @@ mod tests {
     }
 
     /// Four bolused meals at 0.8 of the Walsh ratio, as a mean over 8 seed
-    /// sets: W10's variability makes single days swing (worst run 9% TBR).
+    /// sets: W10's variability makes single days swing (worst of 24: 8% TBR).
     #[test]
     fn realistic_day_stays_in_range() {
         let (mut tir, mut low) = (0.0, 0.0);

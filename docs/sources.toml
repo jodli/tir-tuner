@@ -354,7 +354,7 @@ id = "own-kagr"
 source = "own"
 values = [5.0]
 status = "assumption"
-note = "H04 p9 gives the tuning rule (<5% of 36 runs below 3.3 mmol/L, fasting near 6), not the value. With the weight + TDD model every k_agr from 0.5 to 50 meets it (0 of 36 fasting runs from 72-270 mg/dL below 3.3, fasting mean 5.8), and none changes the realistic day (TBR 9-10% on one seed set). Those dips come from W10's variability: off, the day has 0% TBR with or without sensor noise."
+note = "H04 p9 gives the tuning rule (<5% of 36 runs below 3.3 mmol/L, fasting near 6), not the value. With the weight + TDD model every k_agr from 0.5 to 50 meets it (0 of 36 fasting runs from 72-270 mg/dL below 3.3, fasting mean 5.8), and the realistic day barely moves (k_agr 1-20 over 24 seeds: TBR 0.6-0.9%). Its dips come from W10's variability: off, the day has 0% TBR."
 
 [[claim]]
 id = "own-rollout-step"
@@ -389,14 +389,14 @@ id = "own-imm-process"
 source = "own"
 values = [1e-5, 3e-4, 3e-3]
 status = "assumption"
-note = "sigma_w per IMM mode (us504 p14, eq 65 without values). Swept on the simulation: best estimate error both with and without an unannounced meal."
+note = "sigma_w per IMM mode (us504 p14, eq 65 without values). Swept on the simulation: best estimate error both with and without an unannounced meal. Re-swept on the weight + TDD model (3x around each value): unannounced-meal TIR moves by about 1 point at most. The middle mode at 1e-4 calms delivery but takes the bolused meal below 3.9 mmol/L at 60 min halftime, so the values stay."
 
 [[claim]]
 id = "own-us-halftime"
 source = "own"
-values = [15.0]
+values = [45.0]
 status = "assumption"
-note = "u_s regression halftime without measurements (us504 p14, eq 57 without a value). Longer halftimes help unannounced meals and deepen the dip after bolused ones; 15 min keeps the closed loop level with the old fixed gain."
+note = "u_s regression halftime without measurements (us504 p14, eq 57 without a value). Swept 15-240 min on the weight + TDD model: longer halftimes help unannounced meals and deepen the dip after bolused ones, which crosses 3.9 mmol/L from 60-90 min. 45 min on 16 held-out seeds: unannounced-meal TIR 75.1% (15 min: 68.8%), bolused-meal minimum 4.66 (4.69), realistic-day TIR 90.8% (88.4%). Known limit: eq 57 has one halftime for both cases, so it is a compromise."
 
 [[claim]]
 id = "ware2022-ease-off"
@@ -423,9 +423,9 @@ note = "'approximately 35%', glucose-responsive, inactive once target is reached
 [[claim]]
 id = "own-imm"
 source = "own"
-values = [3, 0.99, 0.005]
+values = [3, 0.999]
 status = "assumption"
-note = "The patent (us504 p14, eq 65) defines N models and the transition matrix without values."
+note = "The patent (us504 p14, eq 65) defines N models and the transition matrix without values. The stay probability is per 15-min control period (about 10 days per model; the likelihood still switches them after a meal). Swept with the u_s halftime: 0.999 against 0.99 cuts delivery noise (rate SD 0.52 vs 0.67 U/h on 16 held-out seeds) at about the same TIR."
 
 # Virtual patient (tir-tuner-body)
 

@@ -45,7 +45,7 @@ $$\frac{dq_3}{dt} = k_{31}(q_1 - q_3), \qquad g_P = \frac{q_1}{V_G}, \qquad g_{I
 * **Gut units:** `u_A` multiplies grams by 5.551 mmol/g (eq 8).
 * **F01** is constant and **F** is the carb bioavailability, as in eq 9.
 * **EGP** (eq 12) [us504-egp]: $EGP = EGP_B \exp\!\left(-\frac{(r_E - BIC)\ln 2}{I_{1/2}}\right)$, with $BIC = \frac{1000\,BIR}{60\,MCR_I\,W}$ (eq 14). The patent gives no values for `EGP_B` or `I_1/2`. There is no cap.
-* **u_S** (eq 13) is held at zero. Nothing estimates it yet.
+* **u_S** (eq 13) is estimated by the IMM filter (section 3).
 * **Initial state:** insulin at its basal steady state, glucose split as eq 63.
 * **Numerics:** forward Euler, every compartment clamped at zero, 1 min steps [own-rollout-step]. The patent discretizes exactly (eq 18-45); 1 min keeps `k31 dt` well below 1.
 

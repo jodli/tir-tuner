@@ -12,7 +12,7 @@ use tir_tuner_common::units::{MIN_PER_HOUR, MMOL_PER_GRAM_CHO, MU_PER_UNIT};
 
 /// Halftime (min) at which `u_S` regresses to zero without a measurement,
 /// eq 57. The patent gives no value. src: own-us-halftime
-pub const U_S_HALFTIME_MIN: f64 = 15.0;
+pub const U_S_HALFTIME_MIN: f64 = 45.0;
 
 /// Plasma glucose that basal insulin `BIC` holds (mmol/L), eq 12.
 /// src: us504-bic-rest
