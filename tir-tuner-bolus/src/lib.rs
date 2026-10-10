@@ -11,8 +11,7 @@ pub struct Suggestion {
     pub meal: Units,
     /// Negative below target, which reduces the meal part.
     pub correction: Units,
-    /// Not rounded to the pump's 0.1 U step: the manual doesn't say which way
-    /// the app rounds. src: open-rounding
+    /// Rounded to the pump's 0.1 U step.
     pub total: Units,
 }
 
@@ -21,10 +20,10 @@ pub enum Refused {
     /// src: man-min-glucose-refuse
     #[error("glucose below the minimum for a bolus suggestion")]
     GlucoseTooLow,
-    /// src: open-iob-below-target
-    #[error("insulin on board below target: the manual doesn't say what the app does")]
-    IobBelowTarget,
 }
+
+/// YpsoPump bolus step, 0.1 U. src: man-ypsopump-bolus-step
+const STEPS_PER_U: f64 = 10.0;
 
 /// `glucose: None` is a meal bolus in Auto mode, where the app greys out
 /// glucose and doesn't use it. src: man-auto-meal-no-glucose
@@ -48,16 +47,18 @@ pub fn suggest(
                 // the meal part. At target the correction is 0 either way.
                 // src: man-iob-correction-only
                 (raw - insulin_on_board).max(Units(0.0))
-            } else if insulin_on_board.0 > 0.0 {
-                return Err(Refused::IobBelowTarget);
             } else {
-                // src: man-negative-correction
-                raw
+                // Below target IOB makes the negative correction bigger, so it
+                // does reduce the meal part, against the manual's wording.
+                // src: man-negative-correction src: user-iob-below-target
+                raw - insulin_on_board
             }
         }
     };
     // No negative bolus; capped at the max bolus. src: man-max-bolus-cap
     let total = (meal + correction).clamp(Units(0.0), s.max_bolus());
+    // Nearest step. src: user-rounding-nearest
+    let total = Units((total.0 * STEPS_PER_U).round() / STEPS_PER_U);
     Ok(Suggestion {
         meal,
         correction,
@@ -134,7 +135,14 @@ mod tests {
     }
 
     #[test]
-    fn open_iob_below_target() {
-        assert_eq!(total(40.0, Some(100.0), 0.5), Err(Refused::IobBelowTarget));
+    fn user_iob_below_target() {
+        // 4 U meal, -0.1 U correction, less 0.5 U IOB.
+        assert_eq!(total(40.0, Some(100.0), 0.5), Ok(3.4));
+    }
+
+    #[test]
+    fn user_rounding_nearest() {
+        assert_eq!(total(2.5, None, 0.0), Ok(0.3));
+        assert_eq!(total(2.4, None, 0.0), Ok(0.2));
     }
 }

@@ -192,18 +192,26 @@ at = "p51"
 status = "source"
 
 [[claim]]
-id = "open-rounding"
+id = "man-ypsopump-bolus-step"
 source = "camaps-manual"
 at = "p50"
-status = "open"
-note = "YpsoPump steps 0.1 U; neither manual says which way the app rounds."
+values = [10.0]
+status = "source"
+note = "0.1 U steps on YpsoPump, as steps per unit."
 
 [[claim]]
-id = "open-iob-below-target"
-source = "camaps-manual"
-at = "p63, p64"
-status = "open"
-note = "The manual doesn't say whether IOB reduces a negative correction."
+id = "user-rounding-nearest"
+source = "user"
+at = "2026-10-10"
+status = "user"
+note = "The user's guess; neither manual says. Check: 3 g at CR 12 without glucose is 0.25 U, the app shows 0.2 or 0.3."
+
+[[claim]]
+id = "user-iob-below-target"
+source = "user"
+at = "2026-10-10"
+status = "user"
+note = "Below target, more IOB gives a smaller suggestion. Contradicts manual p64 'never subtracted from the meal bolus'. At exactly target the correction stays 0; whether the app subtracts IOB there is open."
 
 # Metrics
 
