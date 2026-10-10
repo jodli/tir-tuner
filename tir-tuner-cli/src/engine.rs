@@ -47,7 +47,7 @@ use tir_tuner_cgm::device::{CgmSensor, SensorParams};
 
 use tir_tuner_common::random::SeededRng;
 use tir_tuner_common::units::MU_PER_UNIT;
-use tir_tuner_common::units::mg_per_dl_to_mmol_per_l;
+use tir_tuner_common::units::MgDl;
 
 /// Controller sampling period in minutes: matches the CGM cadence and
 /// the aps controller's per-cycle update (Hovorka et al 2004).
@@ -302,7 +302,7 @@ pub fn simulate(cfg: &SimConfig) -> SimTrace {
 
     let basal_u_per_h = cfg.subject.bir_u_per_h;
     let params = controller_model(&cfg.subject, cfg.auto.weight_kg());
-    let admit_mmol_per_l = mg_per_dl_to_mmol_per_l(cfg.admit_glucose_mg_per_dl);
+    let admit_mmol_per_l = MgDl(cfg.admit_glucose_mg_per_dl).to_mmol_l().0;
     let mut belief = belief_at_glucose(&params, &cfg.subject, admit_mmol_per_l);
 
     let mut meals = cfg.meals.clone();
@@ -434,7 +434,21 @@ fn pump_delivery(rate_u_per_h: f64, rng: &mut SeededRng, error_cv: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tir_tuner_common::metrics::{mean_glucose, time_in_range_pct};
+    use tir_tuner_common::metrics::{mean_glucose, time_below_range_pct, time_in_range_pct};
+    use tir_tuner_common::units::mg_dl_series;
+
+    /// Metrics take mg/dL readings; the traces are mmol/L.
+    fn mean_mmol(trace: &[f64]) -> f64 {
+        mean_glucose(&mg_dl_series(trace)).to_mmol_l().0
+    }
+
+    fn tir_pct(trace: &[f64]) -> f64 {
+        time_in_range_pct(&mg_dl_series(trace))
+    }
+
+    fn tbr_pct(trace: &[f64]) -> f64 {
+        time_below_range_pct(&mg_dl_series(trace))
+    }
 
     #[test]
     fn belief_params_match_subject_basal_insulin() {
@@ -465,7 +479,7 @@ mod tests {
         let cfg = SimConfig::default();
         let trace = simulate(&cfg);
 
-        let mean = mean_glucose(&trace.interstitial_mmol_per_l);
+        let mean = mean_mmol(&trace.interstitial_mmol_per_l);
         assert!(mean.is_finite());
         assert!(
             (2.5..=10.0).contains(&mean),
@@ -490,8 +504,8 @@ mod tests {
         // (trace has one sample per 15-minute control period).
         let trace = simulate(&cfg);
 
-        let before = mean_glucose(&trace.reading_mmol_per_l[..12]);
-        let window = mean_glucose(&trace.reading_mmol_per_l[20..32]);
+        let before = mean_mmol(&trace.reading_mmol_per_l[..12]);
+        let window = mean_mmol(&trace.reading_mmol_per_l[20..32]);
         assert!(
             window > before,
             "meal did not lift glucose: before {before:.2}, after {window:.2}"
@@ -574,8 +588,8 @@ mod tests {
         cfg.use_controller = false;
         let open = simulate(&cfg);
 
-        let tir_closed = time_in_range_pct(&closed.reading_mmol_per_l);
-        let tir_open = time_in_range_pct(&open.reading_mmol_per_l);
+        let tir_closed = tir_pct(&closed.reading_mmol_per_l);
+        let tir_open = tir_pct(&open.reading_mmol_per_l);
         assert!(
             tir_closed > tir_open,
             "closed loop did not beat open loop: closed {tir_closed:.1}% vs open {tir_open:.1}%"
@@ -619,14 +633,8 @@ mod tests {
         ];
         let trace = simulate(&cfg);
 
-        let tir = time_in_range_pct(&trace.reading_mmol_per_l);
-        let low = 100.0
-            * trace
-                .reading_mmol_per_l
-                .iter()
-                .filter(|&&v| v < tir_tuner_common::metrics::TIME_IN_RANGE_MIN_MMOL_L)
-                .count() as f64
-            / trace.reading_mmol_per_l.len() as f64;
+        let tir = tir_pct(&trace.reading_mmol_per_l);
+        let low = tbr_pct(&trace.reading_mmol_per_l);
         // Regression bar: on the real-data day the unfiltered one-sample
         // prediction held 40% TIR with 39% lows; the horizon-rolled
         // loop stays comfortably above both.
@@ -659,7 +667,7 @@ mod tests {
             assert!(v >= 0.0, "reading went negative: {v}");
             assert!(v.is_finite());
         }
-        let tir = time_in_range_pct(&trace.reading_mmol_per_l);
+        let tir = tir_pct(&trace.reading_mmol_per_l);
         assert!((0.0..=100.0).contains(&tir), "TIR out of bounds: {tir}");
     }
 

@@ -10,3 +10,5 @@
 *.duckdb.wal
 *.duckdb.bak-*
 /settings.toml
+/docs/papers/
+/mutants.out*

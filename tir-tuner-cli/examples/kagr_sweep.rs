@@ -9,28 +9,16 @@ use tir_tuner_aps::controller::{
     nmpc_sequence_cost, nmpc_sequence_dose,
 };
 use tir_tuner_cli::engine::{Meal, SimConfig, belief_at_glucose, controller_model, simulate};
-use tir_tuner_common::metrics::TIME_IN_RANGE_MIN_MMOL_L;
-use tir_tuner_common::units::MU_PER_UNIT;
-use tir_tuner_common::units::mg_per_dl_to_mmol_per_l;
+use tir_tuner_common::metrics::{mean_glucose, time_below_range_pct, time_in_range_pct};
+use tir_tuner_common::units::{MU_PER_UNIT, MgDl, mg_dl_series};
 
 fn metrics(trace: &tir_tuner_cli::engine::SimTrace) -> (f64, f64, f64) {
-    let n = trace.reading_mmol_per_l.len() as f64;
-    let tir = 100.0
-        * trace
-            .reading_mmol_per_l
-            .iter()
-            .filter(|&&v| v >= TIME_IN_RANGE_MIN_MMOL_L && v <= 10.0)
-            .count() as f64
-        / n;
-    let low = 100.0
-        * trace
-            .reading_mmol_per_l
-            .iter()
-            .filter(|&&v| v < TIME_IN_RANGE_MIN_MMOL_L)
-            .count() as f64
-        / n;
-    let mean = trace.reading_mmol_per_l.iter().sum::<f64>() / n;
-    (tir, low, mean)
+    let r = mg_dl_series(&trace.reading_mmol_per_l);
+    (
+        time_in_range_pct(&r),
+        time_below_range_pct(&r),
+        mean_glucose(&r).to_mmol_l().0,
+    )
 }
 
 fn main() {
@@ -72,7 +60,7 @@ fn main() {
         (defaults.egp_b - defaults.f_01) / (defaults.s_id * defaults.basal_insulin_conc()),
     );
 
-    for (label, initial) in [("admit-10", mg_per_dl_to_mmol_per_l(180.0))] {
+    for (label, initial) in [("admit-10", MgDl(180.0).to_mmol_l().0)] {
         let mut s = belief_at_glucose(&params, &subject, initial);
         let mut profile = Vec::new();
         for _ in 0..16 {
@@ -226,7 +214,7 @@ fn main() {
         }
     }
 
-    let mut s = belief_at_glucose(&params, &subject, mg_per_dl_to_mmol_per_l(180.0));
+    let mut s = belief_at_glucose(&params, &subject, MgDl(180.0).to_mmol_l().0);
     let mut profile = Vec::new();
     for _ in 0..16 {
         s = s.step(&params, subject.bir_u_per_h, 0.0, 0.0, 15.0);
@@ -246,12 +234,12 @@ fn main() {
             .join(" ")
     );
 
-    let state = belief_at_glucose(&params, &subject, mg_per_dl_to_mmol_per_l(180.0));
+    let state = belief_at_glucose(&params, &subject, MgDl(180.0).to_mmol_l().0);
     for k_agr in [0.5, 1.0, 5.0, 40.0] {
         let dose = nmpc_sequence_dose(
             &params,
             state,
-            mg_per_dl_to_mmol_per_l(180.0),
+            MgDl(180.0).to_mmol_l().0,
             TARGET_GLUCOSE_MMOL_L,
             k_agr,
             20.0,
@@ -262,17 +250,12 @@ fn main() {
         println!("engine-belief k_agr {k_agr}: dose {dose:.3}");
     }
 
-    let w = moving_target_trajectory(
-        mg_per_dl_to_mmol_per_l(180.0),
-        TARGET_GLUCOSE_MMOL_L,
-        16,
-        15.0,
-    );
+    let w = moving_target_trajectory(MgDl(180.0).to_mmol_l().0, TARGET_GLUCOSE_MMOL_L, 16, 15.0);
     let init = nmpc_grid_dose(&params, state, &w, subject.bir_u_per_h, 20.0, 5.0, 15.0);
     let seq = nmpc_sequence(
         &params,
         state,
-        mg_per_dl_to_mmol_per_l(180.0),
+        MgDl(180.0).to_mmol_l().0,
         TARGET_GLUCOSE_MMOL_L,
         5.0,
         20.0,

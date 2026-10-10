@@ -15,10 +15,10 @@ Diese Seite behandelt die Einheiten, die Kennzahlen und die Uhr der Simulation, 
 
 ## Zwei Sprachen für dieselbe Zahl
 
-Glukose wird in zwei Einheiten gemessen, und Sie kennen vermutlich beide. Das Modell rechnet in Millimol pro Liter (mmol/L), der üblichen Einheit in weiten Teilen Europas; die USA und viele Messgeräte arbeiten mit Milligramm pro Deziliter (mg/dL). Es ist dasselbe Maß, nur anders skaliert, mit dem Faktor 18,0182.
+Glukose wird in zwei Einheiten gemessen, und Sie kennen vermutlich beide. Das Modell rechnet in Millimol pro Liter (mmol/L), der üblichen Einheit in weiten Teilen Europas; die USA und viele Messgeräte arbeiten mit Milligramm pro Deziliter (mg/dL). Es ist dasselbe Maß, nur anders skaliert, mit dem Faktor 18,0156: die Molmasse von Glukose, 180,156 g/mol, geteilt durch 10.
 
-1 mmol/L = 18,0182 mg/dL, also sind 5,8 mmol/L = 104,5 mg/dL.
-1 mg/dL = 1/18,0182 mmol/L, also rund 0,0555 mmol/L.
+1 mmol/L = 18,0156 mg/dL, also sind 5,8 mmol/L = 104,5 mg/dL.
+1 mg/dL = 1/18,0156 mmol/L, also rund 0,0555 mmol/L.
 
 Die Zahlen sehen also anders aus, sagen aber dasselbe. Die wichtigsten wiederkehrenden Werte:
 
@@ -40,12 +40,12 @@ Eine 50-g-Mahlzeit entspricht im Modell 277,6 mmol Glukose. Diese Umrechnung ver
 
 Ein Tag voller Glukosewerte wird anhand einiger standardisierter Zahlen bewertet.
 
-- **Zeit im Zielbereich (TIR):** der Anteil der Werte im Bereich zwischen 3,9 und 10,0 mmol/L (70 bis 180 mg/dL), in Prozent. Es ist die wichtigste Zahl eines Diabetes-Tages. Den Bereich legt die ISO fest; das Modell übernimmt ihn unverändert.
-- **Mittlere Glukose:** der Durchschnitt der Werte, in mmol/L.
+- **Zeit im Zielbereich (TIR):** der Anteil der Werte im Bereich zwischen 3,9 und 10,0 mmol/L (70 bis 180 mg/dL), in Prozent. Es ist die wichtigste Zahl eines Diabetes-Tages. Der Bereich stammt aus dem internationalen Konsens zur Zeit im Zielbereich (Battelino 2019). Seine Grenzen sind ganze mg/dL, also zählen 70 und 180 als im Bereich; das Modell rundet simulierte Werte vorher auf ganze mg/dL.
+- **Zeit unter dem Zielbereich (TBR):** der Anteil der Werte unter 70 mg/dL. Das Konsensziel liegt unter 4 %.
+- **Mittlere Glukose:** der Durchschnitt der Werte, in mg/dL.
 - **Variationskoeffizient (CV):** die Streuung der Werte um den Mittelwert, in Prozent. Er sagt, wie stark der Tag um diesen Mittelwert schwankt, unabhängig davon, wie hoch er liegt. Zwei Tage mit demselben Durchschnitt können sich völlig verschieden anfühlen; der CV macht den Unterschied aus.
-- **LBGI und HBGI:** die Indizes für niedrige und hohe Glukose: Risikowerte nach Kovatchev. Jeder einzelne Wert wird danach gewichtet, welche Gefahr er bedeutet. Ein langer Abschnitt mäßig hoher Werte zählt anders als ein einzelner gefährlich niedriger. Werte über etwa 112,5 mg/dL (6,24 mmol/L) tragen nichts zum Niedrig-Index bei, und umgekehrt.
 
-Das sind die Zahlen hinter Ihrem Pumpbericht und Ihren Klinikbesuchen. Der Rest dieses Projekts existiert, um die TIR nach oben zu bringen, ohne die Risikowerte im niedrigen Bereich steigen zu lassen.
+Das sind die Zahlen hinter Ihrem Pumpbericht und Ihren Klinikbesuchen. Der Rest dieses Projekts existiert, um die TIR nach oben zu bringen, ohne die Zeit unter dem Zielbereich steigen zu lassen.
 
 ## Die Uhr
 

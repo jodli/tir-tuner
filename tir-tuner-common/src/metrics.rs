@@ -1,177 +1,109 @@
-//! Clinical reporting metrics over glucose time series, all in mmol/L.
-//!
-//! These are the alignment-free outcome measures used by the trial
-//! literature (Patek 2009 `[P09]`, Wilinska 2010 `[W10]`): percent time in range with
-//! the ISO-defined 3.9-10.0 mmol/L band, mean glucose, and coefficient
-//! of variation. Metrics are pure functions over slices so the numeric
-//! integration and the reporting stay independent.
+//! CGM metrics as the international consensus on time in range defines them
+//! (Battelino 2019, Table 2). Readings are mg/dL; NaN readings are skipped.
 
-use crate::units::mmol_per_l_to_mg_per_dl;
+use crate::units::MgDl;
 
-/// Target range lower bound, mmol/L (70 mg/dL).
-pub const TIME_IN_RANGE_MIN_MMOL_L: f64 = 3.9;
-/// Target range upper bound, mmol/L (180 mg/dL).
-pub const TIME_IN_RANGE_MAX_MMOL_L: f64 = 10.0;
+/// Lowest reading in range, mg/dL. src: battelino-tir-band
+pub const TIR_LOW_MG_DL: f64 = 70.0;
+/// Highest reading in range, mg/dL. src: battelino-tir-band
+pub const TIR_HIGH_MG_DL: f64 = 180.0;
 
-/// Fraction of glucose samples inside the [3.9, 10.0] mmol/L band,
-/// expressed as a percentage. Samples that are NaN are ignored so a
-/// dropped CGM reading does not silently depress the result.
-pub fn time_in_range_pct(samples_mmol_per_l: &[f64]) -> f64 {
-    if samples_mmol_per_l.is_empty() {
+/// src: percent
+const PERCENT: f64 = 100.0;
+
+/// Percent of readings in 70-180 mg/dL.
+pub fn time_in_range_pct(readings: &[MgDl]) -> f64 {
+    pct(readings, |mg| {
+        (TIR_LOW_MG_DL..=TIR_HIGH_MG_DL).contains(&mg)
+    })
+}
+
+/// Percent of readings below 70 mg/dL.
+pub fn time_below_range_pct(readings: &[MgDl]) -> f64 {
+    pct(readings, |mg| mg < TIR_LOW_MG_DL)
+}
+
+fn valid(readings: &[MgDl]) -> impl Iterator<Item = f64> + Clone + '_ {
+    readings.iter().map(|r| r.0).filter(|v| !v.is_nan())
+}
+
+/// Battelino's bands have integer edges ("54-69", "70-180", "181-250"), as
+/// CGM readings are whole mg/dL. A simulated reading is rounded to one first,
+/// so 69.6 counts as 70. src: battelino-integer-bands
+fn pct(readings: &[MgDl], hit: impl Fn(f64) -> bool) -> f64 {
+    let (n, hits) = valid(readings).fold((0, 0), |(n, h), mg| {
+        (n + 1, h + usize::from(hit(mg.round())))
+    });
+    if n == 0 {
         return f64::NAN;
     }
-    let mut in_range = 0usize;
-    let mut counted = 0usize;
-    for &v in samples_mmol_per_l {
-        if v.is_nan() {
-            continue;
-        }
-        counted += 1;
-        if (TIME_IN_RANGE_MIN_MMOL_L..=TIME_IN_RANGE_MAX_MMOL_L).contains(&v) {
-            in_range += 1;
-        }
-    }
-    if counted == 0 {
-        f64::NAN
-    } else {
-        100.0 * in_range as f64 / counted as f64
-    }
+    PERCENT * hits as f64 / n as f64
 }
 
-/// Mean glucose over non-NaN samples, mmol/L.
-pub fn mean_glucose(samples_mmol_per_l: &[f64]) -> f64 {
-    let mut sum = 0.0;
-    let mut counted = 0usize;
-    for &v in samples_mmol_per_l {
-        if v.is_nan() {
-            continue;
-        }
-        sum += v;
-        counted += 1;
-    }
-    if counted == 0 {
-        f64::NAN
-    } else {
-        sum / counted as f64
-    }
+/// Mean glucose. src: battelino-mean
+pub fn mean_glucose(readings: &[MgDl]) -> MgDl {
+    let (n, sum) = valid(readings).fold((0, 0.0), |(n, s), v| (n + 1, s + v));
+    MgDl(sum / n as f64)
 }
 
-/// Coefficient of variation of glucose, percent: `stddev / mean * 100`.
-/// Requires at least two non-NaN samples; otherwise NaN.
-pub fn coefficient_of_variation(samples_mmol_per_l: &[f64]) -> f64 {
-    let mean = mean_glucose(samples_mmol_per_l);
-    if mean.is_nan() {
+/// %CV: sample standard deviation over the mean. Battelino names the metric
+/// but not the formula; n-1 vs n doesn't matter at CGM sample counts.
+/// src: battelino-cv
+pub fn coefficient_of_variation(readings: &[MgDl]) -> f64 {
+    /// Sample SD needs two readings. src: battelino-cv
+    const MIN_READINGS: usize = 2;
+    let n = valid(readings).count();
+    if n < MIN_READINGS {
         return f64::NAN;
     }
-    let mut count = 0usize;
-    let mut sq_err = 0.0;
-    for &v in samples_mmol_per_l {
-        if v.is_nan() {
-            continue;
-        }
-        let e = v - mean;
-        sq_err += e * e;
-        count += 1;
-    }
-    if count < 2 || mean == 0.0 {
-        f64::NAN
-    } else {
-        100.0 * (sq_err / (count as f64 - 1.0)).sqrt() / mean
-    }
-}
-
-/// Low blood glucose index, the Kovatchev risk score. Readings above
-/// ~112.5 mg/dL (where the risk transform changes sign) contribute
-/// nothing. Requires at least one non-NaN sample.
-pub fn low_bgi(samples_mmol_per_l: &[f64]) -> f64 {
-    risk_score(samples_mmol_per_l, RiskSide::Low)
-}
-
-/// High blood glucose index, the Kovatchev risk score. Readings below
-/// ~112.5 mg/dL contribute nothing. Requires at least one non-NaN sample.
-pub fn high_bgi(samples_mmol_per_l: &[f64]) -> f64 {
-    risk_score(samples_mmol_per_l, RiskSide::High)
-}
-
-#[derive(Clone, Copy)]
-enum RiskSide {
-    Low,
-    High,
-}
-
-fn risk_score(samples_mmol_per_l: &[f64], side: RiskSide) -> f64 {
-    let mut total = 0.0;
-    let mut counted = 0usize;
-    for &v in samples_mmol_per_l {
-        if v.is_nan() {
-            continue;
-        }
-        let mg = mmol_per_l_to_mg_per_dl(v);
-        let f = 1.509 * (mg.ln().powf(1.084) - 5.381);
-        let contribute = match side {
-            RiskSide::Low => f < 0.0,
-            RiskSide::High => f >= 0.0,
-        };
-        if contribute {
-            // G* in Kovatchev's notation, the "distance" component is
-            // 10*f^2 with f in the 0..1.00001 scale.
-            total += 10.0 * f * f;
-        }
-        counted += 1;
-    }
-    if counted == 0 {
-        f64::NAN
-    } else {
-        total / counted as f64
-    }
+    let mean = mean_glucose(readings).0;
+    let var = valid(readings)
+        .map(|x| {
+            let d = x - mean;
+            d * d
+        })
+        .sum::<f64>()
+        / (n - 1) as f64;
+    PERCENT * var.sqrt() / mean
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn tir_counts_band_boundaries_inclusive() {
-        let s = [3.9, 10.0, 5.8, 2.5, 13.9];
-        // 3.9 and 10.0 count as in-range, 5.8 counts, the lows/highs don't.
-        assert!((time_in_range_pct(&s) - 60.0).abs() < 1e-9);
+    fn mg(v: &[f64]) -> Vec<MgDl> {
+        v.iter().map(|&x| MgDl(x)).collect()
     }
 
     #[test]
-    fn tir_ignores_nan_readings() {
-        assert!((time_in_range_pct(&[5.8, f64::NAN, 6.5]) - 100.0).abs() < 1e-9);
-        assert!(time_in_range_pct(&[f64::NAN]).is_nan());
-        assert!(time_in_range_pct(&[]).is_nan());
+    fn battelino_tir_band_70_and_180_are_in_range() {
+        let r = mg(&[54.0, 69.0, 70.0, 180.0, 181.0]);
+        assert_eq!(time_in_range_pct(&r), 40.0);
+        assert_eq!(time_below_range_pct(&r), 40.0);
     }
 
     #[test]
-    fn mean_and_cv_on_known_series() {
-        let s = [5.0, 5.0, 5.0];
-        assert!((mean_glucose(&s) - 5.0).abs() < 1e-12);
-        assert!((coefficient_of_variation(&s) - 0.0).abs() < 1e-12);
-        assert!(coefficient_of_variation(&[5.0]).is_nan());
+    fn battelino_integer_bands_round_simulated_readings() {
+        let r = mg(&[69.4, 69.6, 180.4, 180.6]);
+        assert_eq!(time_in_range_pct(&r), 50.0);
+        assert_eq!(time_below_range_pct(&r), 25.0);
     }
 
     #[test]
-    fn risk_scores_separate_by_sign() {
-        // 5.8 mmol/L = 104.5 mg/dL sits below the sign-crossing point,
-        // so it is entirely low-risk; 13.9 mmol/L = 250 mg/dL is high.
-        assert!(low_bgi(&[5.8]) > 0.0);
-        assert!(low_bgi(&[5.8]) < 1.0);
-        assert!(high_bgi(&[5.8]) == 0.0);
-        assert!(high_bgi(&[13.9]) > 1.0);
-        assert!(low_bgi(&[13.9]) == 0.0);
+    fn nan_readings_are_skipped() {
+        let r = mg(&[100.0, f64::NAN, 300.0]);
+        assert_eq!(time_in_range_pct(&r), 50.0);
+        assert_eq!(mean_glucose(&r), MgDl(200.0));
+        assert!(time_in_range_pct(&mg(&[f64::NAN])).is_nan());
     }
 
-    proptest::proptest! {
-        #[test]
-        fn tir_is_bounded_percentage(values in proptest::collection::vec(-20.0f64..50.0, 0..100)) {
-            let pct = time_in_range_pct(&values);
-            if values.is_empty() {
-                assert!(pct.is_nan());
-            } else {
-                assert!((0.0..=100.0).contains(&pct));
-            }
-        }
+    #[test]
+    fn battelino_cv_is_sample_sd_over_mean() {
+        // mean 150, sample SD 50.
+        assert!((coefficient_of_variation(&mg(&[100.0, 150.0, 200.0])) - 100.0 / 3.0).abs() < 1e-9);
+        // Two readings: mean 150, sample SD 50 * sqrt(2).
+        let two = coefficient_of_variation(&mg(&[100.0, 200.0]));
+        assert!((two - 100.0 * 50.0 * 2f64.sqrt() / 150.0).abs() < 1e-9);
+        assert!(coefficient_of_variation(&mg(&[100.0])).is_nan());
     }
 }

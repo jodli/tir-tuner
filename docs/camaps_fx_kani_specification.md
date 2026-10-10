@@ -188,11 +188,11 @@ The implemented solver (`nmpc_sequence` in `src/controller.rs`) rolls the state 
 
 | Parameter / Feature | Value / Specification | Reference |
 |---|---|---|
-| **Default Target Glucose** | $5.8\text{ mmol/L}$ ($104\text{ mg/dL}$) | Ware et al. 2022 |
-| **User Target Range** | $4.4\text{ to } 11.0\text{ mmol/L}$ ($80\text{ to } 200\text{ mg/dL}$) | Ware et al. 2022 |
+| **Default Target Glucose** | $5.8\text{ mmol/L}$ ($104.5\text{ mg/dL}$) | Ware et al. 2022; 104.5 mg/dL from Ware et al. 2022b |
+| **User Target Range** | $4.4\text{ to } 11.0\text{ mmol/L}$ (the mg/dL edges the app shows are not in the sources) | Ware et al. 2022 |
 | **Ease-off Mode (Exercise)** | Target = $7.0\text{ mmol/L}$; suspend if $g_{IG} < 7.0\text{ mmol/L}$ | Ware et al. 2022 |
 | **Boost Mode** | Temporary insulin intensification by $+35\%$ | Ware et al. 2022 |
-| **Hard Hypo Cutoff** | Mandatory zero delivery ($u(t) = 0$) if $g_{IG} < 4.4\text{ mmol/L}$ | Safety Invariant |
+| **Hard Hypo Cutoff** | Mandatory zero delivery ($u(t) = 0$) if $g_{IG} < 4.4\text{ mmol/L}$ | Our assumption: no source gives a suspend threshold; 4.4 is only the lower end of the target range |
 | **Max Insulin Limit ($u_{max}$)** | Capped at user-defined maximum hourly rate | Safety Invariant |
 
 ### 5.3 Closed-Loop Simulation Wiring (`tir-tuner-cli/src/engine.rs`)
@@ -296,7 +296,7 @@ For the Data Science team using this engine to improve the Time in Range (TIR) t
    * **Sensor Noise & Dropouts**: Inject Gaussian noise ($\sigma_Z = 0.5\text{ mmol/L}$) and 30-minute sensor loss periods.
 3. **Metric Targets**:
    * **Time in Range ($3.9\text{–}10.0\text{ mmol/L}$)**: Target $> 70\%$. The Boughton et al. (2026) real-world cohort (35,714 users, 19 countries) reaches a median TIR of $69.6\%$; the earlier Alwan et al. (2023) analysis (N = 1,805) reported a mean TIR of $72.6\%$.
-   * **Time Below Range ($< 3.9\text{ mmol/L}$)**: Target $< 2.5\%$.
-   * **Severe Hypo ($< 3.0\text{ mmol/L}$)**: Target $< 1.0\%$.
+   * **Time Below Range ($< 3.9\text{ mmol/L}$)**: Target $< 4\%$ (Battelino 2019).
+   * **Severe Hypo ($< 3.0\text{ mmol/L}$)**: Target $< 1\%$ below 54 mg/dL (Battelino 2019).
 
 ---

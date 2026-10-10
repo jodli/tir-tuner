@@ -1,0 +1,245 @@
+# Every number and rule on the medical path, traced to a source.
+#
+# Code tags a claim with `src: <id>` in a comment. The test
+# tir-tuner-common/tests/sources.rs fails when a literal in a `lint.files`
+# file isn't in a tagged const, when a tag names no claim, when a claim's
+# `values` aren't the literals in its consts, or when a claim isn't used.
+#
+# status: source  = the source says it
+#         derived = follows from the source, `note` says how
+#         user    = the user told us
+#         open    = unknown; the code refuses or leaves it out
+#
+# Pages are PDF pages. The PDFs stay local in docs/papers/ (gitignored).
+
+[lint]
+files = [
+  "tir-tuner-bolus/src/lib.rs",
+  "tir-tuner-common/src/data.rs",
+  "tir-tuner-common/src/metrics.rs",
+  "tir-tuner-common/src/settings.rs",
+  "tir-tuner-common/src/units.rs",
+  "tir-tuner-aps/src/settings.rs",
+]
+# Literals allowed anywhere. Everything else is a named, tagged const.
+allowed = [0, 1]
+
+[sources]
+camaps-manual = "mylife CamAPS FX user manual, mmol/L edition (camaps_fx_manual.pdf)"
+ware2022 = "Ware J et al. Cambridge hybrid closed-loop algorithm in children and adolescents with type 1 diabetes. Lancet Digit Health 2022;4(4):e245-e255. doi:10.1016/S2589-7500(22)00020-6"
+ware2022b = "Ware J et al. Safety of user-initiated intensification of insulin delivery using Cambridge hybrid closed-loop algorithm. J Diabetes Sci Technol 2024;18(4):882-888. doi:10.1177/19322968221141924"
+battelino2019 = "Battelino T et al. Clinical targets for continuous glucose monitoring data interpretation: international consensus on time in range. Diabetes Care 2019;42(8):1593-1603. doi:10.2337/dci19-0028"
+iupac = "IUPAC standard atomic weights: C 12.011, H 1.008, O 15.999"
+definition = "Unit definitions (SI prefixes, clock)"
+user = "The user, in conversation"
+
+# Units
+
+[[claim]]
+id = "glucose-molar-mass"
+source = "iupac"
+values = [180.156, 10.0, 1000.0]
+status = "derived"
+note = "C6H12O6 = 6*12.011 + 12*1.008 + 6*15.999. 10 dL per L, 1000 mmol per mol."
+
+[[claim]]
+id = "si-milli"
+source = "definition"
+values = [1000.0]
+status = "source"
+
+[[claim]]
+id = "percent"
+source = "definition"
+values = [100]
+status = "source"
+
+[[claim]]
+id = "clock"
+source = "definition"
+values = [24, 60]
+status = "source"
+note = "Hours per day, minutes per hour."
+
+# Settings
+
+[[claim]]
+id = "man-30-min-blocks"
+source = "camaps-manual"
+at = "p59, p63, p64"
+values = [30]
+status = "source"
+
+[[claim]]
+id = "man-default-target"
+source = "camaps-manual"
+at = "p59, p70; 104.5 mg/dL in ware2022b p3"
+values = [5.8]
+status = "source"
+
+[[claim]]
+id = "man-personal-target-off"
+source = "camaps-manual"
+at = "p59, p60"
+status = "source"
+note = "Switched off: the default target applies. Times without a block show the default."
+
+[[claim]]
+id = "ware2022-target-range"
+source = "ware2022"
+at = "p4"
+values = [4.4, 11.0]
+status = "source"
+note = "The manual gives no personal target range."
+
+[[claim]]
+id = "man-bolus-target-range"
+source = "camaps-manual"
+at = "p63"
+values = [4.4, 11.0]
+status = "source"
+note = "mmol/L. The mg/dL edges the app shows are open."
+
+[[claim]]
+id = "man-min-glucose-range"
+source = "camaps-manual"
+at = "p62"
+values = [2.8, 4.4]
+status = "source"
+
+[[claim]]
+id = "man-insulin-action-range"
+source = "camaps-manual"
+at = "p64"
+values = [2.0, 8.0]
+status = "source"
+note = "No step given."
+
+[[claim]]
+id = "man-max-bolus-range"
+source = "camaps-manual"
+at = "p63"
+values = [0.5, 30.0, 0.5]
+status = "source"
+
+[[claim]]
+id = "man-weight-range"
+source = "camaps-manual"
+at = "p29"
+values = [10.0, 300.0, 1.0]
+status = "source"
+
+[[claim]]
+id = "man-tdd-range"
+source = "camaps-manual"
+at = "p29"
+values = [5.0, 350.0, 1.0]
+status = "source"
+
+[[claim]]
+id = "man-calculator-not-auto"
+source = "camaps-manual"
+at = "p62, p63"
+status = "source"
+
+# Bolus calculator
+
+[[claim]]
+id = "man-carb-ratio"
+source = "camaps-manual"
+at = "p64"
+status = "derived"
+note = "CR is grams covered by one unit, so the meal part is carbs / CR."
+
+[[claim]]
+id = "man-correction-factor"
+source = "camaps-manual"
+at = "p63"
+status = "derived"
+note = "CF is the drop per unit and the correction aims at the bolus target, so (glucose - target) / CF."
+
+[[claim]]
+id = "man-negative-correction"
+source = "camaps-manual"
+at = "p63"
+status = "source"
+
+[[claim]]
+id = "man-iob-correction-only"
+source = "camaps-manual"
+at = "p64"
+status = "source"
+note = "Floored at 0: IOB is never subtracted from the meal part."
+
+[[claim]]
+id = "man-max-bolus-cap"
+source = "camaps-manual"
+at = "p63"
+status = "source"
+note = "The floor at 0 (no negative bolus) is ours."
+
+[[claim]]
+id = "man-min-glucose-refuse"
+source = "camaps-manual"
+at = "p62"
+status = "source"
+note = "'a lower current glucose value': strictly below."
+
+[[claim]]
+id = "man-auto-meal-no-glucose"
+source = "camaps-manual"
+at = "p51"
+status = "source"
+
+[[claim]]
+id = "open-rounding"
+source = "camaps-manual"
+at = "p50"
+status = "open"
+note = "YpsoPump steps 0.1 U; neither manual says which way the app rounds."
+
+[[claim]]
+id = "open-iob-below-target"
+source = "camaps-manual"
+at = "p63, p64"
+status = "open"
+note = "The manual doesn't say whether IOB reduces a negative correction."
+
+# Metrics
+
+[[claim]]
+id = "battelino-tir-band"
+source = "battelino2019"
+at = "p3, Table 2"
+values = [70.0, 180.0]
+status = "source"
+
+[[claim]]
+id = "battelino-integer-bands"
+source = "battelino2019"
+at = "p3, Table 2"
+status = "derived"
+note = "Bands have whole mg/dL edges (54-69, 70-180, 181-250); simulated readings are rounded to whole mg/dL."
+
+[[claim]]
+id = "battelino-mean"
+source = "battelino2019"
+at = "p3, Table 2"
+status = "source"
+
+[[claim]]
+id = "battelino-cv"
+source = "battelino2019"
+at = "p3, Table 2"
+values = [2]
+status = "derived"
+note = "The metric is named, the formula isn't; sample SD over mean, which needs two readings."
+
+# Recorded data
+
+[[claim]]
+id = "user-hypo-treatment"
+source = "user"
+at = "2026-10-10"
+status = "user"
+note = "Carbs logged with 0 U are hypo treatments."

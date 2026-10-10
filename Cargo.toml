@@ -23,6 +23,7 @@ chrono = { version = "0.4", default-features = false, features = ["std"] }
 duckdb = { version = "1.10506", features = ["bundled", "chrono"] }
 
 thiserror = "2"
+toml = "1.1.8"
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }

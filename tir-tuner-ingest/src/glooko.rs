@@ -198,6 +198,7 @@ fn number(s: &str) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tir_tuner_common::data::BolusKind;
 
     #[test]
     fn german_bolus() {
@@ -211,7 +212,7 @@ Zeitstempel,Insulin-Typ,Blutzuckereingabe (mg/dl),Kohlenhydrataufnahme (g),Kohle
         assert_eq!(range.1, NaiveDate::from_ymd_opt(2026, 8, 5).unwrap());
         assert_eq!(rows.boluses[0].carbs_g, 50.0);
         assert_eq!(rows.boluses[0].units, 4.5);
-        assert!(!rows.boluses[1].is_meal());
+        assert_eq!(rows.boluses[1].kind(), BolusKind::Correction);
         assert_eq!(rows.boluses[1].at.to_string(), "2026-07-31 16:02:00");
     }
 

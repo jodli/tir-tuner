@@ -15,10 +15,10 @@ This page covers the units, the report-card metrics, and the simulation clock, t
 
 ## Two languages for the same number
 
-Glucose is measured in two units, and you will have seen both. The model works in millimoles per liter (mmol/L), the unit in most of Europe. The US and many meters use milligrams per deciliter (mg/dL). The two are the same measure scaled by the factor `18.0182`.
+Glucose is measured in two units, and you will have seen both. The model works in millimoles per liter (mmol/L), the unit in most of Europe. The US and many meters use milligrams per deciliter (mg/dL). The two are the same measure scaled by the factor `18.0156`, glucose's molar mass of 180.156 g/mol divided by 10.
 
-1 mmol/L = 18.0182 mg/dL. 5.8 mmol/L is 104.5 mg/dL.
-1 mg/dL = 1 / 18.0182 mmol/L, roughly 0.0555.
+1 mmol/L = 18.0156 mg/dL. 5.8 mmol/L is 104.5 mg/dL.
+1 mg/dL = 1 / 18.0156 mmol/L, roughly 0.0555.
 
 So the numbers look different but say the same thing. The ones that recur:
 
@@ -40,12 +40,12 @@ A 50 g meal becomes 277.6 mmol of glucose in the model. That conversion links th
 
 A day of glucose readings is judged with a few standard numbers.
 
-- **Time in range (TIR)**: the share of readings inside the band 3.9 to 10.0 mmol/L (70 to 180 mg/dL), as a percentage. This is the headline number of a diabetes day. ISO defines the band; the model reports it the same way.
-- **Mean glucose**: the average of the readings, in mmol/L.
+- **Time in range (TIR)**: the share of readings inside the band 3.9 to 10.0 mmol/L (70 to 180 mg/dL), as a percentage. This is the headline number of a diabetes day. The band comes from the international consensus on time in range (Battelino 2019). Its edges are whole mg/dL, so 70 and 180 count as in range, and the model rounds simulated readings to whole mg/dL before counting.
+- **Time below range (TBR)**: the share of readings below 70 mg/dL. The consensus goal is under 4%.
+- **Mean glucose**: the average of the readings, in mg/dL.
 - **Coefficient of variation (CV)**: the spread of the readings around the mean, as a percentage. It measures how much the day swings around that average, independent of how high. Two days with the same average can feel very different, and CV is what tells them apart.
-- **LBGI and HBGI**: the low and high blood glucose indices. They are the Kovatchev risk scores, and they weight each reading toward the danger it represents. A long stretch of mild highs scores differently from one scary low. Readings above roughly 112.5 mg/dL (6.24 mmol/L) contribute nothing to the low index, and vice versa.
 
-These are the numbers behind your pump report and your clinic reviews. The rest of this project exists to move the TIR number up without letting the low risk scores climb.
+These are the numbers behind your pump report and your clinic reviews. The rest of this project exists to move the TIR number up without letting time below range climb.
 
 ## The clock
 

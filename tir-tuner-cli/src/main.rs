@@ -1,7 +1,10 @@
 use tir_tuner_body::solver::with_basal_glucose;
 use tir_tuner_cli::engine::{Meal, SimConfig, simulate};
-use tir_tuner_common::metrics::{coefficient_of_variation, mean_glucose, time_in_range_pct};
-use tir_tuner_common::units::mg_per_dl_to_mmol_per_l;
+use tir_tuner_common::data::BolusKind;
+use tir_tuner_common::metrics::{
+    coefficient_of_variation, mean_glucose, time_below_range_pct, time_in_range_pct,
+};
+use tir_tuner_common::units::{MgDl, mg_dl_series};
 
 use chrono::NaiveDateTime;
 use clap::{Parser, Subcommand};
@@ -162,18 +165,22 @@ fn ingest(source: &Path, archive: &Path, db: &Path) -> Result<(), Error> {
         .cgm
         .chunk_by(|a, b| a.at.date() == b.at.date())
         .count();
-    let meals = export.boluses.iter().filter(|b| b.is_meal()).count();
+    let count = |k| export.boluses.iter().filter(|b| b.kind() == k).count();
+    let (meals, hypo, corrections) = (
+        count(BolusKind::Meal),
+        count(BolusKind::HypoTreatment),
+        count(BolusKind::Correction),
+    );
     println!("archived to {}", dir.display());
     println!(
         "range {} .. {}, CGM on {days} days",
         export.start, export.end
     );
     println!(
-        "{} CGM, {} fingerstick, {} boluses ({meals} meal, {} correction), {} basal segments",
+        "{} CGM, {} fingerstick, {} boluses ({meals} meal, {hypo} hypo treatment, {corrections} correction), {} basal segments",
         export.cgm.len(),
         export.bg.len(),
         export.boluses.len(),
-        export.boluses.len() - meals,
         export.basal.len(),
     );
 
@@ -193,24 +200,15 @@ fn ingest(source: &Path, archive: &Path, db: &Path) -> Result<(), Error> {
 fn simulate_export(dir: &Path, kagr: f64, db: &Path) -> Result<(), Error> {
     let export = tir_tuner_ingest::read_export(dir)?;
     let cgm = &export.cgm;
-    let real_mmol: Vec<f64> = cgm
-        .iter()
-        .map(|r| mg_per_dl_to_mmol_per_l(r.mg_dl))
-        .collect();
-    println!(
-        "real Glooko: {} samples, TIR {:.1}%, mean {:.2} mmol/L, CV {:.1}%",
-        cgm.len(),
-        time_in_range_pct(&real_mmol),
-        mean_glucose(&real_mmol),
-        coefficient_of_variation(&real_mmol),
-    );
+    let real: Vec<MgDl> = cgm.iter().map(|r| MgDl(r.mg_dl)).collect();
+    print_metrics("real Glooko", &real);
 
-    // Meals relative to the CGM start.
+    // Everything eaten, hypo treatments included, relative to the CGM start.
     let cgm_start = cgm.first().ok_or_else(|| Error::NoCgm(dir.into()))?.at;
     let meals: Vec<Meal> = export
         .boluses
         .iter()
-        .filter(|b| b.is_meal())
+        .filter(|b| b.kind() != BolusKind::Correction)
         .map(|b| Meal {
             start_min: (b.at - cgm_start).num_minutes() as f64,
             carbs_g: b.carbs_g,
@@ -259,14 +257,20 @@ fn simulate_export(dir: &Path, kagr: f64, db: &Path) -> Result<(), Error> {
     };
     let trace = simulate(&cfg);
 
-    let sim_readings = &trace.reading_mmol_per_l;
-    println!(
-        "sim (closed loop): {} samples, TIR {:.1}%, mean {:.2} mmol/L, CV {:.1}%",
-        sim_readings.len(),
-        time_in_range_pct(sim_readings),
-        mean_glucose(sim_readings),
-        coefficient_of_variation(sim_readings),
+    print_metrics(
+        "sim (closed loop)",
+        &mg_dl_series(&trace.reading_mmol_per_l),
     );
-
     Ok(())
+}
+
+fn print_metrics(label: &str, readings: &[MgDl]) {
+    println!(
+        "{label}: {} samples, TIR {:.1}%, TBR {:.1}%, mean {:.0} mg/dL, CV {:.1}%",
+        readings.len(),
+        time_in_range_pct(readings),
+        time_below_range_pct(readings),
+        mean_glucose(readings).0,
+        coefficient_of_variation(readings),
+    );
 }

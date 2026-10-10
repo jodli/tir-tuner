@@ -9,15 +9,33 @@ use std::fmt;
 
 use chrono::{NaiveDateTime, NaiveTime, Timelike};
 
-use crate::units::{mg_per_dl_to_mmol_per_l, mmol_per_l_to_mg_per_dl};
+use crate::units::{GramsPerUnit, MgDl, MgDlPerUnit, MmolL, Units};
 
-/// The app sets every time block in 30 min steps.
+/// The app sets every time block in 30 min steps. src: man-30-min-blocks
 pub const STEP_MIN: u16 = 30;
-const DAY_MIN: u16 = 24 * 60;
+/// src: clock
+const MIN_PER_HOUR: u16 = 60;
+/// src: clock
+const DAY_MIN: u16 = 24 * MIN_PER_HOUR;
 const SLOTS: usize = (DAY_MIN / STEP_MIN) as usize;
 
-/// Auto mode target where no personal target is set (p59).
+/// Auto mode target where no personal target is set. src: man-default-target
 pub const DEFAULT_TARGET_MMOL_L: f64 = 5.8;
+/// Personal target range. The manual gives none, the trials do.
+/// src: ware2022-target-range
+pub const AUTO_TARGET_MMOL_L: (f64, f64) = (4.4, 11.0);
+/// src: man-bolus-target-range
+pub const BOLUS_TARGET_MMOL_L: (f64, f64) = (4.4, 11.0);
+/// src: man-min-glucose-range
+pub const MIN_GLUCOSE_MMOL_L: (f64, f64) = (2.8, 4.4);
+/// src: man-insulin-action-range
+pub const INSULIN_ACTION_HOURS: (f64, f64) = (2.0, 8.0);
+/// src: man-max-bolus-range
+pub const MAX_BOLUS_U: (f64, f64, f64) = (0.5, 30.0, 0.5);
+/// src: man-weight-range
+pub const WEIGHT_KG: (f64, f64, f64) = (10.0, 300.0, 1.0);
+/// src: man-tdd-range
+pub const TOTAL_DAILY_DOSE_U: (f64, f64, f64) = (5.0, 350.0, 1.0);
 
 /// A setting, named as in `settings.toml` and the store.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -54,10 +72,6 @@ impl Setting {
             Self::Weight => "weight_kg",
             Self::TotalDailyDose => "total_daily_dose_u",
         }
-    }
-
-    pub fn from_name(name: &str) -> Option<Self> {
-        Self::SCHEDULES.into_iter().find(|s| s.name() == name)
     }
 }
 
@@ -115,7 +129,7 @@ impl Schedule {
     fn build(blocks: &[Block], default: Option<f64>) -> Result<Self, String> {
         let mut by_slot = [f64::NAN; SLOTS];
         for b in blocks {
-            let on_grid = |m: u16| m % STEP_MIN == 0 && m <= DAY_MIN;
+            let on_grid = |m: u16| m.is_multiple_of(STEP_MIN) && m <= DAY_MIN;
             if !on_grid(b.start_min) || !on_grid(b.end_min) || b.start_min == DAY_MIN {
                 return Err(format!("{} is not on the 30 min grid", b.label()));
             }
@@ -137,7 +151,7 @@ impl Schedule {
     }
 
     pub fn at(&self, t: NaiveTime) -> f64 {
-        self.by_slot[(t.hour() * 60 + t.minute()) as usize / STEP_MIN as usize]
+        self.by_slot[(t.hour() * u32::from(MIN_PER_HOUR) + t.minute()) as usize / STEP_MIN as usize]
     }
 
     /// Fewest blocks: runs of equal values, the one across midnight whole.
@@ -159,12 +173,6 @@ impl Schedule {
                 }),
             }
         }
-        for b in &mut blocks {
-            // Back to clock minutes: a block past midnight ends at 00:00..24:00.
-            if b.end_min > DAY_MIN {
-                b.end_min -= DAY_MIN;
-            }
-        }
         blocks.sort_by_key(|b| b.start_min);
         blocks
     }
@@ -172,9 +180,10 @@ impl Schedule {
 
 /// `06`, `06:30`.
 fn clock(min: u16) -> String {
-    match min % 60 {
-        0 => format!("{:02}", min / 60),
-        m => format!("{:02}:{m:02}", min / 60),
+    let h = min / MIN_PER_HOUR;
+    match min % MIN_PER_HOUR {
+        0 => format!("{h:02}"),
+        m => format!("{h:02}:{m:02}"),
     }
 }
 
@@ -187,8 +196,9 @@ pub struct ProfileInput {
     pub correction_factor: Vec<Block>,
     /// mg/dl.
     pub bolus_target: Vec<Block>,
-    /// Personal target, mg/dl. `None`: same as the bolus target. Times
-    /// without a block use [`DEFAULT_TARGET_MMOL_L`].
+    /// Personal target, mg/dl. `None`: switched off, Auto mode runs at
+    /// [`DEFAULT_TARGET_MMOL_L`] all day; times without a block use it too.
+    /// src: man-personal-target-off
     pub auto_target: Option<Vec<Block>>,
     pub insulin_action_hours: f64,
     pub max_bolus_u: f64,
@@ -199,7 +209,7 @@ pub struct ProfileInput {
     pub total_daily_dose_u: f64,
 }
 
-/// The bolus calculator. None of it affects Auto mode (p62).
+/// The bolus calculator. None of it affects Auto mode. src: man-calculator-not-auto
 #[derive(Clone, Debug, PartialEq)]
 pub struct BolusSettings {
     carb_ratio: Schedule,
@@ -211,23 +221,20 @@ pub struct BolusSettings {
 }
 
 impl BolusSettings {
-    pub fn carb_ratio(&self) -> &Schedule {
-        &self.carb_ratio
+    pub fn carb_ratio(&self, t: NaiveTime) -> GramsPerUnit {
+        GramsPerUnit(self.carb_ratio.at(t))
     }
-    pub fn correction_factor(&self) -> &Schedule {
-        &self.correction_factor
+    pub fn correction_factor(&self, t: NaiveTime) -> MgDlPerUnit {
+        MgDlPerUnit(self.correction_factor.at(t))
     }
-    pub fn target(&self) -> &Schedule {
-        &self.target
+    pub fn target(&self, t: NaiveTime) -> MgDl {
+        MgDl(self.target.at(t))
     }
-    pub fn insulin_action_hours(&self) -> f64 {
-        self.insulin_action_hours
+    pub fn max_bolus(&self) -> Units {
+        Units(self.max_bolus_u)
     }
-    pub fn max_bolus_u(&self) -> f64 {
-        self.max_bolus_u
-    }
-    pub fn min_glucose_mg_dl(&self) -> f64 {
-        self.min_glucose_mg_dl
+    pub fn min_glucose(&self) -> MgDl {
+        MgDl(self.min_glucose_mg_dl)
     }
 }
 
@@ -246,9 +253,6 @@ impl AutoSettings {
     pub fn weight_kg(&self) -> f64 {
         self.weight_kg
     }
-    pub fn total_daily_dose_u(&self) -> f64 {
-        self.total_daily_dose_u
-    }
 }
 
 /// Bolus calculator and Auto mode settings that passed the app's checks.
@@ -265,6 +269,7 @@ impl Profile {
         let schedule = |setting, blocks: &[Block], default| {
             Schedule::build(blocks, default).map_err(|msg| fail(setting, msg))
         };
+        // "between X and Y" in the manual includes both ends.
         let range = |setting, v: f64, (lo, hi): (f64, f64)| {
             if (lo..=hi).contains(&v) {
                 Ok(())
@@ -272,9 +277,16 @@ impl Profile {
                 Err(fail(setting, format!("{v} is outside {lo}..{hi}")))
             }
         };
-        // The manual gives glucose ranges in mmol/L; the settings are mg/dl.
+        let stepped = |setting, v: f64, (lo, hi, step): (f64, f64, f64)| {
+            range(setting, v, (lo, hi))?;
+            if (v / step).fract() != 0.0 {
+                return Err(fail(setting, format!("{v} is not a multiple of {step}")));
+            }
+            Ok(())
+        };
+        // The ranges are mmol/L; the settings are mg/dl.
         let glucose = |setting, what: String, mg_dl: f64, (lo, hi): (f64, f64)| {
-            if (lo..=hi).contains(&mg_per_dl_to_mmol_per_l(mg_dl)) {
+            if (lo..=hi).contains(&MgDl(mg_dl).to_mmol_l().0) {
                 Ok(())
             } else {
                 Err(fail(
@@ -283,36 +295,31 @@ impl Profile {
                 ))
             }
         };
+        let targets = |setting, blocks: &[Block], limits| {
+            blocks
+                .iter()
+                .try_for_each(|b| glucose(setting, format!("{} = ", b.label()), b.value, limits))
+        };
 
         let bolus_target = schedule(BolusTarget, &input.bolus_target, None)?;
-        for b in &input.bolus_target {
-            glucose(
-                BolusTarget,
-                format!("{} = ", b.label()),
-                b.value,
-                (4.4, 11.0),
-            )?;
-        }
-        let auto_target = match &input.auto_target {
-            Some(blocks) => {
-                let default = mmol_per_l_to_mg_per_dl(DEFAULT_TARGET_MMOL_L);
-                schedule(AutoTarget, blocks, Some(default))?
-            }
-            None => bolus_target.clone(),
-        };
+        targets(BolusTarget, &input.bolus_target, BOLUS_TARGET_MMOL_L)?;
+        let auto_blocks = input.auto_target.as_deref().unwrap_or_default();
+        let auto_target = schedule(AutoTarget, auto_blocks, Some(default_target_mg_dl()))?;
+        targets(AutoTarget, auto_blocks, AUTO_TARGET_MMOL_L)?;
         glucose(
             MinGlucose,
             String::new(),
             input.min_glucose_mg_dl,
-            (2.8, 4.4),
+            MIN_GLUCOSE_MMOL_L,
         )?;
-        range(InsulinActionHours, input.insulin_action_hours, (2.0, 8.0))?;
-        range(MaxBolus, input.max_bolus_u, (0.5, 30.0))?;
-        if (input.max_bolus_u * 2.0).fract() != 0.0 {
-            return Err(fail(MaxBolus, "must be a multiple of 0.5".into()));
-        }
-        range(Weight, input.weight_kg, (10.0, 300.0))?;
-        range(TotalDailyDose, input.total_daily_dose_u, (5.0, 350.0))?;
+        range(
+            InsulinActionHours,
+            input.insulin_action_hours,
+            INSULIN_ACTION_HOURS,
+        )?;
+        stepped(MaxBolus, input.max_bolus_u, MAX_BOLUS_U)?;
+        stepped(Weight, input.weight_kg, WEIGHT_KG)?;
+        stepped(TotalDailyDose, input.total_daily_dose_u, TOTAL_DAILY_DOSE_U)?;
 
         Ok(Self {
             bolus: BolusSettings {
@@ -360,7 +367,7 @@ impl Profile {
             carb_ratio: b.carb_ratio.blocks(),
             correction_factor: b.correction_factor.blocks(),
             bolus_target: b.target.blocks(),
-            auto_target: (a.target != b.target).then(|| a.target.blocks()),
+            auto_target: (a.target != default_auto_target()).then(|| a.target.blocks()),
             insulin_action_hours: b.insulin_action_hours,
             max_bolus_u: b.max_bolus_u,
             min_glucose_mg_dl: b.min_glucose_mg_dl,
@@ -368,6 +375,16 @@ impl Profile {
             total_daily_dose_u: a.total_daily_dose_u,
         }
     }
+}
+
+fn default_target_mg_dl() -> f64 {
+    MmolL(DEFAULT_TARGET_MMOL_L).to_mg_dl().0
+}
+
+/// Personal target switched off.
+pub fn default_auto_target() -> Schedule {
+    Schedule::build(&[], Some(default_target_mg_dl()))
+        .expect("an empty schedule with a default builds")
 }
 
 #[derive(Debug, PartialEq, thiserror::Error)]
@@ -383,8 +400,12 @@ pub struct ProfileHistory {
 impl ProfileHistory {
     pub fn new(mut entries: Vec<(NaiveDateTime, Profile)>) -> Result<Self, DuplicateEntry> {
         entries.sort_by_key(|(from, _)| *from);
-        if let Some(w) = entries.windows(2).find(|w| w[0].0 == w[1].0) {
-            return Err(DuplicateEntry(w[0].0));
+        if let Some((a, _)) = entries
+            .iter()
+            .zip(entries.iter().skip(1))
+            .find(|(a, b)| a.0 == b.0)
+        {
+            return Err(DuplicateEntry(a.0));
         }
         Ok(Self { entries })
     }
@@ -416,6 +437,104 @@ mod tests {
 
     fn t(h: u32, m: u32) -> NaiveTime {
         NaiveTime::from_hms_opt(h, m, 0).unwrap()
+    }
+
+    fn input() -> ProfileInput {
+        ProfileInput {
+            carb_ratio: vec![Block::all_day(12.0)],
+            correction_factor: vec![Block::all_day(100.0)],
+            bolus_target: vec![Block::all_day(110.0)],
+            auto_target: None,
+            insulin_action_hours: 2.5,
+            max_bolus_u: 30.0,
+            min_glucose_mg_dl: 70.0,
+            weight_kg: 50.0,
+            total_daily_dose_u: 36.0,
+        }
+    }
+
+    #[test]
+    fn man_30_min_blocks_reject_off_grid_and_bad_values() {
+        let raw = |start_min, end_min, value| Block {
+            start_min,
+            end_min,
+            value,
+        };
+        for (b, msg) in [
+            (raw(15, 360, 10.0), "not on the 30 min grid"),
+            (raw(0, 1470, 10.0), "not on the 30 min grid"),
+            (raw(1440, 360, 10.0), "not on the 30 min grid"),
+            (block(0, 24, 0.0), "must be positive"),
+            (block(0, 24, f64::INFINITY), "must be positive"),
+        ] {
+            let err = Schedule::build(&[b], None).unwrap_err();
+            assert!(err.ends_with(msg), "{err}");
+        }
+    }
+
+    #[test]
+    fn half_hour_block_at_midnight_round_trips() {
+        let first = Block {
+            start_min: 0,
+            end_min: 30,
+            value: 10.0,
+        };
+        let s = Schedule::build(&[first], Some(20.0)).unwrap();
+        assert_eq!(s.blocks()[0], first);
+    }
+
+    #[test]
+    fn half_hour_block_is_looked_up_by_minute() {
+        let b = Block {
+            start_min: 330,
+            end_min: 360,
+            value: 50.0,
+        };
+        let s = Schedule::build(&[b], Some(10.0)).unwrap();
+        assert_eq!(
+            (s.at(t(5, 29)), s.at(t(5, 45)), s.at(t(6, 0))),
+            (10.0, 50.0, 10.0)
+        );
+    }
+
+    #[test]
+    fn man_personal_target_off_runs_at_5_8() {
+        let p = Profile::new(input()).unwrap();
+        assert!((p.auto().target().at(t(3, 0)) - 104.5).abs() < 0.05);
+        assert_eq!(p.to_input().auto_target, None);
+    }
+
+    #[test]
+    fn ware2022_target_range() {
+        let with_target = |mg| ProfileInput {
+            auto_target: Some(vec![block(6, 22, mg)]),
+            ..input()
+        };
+        assert!(Profile::new(with_target(80.0)).is_ok());
+        assert!(Profile::new(with_target(198.0)).is_ok());
+        for mg in [79.0, 199.0] {
+            let err = Profile::new(with_target(mg)).unwrap_err();
+            assert_eq!(err.setting, Setting::AutoTarget);
+        }
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn blocks_are_fewest_and_round_trip(values in proptest::collection::vec(1u8..4, SLOTS)) {
+            let slots: Vec<Block> = values.iter().enumerate().map(|(i, &v)| Block {
+                start_min: i as u16 * STEP_MIN,
+                end_min: (i as u16 + 1) * STEP_MIN,
+                value: f64::from(v),
+            }).collect();
+            let s = Schedule::build(&slots, None).unwrap();
+            let blocks = s.blocks();
+            assert_eq!(Schedule::build(&blocks, None).unwrap(), s);
+            if blocks.len() > 1 {
+                for (k, b) in blocks.iter().enumerate() {
+                    assert_ne!(b.value, blocks[(k + 1) % blocks.len()].value);
+                }
+            }
+        }
     }
 
     #[test]
@@ -453,14 +572,7 @@ mod tests {
         };
         let input = |cr| ProfileInput {
             carb_ratio: vec![Block::all_day(cr)],
-            correction_factor: vec![Block::all_day(100.0)],
-            bolus_target: vec![Block::all_day(110.0)],
-            auto_target: None,
-            insulin_action_hours: 2.5,
-            max_bolus_u: 30.0,
-            min_glucose_mg_dl: 70.0,
-            weight_kg: 50.0,
-            total_daily_dose_u: 36.0,
+            ..input()
         };
         let (a, b) = (
             Profile::new(input(12.0)).unwrap(),

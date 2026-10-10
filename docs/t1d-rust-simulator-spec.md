@@ -198,7 +198,7 @@ $$v(t) = \alpha_1 v(t-1) + e(t), \quad e(t) \sim \mathcal{N}(0, \sigma_e^2)$$
 
 ```rust
 /// Units and Conversion Constants
-pub const MMOL_TO_MG_DL: f64 = 18.0182;
+pub const MMOL_TO_MG_DL: f64 = 18.0156; // 180.156 g/mol / 10
 pub const PMOL_TO_MU: f64 = 1.0 / 6.0; // Insulin unit conversion
 
 /// State vector for Hovorka 2004/2010 Simulator

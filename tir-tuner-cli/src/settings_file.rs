@@ -11,7 +11,7 @@
 //! carb_ratio = { "00-06" = 17, "06-11" = 12, "11-17" = 13, "17-24" = 11 }
 //! correction_factor = { "06-22" = 100, "22-06" = 80 }
 //! bolus_target = { "06-22" = 110, "22-06" = 120 }
-//! # auto_target: optional, defaults as in `ProfileInput::auto_target`
+//! # auto_target: optional, omitted = personal target off (5.8 mmol/L all day)
 //! ```
 
 use std::collections::BTreeMap;

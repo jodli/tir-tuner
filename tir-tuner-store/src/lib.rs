@@ -146,14 +146,14 @@ impl Store {
         )?;
         let mut block = tx.prepare("INSERT INTO profile_block VALUES (?, ?, ?, ?, ?)")?;
         for (from, p) in history.entries() {
-            let (b, a) = (p.bolus(), p.auto());
+            let i = p.to_input();
             profile.execute(params![
                 from,
-                b.insulin_action_hours(),
-                b.max_bolus_u(),
-                b.min_glucose_mg_dl(),
-                a.weight_kg(),
-                a.total_daily_dose_u()
+                i.insulin_action_hours,
+                i.max_bolus_u,
+                i.min_glucose_mg_dl,
+                i.weight_kg,
+                i.total_daily_dose_u
             ])?;
             for (setting, schedule) in p.schedules() {
                 for bl in schedule.blocks() {

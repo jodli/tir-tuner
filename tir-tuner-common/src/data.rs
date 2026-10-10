@@ -18,10 +18,23 @@ pub struct Bolus {
     pub units: f64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BolusKind {
+    Meal,
+    /// Carbs logged with no insulin: the user treats lows this way.
+    /// src: user-hypo-treatment
+    HypoTreatment,
+    /// No carbs.
+    Correction,
+}
+
 impl Bolus {
-    /// A bolus without carbs is a correction.
-    pub fn is_meal(&self) -> bool {
-        self.carbs_g > 0.0
+    pub fn kind(&self) -> BolusKind {
+        match (self.carbs_g > 0.0, self.units > 0.0) {
+            (false, _) => BolusKind::Correction,
+            (true, true) => BolusKind::Meal,
+            (true, false) => BolusKind::HypoTreatment,
+        }
     }
 }
 
@@ -50,4 +63,22 @@ pub struct Export {
 pub struct Alarm {
     pub at: NaiveDateTime,
     pub kind: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn user_hypo_treatment_is_carbs_without_insulin() {
+        let b = |carbs_g, units| Bolus {
+            at: NaiveDateTime::default(),
+            carbs_g,
+            units,
+        };
+        assert_eq!(b(60.0, 6.0).kind(), BolusKind::Meal);
+        assert_eq!(b(15.0, 0.0).kind(), BolusKind::HypoTreatment);
+        assert_eq!(b(0.0, 1.5).kind(), BolusKind::Correction);
+        assert_eq!(b(0.0, 0.0).kind(), BolusKind::Correction);
+    }
 }

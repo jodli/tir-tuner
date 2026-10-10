@@ -84,8 +84,9 @@ fn max_abs_derivative(d: &crate::derivative::BodyDerivatives) -> f64 {
 /// `q2 = x1*q1/(x2 + k12)` so the model does not start with a spur of
 /// inter-compartment flux.
 pub fn admit_state(subject: &VirtualSubject, glucose_mg_per_dl: f64) -> BodyState {
-    use tir_tuner_common::units::mg_per_dl_to_mmol_per_l;
-    let g = mg_per_dl_to_mmol_per_l(glucose_mg_per_dl);
+    let g = tir_tuner_common::units::MgDl(glucose_mg_per_dl)
+        .to_mmol_l()
+        .0;
 
     let u_basal_mu_per_min = subject.bir_u_per_h / 60.0 * MU_PER_UNIT;
     let s1 = u_basal_mu_per_min / subject.ka_per_min;

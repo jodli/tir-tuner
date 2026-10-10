@@ -1742,6 +1742,7 @@ name = "tir-tuner-bolus"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "thiserror",
  "tir-tuner-common",
 ]
 
@@ -1777,8 +1778,12 @@ name = "tir-tuner-common"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "proc-macro2",
  "proptest",
+ "regex",
+ "syn 2.0.119",
  "thiserror",
+ "toml",
 ]
 
 [[package]]
