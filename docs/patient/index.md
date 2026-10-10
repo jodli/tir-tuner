@@ -1,66 +1,43 @@
 ---
-title: How the pieces fit
+title: Type 1 diabetes, from the inside
 lang: en
 alt: de/index.html
 ---
 
-# How the pieces fit
+# Type 1 diabetes, from the inside
 
-These pages explain how the artificial pancreas works from the inside. They are written for people who live with type 1 diabetes, not for engineers. Each page covers one part of the system, and each can be read on its own.
+These pages explain what happens in the body with type 1 diabetes: where blood sugar comes from, how food turns into sugar, how insulin brings it back down, and why the same meal and the same dose don't give the same result twice. They are written for people who live with the illness. No maths needed.
 
 ## The short version
 
-Type 1 diabetes means your body no longer makes insulin. Without insulin, the sugar from food stays in the blood, and so does the sugar your liver keeps producing on its own. An artificial pancreas takes over that job. A sensor under your skin reads how much sugar is in your tissue fluid. A small computer looks at that reading, decides how much insulin your body will need over the next few hours, and tells a pump how fast to deliver. The loop repeats every fifteen minutes, all day, without you doing anything.
+Your blood always carries some sugar. It is the fuel for the brain and the muscles. The liver adds sugar around the clock, food adds more, and the body's cells take it out again. Insulin is the signal that controls both sides: it tells the cells to take sugar in, and it tells the liver to make less.
 
-That loop is what this repository models. We built a virtual body, a virtual sensor, a virtual controller and a virtual pump, wired them together, and then proved the safety rules hold. The pages below walk through each piece.
+In type 1 diabetes the body no longer makes insulin. The sugar keeps coming in, from the liver and from food, but the signal to take it out is missing. Every treatment, injections, a pump, a pump that doses on its own, replaces that missing signal from the outside.
 
-## The pages
-
-| Page | The part of the system | The crate behind it |
-|---|---|---|
-| [The numbers that matter](math-and-metrics.md) | Units, the report-card metrics, and the clock that runs the simulation | `tir-tuner-common` |
-| [The sensor](sensor.md) | What your CGM reading measures, and why it wobbles | `tir-tuner-cgm` |
-| [The body](body.md) | How type 1 diabetes works, and the model we use to describe it | `tir-tuner-body` |
-| [The brain](brain.md) | How the pump decides how much insulin to deliver | `tir-tuner-aps` |
-| [The loop](loop.md) | How all of it is wired together, including your own pump data | `tir-tuner-cli` |
-
-The names start with `tir-tuner` because the original goal of this project was tuning the time-in-range (TIR) of glucose controllers in simulation. The name stuck; the project outgrew it.
-
-## Once around the loop
+The hard part is timing. Insulin under the skin needs about an hour to reach its peak in the blood, and food reaches the blood on its own schedule. Most highs and lows come from those two schedules not lining up.
 
 ```mermaid
 flowchart LR
-    S[(Sensor)] -->|sugar reading| B[Brain]
-    B -->|insulin rate| W[Watchdog]
-    W -->|checked rate| P[(Pump)]
-    P -->|insulin under the skin| V[(Body)]
-    V -->|sugar moves, new reading| S
+    F[Food] -->|digested| B((Blood sugar))
+    L[Liver] -->|makes sugar all the time| B
+    B -->|used without insulin| BR[Brain]
+    B -->|taken in with insulin| M[Muscle and fat]
+    I[Insulin] -.opens the door.-> M
+    I -.slows down.-> L
 ```
 
-```mermaid
-sequenceDiagram
-    participant S as Sensor
-    participant B as Brain
-    participant P as Pump
-    participant V as Body
-    S->>B: reading every 15 min
-    B->>B: predict the next 4 hours
-    B->>P: the first 15 min of the best plan
-    P->>V: insulin, at a checked rate
-    V-->>S: interstitial sugar changes
-    Note over S,V: repeat every 15 minutes
-```
+## The pages
 
-## Where to start
+1. [Where blood sugar comes from](body.md): the liver, the brain, the muscles and the kidneys, and why sugar rises without insulin even when you don't eat.
+2. [From plate to blood](food.md): how fast carbs arrive, why a big meal arrives longer instead of faster, and why the same meal varies.
+3. [How insulin works](insulin.md): how long it takes, its three jobs in the body, how long it really lasts, and what changes how it is absorbed.
+4. [Carb ratio, correction factor, target](dosing.md): the numbers in your pump, what each one means, and how a bolus is put together.
+5. [How the pump decides on its own](brain.md): what an automatic insulin system does around the clock, and when Boost and Ease-off help.
+6. [The sensor](sensor.md): what your sensor reading measures, and why it never matches the finger prick exactly.
+7. [The numbers on your report](math-and-metrics.md): time in range and the other numbers your clinic looks at.
 
-- If you are new to all of this, start with [The body](body.md). It explains the disease in the same language the model uses.
-- Then read [The brain](brain.md). It does the deciding, and it has the clearest safety rules.
-- [The sensor](sensor.md) explains why your sensor number and your meter disagree.
-- [The numbers that matter](math-and-metrics.md) explains the report-card numbers and why your pump report is full of them.
-- [The loop](loop.md) shows the whole system running, including a replay of a day from your own pump.
+Each page can be read on its own. If you are new to this, read them in order.
 
-## A note on honesty
+## A note on these pages
 
-Nothing here is medical advice. These pages describe a research model of how the system works, not a product you should use to adjust your treatment. Your pump, your sensor and your care team are the source of truth. The model's job is to help you understand what they are all doing together.
-
-The formal safety catalogue behind the controller lives in the [full report](verification_report.html). It is written in mathematical language; the pages in this folder are not.
+Nothing here is medical advice. The pages explain how the body and the treatment work, so that your own data and your clinic's suggestions make more sense. Changes to your settings belong with your care team.

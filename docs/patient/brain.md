@@ -1,119 +1,71 @@
 ---
-title: The brain
+title: How the pump decides on its own
 lang: en
 alt: de/brain.html
 sources:
-  - tir-tuner-aps/src/lib.rs
   - tir-tuner-aps/src/controller.rs
-  - tir-tuner-aps/src/hovorka.rs
-  - tir-tuner-aps/src/imm.rs
   - tir-tuner-aps/src/kalman.rs
+  - tir-tuner-aps/src/imm.rs
+  - tir-tuner-aps/src/settings.rs
 ---
 
-# The brain
+# How the pump decides on its own
 
-This page explains how the pump decides how much insulin to deliver, and the safety rules that sit between the decision and the delivery.
+In Auto mode the pump no longer follows a fixed basal rate. An app reads the sensor, decides how much insulin is needed right now, and tells the pump. It does that again and again, day and night. This page explains how such a system thinks.
 
-## The problem the brain solves
+## It looks ahead
 
-Insulin is slow. A dose takes about an hour to reach full effect, and meals arrive with their own delay. If the pump only reacted to the current reading, it would always be correcting yesterday's sugar, dosing once for what arrives now, again for what arrives next, and over-dosing when both land together. The controller's idea is to look ahead instead.
+Insulin needs about an hour to reach its peak, so reacting to the current reading is always too late. A system that only reacts gives more insulin while the sugar rises, keeps giving while the earlier insulin is still on its way, and ends in a low.
 
-## Model predictive control, without the jargon
+So the system looks ahead instead. Every few minutes it does the same thing:
 
-Every control period (15 minutes), the controller does the same four things:
+1. Read the newest sensor value.
+2. Predict how the sugar will move over the next hours, taking into account the insulin already given and the food you entered.
+3. Work out which insulin rate would bring the sugar to the target along that prediction.
+4. Give only the first small step of that plan.
+5. Start over with the next reading.
 
-1. Take the current sensor reading.
-2. Simulate the next four hours under several candidate insulin schedules.
-3. Score each schedule against the goal: reach the target glucose without wild swings in the rate.
-4. Deliver only the first 15 minutes of the best schedule, then start over.
-
-Plan the whole route, take the next turn, re-plan. The whole plan is rarely followed, because the situation changes and the plan is recalculated at each step; only the immediate next move is acted on. The technique is called model predictive control (MPC). This implementation is the nonlinear kind, because the model it uses to predict is not a straight line.
-
-```mermaid
-flowchart LR
-    S[Sensor reading] --> P[Simulate 4h under each candidate schedule]
-    P --> C[Score: distance to target + rate volatility]
-    C --> D[Best schedule]
-    D --> A[Deliver first 15 min]
-    A -->|next period| S
-```
-
-## The controller carries a model of you
-
-To simulate the next four hours, the controller needs a picture of the body it is dosing. It carries that picture as a model, nearly the same one described in [the body](body.md): insulin depots, blood insulin, the three insulin actions, sugar compartments, the sensor compartment.
-
-Two details matter:
-
-- **The picture is deliberately approximate.** The controller's model is a simplified sketch of the person it doses, and the loop is tested against the mismatch, because the real system lives with it. It is built from the two numbers you enter in the app, your weight and your average daily insulin, plus published averages from Hovorka 2004. The simulated body has its own values and doesn't share them.
-- **The picture is corrected constantly.** Every control period, the controller weighs the new sensor reading against what its model expected. It knows how noisy the sensor is and that a sensor error tends to persist for a while, so a single odd reading moves its picture only a little, while readings that keep pointing the same way move it a lot. It also keeps three versions of its picture: a calm one for quiet hours and two that react faster, for when something unexpected like an unannounced meal is going on. Whichever version explained the recent readings best gets the most say.
-
-This is why the pump does not panic at one weird low reading: a single reading is information, not the truth. The hard safety rules below are separate from this smoothing, and the controller cannot override them.
-
-## The moving target
-
-The goal is not to snap to 5.8 mmol/L instantly, because slamming insulin in to fix a high reading is exactly what causes a low an hour later. The controller builds a moving target path instead:
-
-| Where the sugar sits | The path toward target |
-|---|---|
-| Far above target | falls at 2 mmol/L per hour |
-| Nearer target | eases to 1 mmol/L per hour, never past the target |
-| Below target | rises back exponentially, settling on target from below |
-
-This shape lets the pump correct highs deliberately without converting a high into a low.
+The plan is thrown away every time and made again with fresh data. The system only has to be right about the next few minutes, and it can change its mind as soon as the sugar does something unexpected.
 
 ```mermaid
 flowchart LR
-    A["far above target"] -->|fall steep, 2 mmol/L/h| B["near target"]
-    B -->|fall gently, 1 mmol/L/h| C[target 5.8]
-    D["below target"] -->|rise gently, settle from below| C
+    S[New sensor value] --> P[Predict the next hours]
+    P --> D[Choose the best insulin rate]
+    D --> G[Give a small step]
+    G -->|a few minutes later| S
 ```
 
-## The score: closeness and smoothness
+## It doesn't rush
 
-A candidate schedule is scored as a sum over the four-hour horizon of two penalties:
+A system that tried to fix a high reading at once would push a lot of insulin, and that insulin would still be working when the sugar is already back down. So the system plans a gradual way down to the target instead of a straight drop. It accepts a high that lasts a bit longer to avoid a low later.
 
-1. One penalty for each moment the predicted sugar deviates from the moving target path, squared so larger misses hurt more.
-2. A second penalty for every sharp change in the insulin rate, so the pump prefers steady pumping over bursts.
+## It has a picture of you
 
-The balance between the two is controlled by a single number, `k_agr`. A high `k_agr` lets the rate move freely, a low one pins it close to the previous rate. A very low one is the "do not disturb the steady state" setting; a very high one is the "fix this now" setting. It is the one tuning knob for how aggressively the rate may change between periods.
+To predict, the system carries a simplified picture of your body: how fast insulin arrives, how strongly you react to it, how food turns into sugar. It starts from your weight and your usual daily insulin, and it keeps learning from your data: the insulin given, the sensor values and the meals all update its picture of how sensitive you are. Routine activity, like a walk every morning, ends up in that picture too.
 
-The scoring makes the loop cautious. It prices the whole predicted trajectory, so it eases off the correction early and accepts a small remaining high after a meal instead of chasing the spike into a low.
+The picture is never perfect, so the system checks it against every new reading. One odd reading moves it only a little, because sensors are sometimes off. Readings that keep pointing the same way move it a lot. The system also keeps several guesses at once, for example "a quiet hour" and "something unexpected is happening, maybe a meal nobody entered", and trusts whichever explains the recent readings best.
 
-## Three opinions, one answer
+## Safety comes first
 
-A single model of you cannot fit every hour of the day. Sensitivity changes with exercise, sleep, illness, the phase of the month. So the controller runs three candidate models ("modes") in parallel, each with a probability of being the right one for right now.
+- The highest insulin rate is limited for each person.
+- When the sugar is low or falling fast, the system cuts insulin further.
+- Carbs logged as a hypo treatment get no insulin.
+- A meal marked as slowly absorbed gets its insulin over three to four hours, as the sugar rises.
 
-Every reading shifts those probabilities. The mode that explained the last reading best gets more trust, through a Bayesian update, and a small Markov step lets the trust drift over time, so the loop is never stuck in yesterday's mode. The three probabilities are blended into one estimate, and that estimate drives the dose decision.
+## The target
 
-The algorithm keeps several versions of the world in its head at once and shifts trust to whichever explains your readings best.
+The system aims for a personal target, 5.8 mmol/L (about 105 mg/dL) unless you set your own. It can differ by time of day, in half-hour blocks. A higher target means fewer lows and more time above range. A lower one means the opposite.
 
-This project's loop runs that three-filter scheme as the patent describes it. How noisy each version assumes the world to be is not published, so those numbers are this project's own choice.
+## Meals still need a bolus
 
-## The watchdog before every dose
+Food reaches the blood faster than insulin does (see [from plate to blood](food.md)). If the system waited for the sugar to rise before giving meal insulin, it would always be behind. A meal bolus gives the insulin a head start. In Auto mode the bolus covers only the carbs: highs are the automatic system's job.
 
-The decision is made. Nothing is delivered until it passes the watchdog, and the watchdog has hard rules that no optimizer can override:
+## Boost and Ease-off
 
-| Rule | Value | Effect |
-|---|---|---|
-| Hard hypo cutoff | below 4.4 mmol/L | delivery is forced to zero, boluses included |
-| Ease-off mode | suspends fully below 7.0 mmol/L | raised target for exercise or illness phases |
-| Boost mode | +35% delivery, never below Standard | temporary intensification |
-| Maximum rate | capped at the pump's limit | no delivery ever exceeds it |
+Sometimes you know something the system can't see yet.
 
-The real CamAPS system ships with these three modes, Standard, Ease-off and Boost. Every one of these rules is the subject of a formal proof in this project.
+**Boost** is for times when you need more insulin than usual: illness, stress, hormones, steroids. The system gives about a third more insulin while the sugar is above target, and still cuts back when it falls. Used for more than about 9 hours, Boost can push the time below range over 4%.
 
-The headline numbers, gathered in one place:
+**Ease-off** is for times when you need less insulin: sport, a long walk, a day of gardening, alcohol, hot weather, illness with vomiting or diarrhoea, the start of a period. The system aims higher and gives less. Activity makes the body more sensitive to insulin, and insulin given before it is still working during it, so Ease-off works best when started 60 to 90 minutes before the activity. Used for more than about 9 hours, Ease-off can push the time above 10 mmol/L over 30%.
 
-- Target glucose: 5.8 mmol/L
-- User-adjustable target range: 4.4 to 11.0 mmol/L
-- Hard hypo cutoff: 4.4 mmol/L
-- Ease-off target: 7.0 mmol/L
-- Boost factor: 1.35
-- Control period: 15 minutes
-- Prediction horizon: 240 minutes (4 hours)
-
-## Predict, act small, check, correct
-
-Every cycle runs the same four steps and then starts over. That is the same structure as your care team's approach, except the pump runs it every fifteen minutes, all night, without you.
-
-From here: [the loop](loop.md) shows the controller, the sensor and the body wired together and run over a real day. The formal proofs behind the watchdog live in the [verification report](verification_report.html).
+Next: [the sensor](sensor.md).

@@ -1,66 +1,51 @@
 ---
-title: Die Zahlen, auf die es ankommt
+title: Die Zahlen in Ihrem Bericht
 lang: de
 alt: ../math-and-metrics.html
 sources:
   - tir-tuner-common/src/units.rs
   - tir-tuner-common/src/metrics.rs
-  - tir-tuner-common/src/euler.rs
-  - tir-tuner-common/src/random.rs
 ---
 
-# Die Zahlen, auf die es ankommt
+# Die Zahlen in Ihrem Bericht
 
-Diese Seite behandelt die Einheiten, die Kennzahlen und die Uhr der Simulation, also die Bausteine, auf denen jede andere Seite in diesem Ordner aufbaut.
+Ein Sensor sammelt Hunderte Werte am Tag. Ihre Klinik fasst sie in wenigen Zahlen zusammen, und diese Zahlen werden weltweit gleich verwendet, ein Bericht aus der einen Klinik bedeutet also in der anderen dasselbe.
 
-## Zwei Sprachen für dieselbe Zahl
+## Zwei Einheiten für dieselbe Sache
 
-Glukose wird in zwei Einheiten gemessen, und Sie kennen vermutlich beide. Das Modell rechnet in Millimol pro Liter (mmol/L), der üblichen Einheit in weiten Teilen Europas; die USA und viele Messgeräte arbeiten mit Milligramm pro Deziliter (mg/dL). Es ist dasselbe Maß, nur anders skaliert, mit dem Faktor 18,0156: die Molmasse von Glukose, 180,156 g/mol, geteilt durch 10.
+Zucker wird je nach Land und Gerät in mg/dl oder mmol/l gemessen. Das ist dieselbe Sache auf einer anderen Skala: 1 mmol/l sind 18 mg/dl.
 
-1 mmol/L = 18,0156 mg/dL, also sind 5,8 mmol/L = 104,5 mg/dL.
-1 mg/dL = 1/18,0156 mmol/L, also rund 0,0555 mmol/L.
-
-Die Zahlen sehen also anders aus, sagen aber dasselbe. Die wichtigsten wiederkehrenden Werte:
-
-| mmol/L | mg/dL | Was es ist |
+| mmol/l | mg/dl | Bedeutung |
 |---|---|---|
+| 3,0 | 54 | sehr niedrig |
 | 3,9 | 70 | untere Grenze des Zielbereichs |
-| 5,8 | 104,5 | Zielwert der Steuerung |
 | 10,0 | 180 | obere Grenze des Zielbereichs |
+| 13,9 | 250 | sehr hoch |
 
-## Vom Essen zum Blutzucker
+## Zeit im Zielbereich
 
-Das Modell rechnet Kohlenhydrate in Gramm und Glukose in Millimol. Ein Gramm Kohlenhydrate wird wie ein Gramm Glukose behandelt; ein Gramm Glukose entspricht einem 180,156stel Mol, also:
+Die wichtigste Zahl. Sie ist der Anteil der Werte zwischen 70 und 180 mg/dl (3,9 bis 10,0 mmol/l). 70 und 180 selbst zählen als im Bereich.
 
-1 g Kohlenhydrate = 5,551 mmol Glukose.
+Das internationale Ziel für die meisten Erwachsenen mit Typ-1-Diabetes:
 
-Eine 50-g-Mahlzeit entspricht im Modell 277,6 mmol Glukose. Diese Umrechnung verbindet das Essen auf dem Teller mit dem Zucker im Blut.
+| Bereich | Ziel | Pro Tag |
+|---|---|---|
+| Im Bereich, 70 bis 180 | mehr als 70 % | mehr als 16 h 48 min |
+| Unter 70 | weniger als 4 % | weniger als 1 h |
+| Unter 54 | weniger als 1 % | weniger als 15 min |
+| Über 180 | weniger als 25 % | weniger als 6 h |
+| Über 250 | weniger als 5 % | weniger als 1 h 12 min |
 
-## Die Kennzahlen des Tages
+Die Zeit unter dem Bereich hat das strengste Ziel, weil Tiefs sofort gefährlich sind und Hochs über Jahre schaden. Mehr Zeit im Bereich ist nur ein Fortschritt, wenn die Zeit darunter nicht mitsteigt.
 
-Ein Tag voller Glukosewerte wird anhand einiger standardisierter Zahlen bewertet.
+## Mittelwert und Schwankung
 
-- **Zeit im Zielbereich (TIR):** der Anteil der Werte im Bereich zwischen 3,9 und 10,0 mmol/L (70 bis 180 mg/dL), in Prozent. Es ist die wichtigste Zahl eines Diabetes-Tages. Der Bereich stammt aus dem internationalen Konsens zur Zeit im Zielbereich (Battelino 2019). Seine Grenzen sind ganze mg/dL, also zählen 70 und 180 als im Bereich; das Modell rundet simulierte Werte vorher auf ganze mg/dL.
-- **Zeit unter dem Zielbereich (TBR):** der Anteil der Werte unter 70 mg/dL. Das Konsensziel liegt unter 4 %.
-- **Mittlere Glukose:** der Durchschnitt der Werte, in mg/dL.
-- **Variationskoeffizient (CV):** die Streuung der Werte um den Mittelwert, in Prozent. Er sagt, wie stark der Tag um diesen Mittelwert schwankt, unabhängig davon, wie hoch er liegt. Zwei Tage mit demselben Durchschnitt können sich völlig verschieden anfühlen; der CV macht den Unterschied aus.
+Der **Mittelwert** ist der Durchschnitt aller Werte. Er sagt, wo der Tag insgesamt liegt.
 
-Das sind die Zahlen hinter Ihrem Pumpbericht und Ihren Klinikbesuchen. Der Rest dieses Projekts existiert, um die TIR nach oben zu bringen, ohne die Zeit unter dem Zielbereich steigen zu lassen.
+Der **Variationskoeffizient** (VK, englisch CV) sagt, wie stark die Werte um diesen Mittelwert schwanken, als Prozent davon. Zwei Tage mit demselben Mittelwert können sich völlig verschieden anfühlen: einer flach, einer den ganzen Tag auf und ab. Der VK unterscheidet sie. Das Ziel ist 36 % oder weniger.
 
-## Die Uhr
+## Den eigenen Bericht lesen
 
-Eine Simulation bewegt sich in kleinen, festen Zeitschritten vorwärts statt kontinuierlich. Der zentrale Rechenschritt ist ein geklemmter Vorwärts-Euler-Schritt: den aktuellen Wert nehmen, die Änderungsrate mit der Intervalllänge addieren und das Ergebnis niemals unter Null fallen lassen.
+Ein einzelner Tag sagt wenig. Ein vergessener Bolus oder eine falsch geschätzte Mahlzeit kann ihn ruinieren. Berichte umfassen meist die letzten 14 Tage, und Muster über diese Zeit zählen: dasselbe Hoch nach derselben Mahlzeit, dasselbe Tief zur selben Nachtzeit. Solche Muster zeigen auf eine bestimmte Zeit und eine bestimmte Einstellung, wie auf der Seite [Kohlenhydratverhältnis, Korrekturfaktor, Zielwert](dosing.md) beschrieben.
 
-Die Klemme bei Null ist eine Sicherheitsregel: Keine Menge darf negativ werden, weder Insulin noch Glukose. Die Regel gilt in jedem Schritt und zählt zu den Invarianten, die die formale Verifikation beweist. Der Körper rechnet in Schritten von 0,25 Minuten, die Steuerung denkt in 15-Minuten-Schritten; beide nutzen dasselbe geklemmte Grundprimitiv.
-
-## Der Seed
-
-Die Simulation ist vollständig deterministisch: Jedes Zufallselement, Sensorrauschen wie Pumpfehler, stammt aus einem Generator, der mit einer festen Zahl geseedet wird. Wer denselben Seed zweimal laufen lässt, bekommt exakt denselben virtuellen Tag, Byte für Byte.
-
-Deshalb tragen die Sicherheitsbeweise: Eine Eigenschaft, die für einen simulierten Tag gilt, lässt sich über Tausende Tage prüfen, alle reproduzierbar, alle nachrechenbar. Der Generator ist klein und standardisiert und zieht ausschließlich aus dem Seed.
-
-## Dieselben Zahlen wie Ihr Messgerät
-
-Jede Zahl auf dieser Seite ist so gewählt, dass das Modell und Ihr Messgerät dieselbe Sprache sprechen: dieselben Einheiten wie Ihr Messgerät, derselbe Bereich wie Ihr Bericht, dieselben Risikowerte wie Ihre Klinik. Das Projekt existiert, damit sich der simulierte Tag mit Ihrem echten Tag direkt vergleichen lässt.
-
-Weiter: [Der Sensor](sensor.md) misst den Zucker des Körpers, und [Der Körper](body.md) ist der Ort, an dem die Krankheit selbst lebt.
+Zurück zur [Übersicht](index.md).

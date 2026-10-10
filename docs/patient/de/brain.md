@@ -1,119 +1,71 @@
 ---
-title: Das Gehirn
+title: Wie die Pumpe selbst entscheidet
 lang: de
 alt: ../brain.html
 sources:
-  - tir-tuner-aps/src/lib.rs
   - tir-tuner-aps/src/controller.rs
-  - tir-tuner-aps/src/hovorka.rs
-  - tir-tuner-aps/src/imm.rs
   - tir-tuner-aps/src/kalman.rs
+  - tir-tuner-aps/src/imm.rs
+  - tir-tuner-aps/src/settings.rs
 ---
 
-# Das Gehirn
+# Wie die Pumpe selbst entscheidet
 
-Diese Seite erklärt, wie die Pumpe entscheidet, wie viel Insulin sie abgibt, und welche Sicherheitsregeln zwischen Entscheidung und Abgabe sitzen.
+Im Auto-Modus folgt die Pumpe keiner festen Basalrate mehr. Eine App liest den Sensor, entscheidet, wie viel Insulin gerade nötig ist, und sagt es der Pumpe. Das macht sie immer wieder, Tag und Nacht. Diese Seite erklärt, wie so ein System denkt.
 
-## Das Problem, das das Gehirn löst
+## Es schaut voraus
 
-Insulin wirkt langsam: Eine Dosis braucht etwa eine Stunde, bis sie ihre volle Wirkung entfaltet, und auch Mahlzeiten wirken mit eigener Verzögerung. Würde die Pumpe nur den aktuellen Wert betrachten, korrigierte sie immer den Zucker von gestern: eine Dosis für das, was gerade ankommt, eine für das, was gleich kommt, und eine zu große, wenn beides aufeinandertrifft. Die Steuerung schaut stattdessen nach vorn.
+Insulin braucht etwa eine Stunde bis zu seinem Höhepunkt, also kommt jede Reaktion auf den aktuellen Wert zu spät. Ein System, das nur reagiert, gibt mehr Insulin, solange der Zucker steigt, gibt weiter, während das frühere Insulin noch unterwegs ist, und landet in einem Tief.
 
-## Modellprädiktive Regelung, ohne Fachjargon
+Deshalb schaut das System voraus. Alle paar Minuten macht es dasselbe:
 
-In jeder Regelperiode (15 Minuten) erledigt die Steuerung vier Dinge:
+1. Den neuesten Sensorwert lesen.
+2. Vorhersagen, wie sich der Zucker in den nächsten Stunden bewegt, mit dem schon gegebenen Insulin und dem eingetragenen Essen.
+3. Ausrechnen, welche Insulinrate den Zucker entlang dieser Vorhersage zum Zielwert bringt.
+4. Nur den ersten kleinen Schritt dieses Plans umsetzen.
+5. Mit dem nächsten Wert von vorn beginnen.
 
-1. Sie nimmt den aktuellen Sensorwert.
-2. Sie simuliert die nächsten vier Stunden unter mehreren Kandidaten-Insulinplänen.
-3. Sie bewertet jeden Plan gegen das Ziel: den Zielwert erreichen, ohne dass die Rate wild ausschlägt.
-4. Sie gibt nur die ersten 15 Minuten des besten Plans ab und beginnt dann von vorn.
-
-Plan den ganzen Weg, fahre nur die nächste Abbiegung, plane dann neu. Der Gesamtplan wird selten komplett durchgefahren, denn die Lage ändert sich: In jedem Schritt wird der Plan neu berechnet und nur der unmittelbar nächste Zug umgesetzt. Diese Technik heißt modellprädiktive Regelung (MPC). Diese Implementierung ist die nichtlineare Variante, denn das Modell, mit dem sie vorhersagt, ist keine Gerade.
-
-```mermaid
-flowchart LR
-    S[Sensormessung] --> P[4 h unter jedem Kandidatenplan simulieren]
-    P --> C[Bewertung: Abstand zum Ziel + Schwankung der Rate]
-    C --> D[Bester Plan]
-    D --> A[Die ersten 15 min abgeben]
-    A -->|nächster Zyklus| S
-```
-
-## Die Steuerung trägt ein Modell von Ihnen
-
-Um die nächsten vier Stunden durchzurechnen, braucht die Steuerung ein Bild des Körpers, dem sie Insulin gibt. Dieses Bild hat sie als Modell dabei, nahezu dasselbe, das [Der Körper](body.md) beschreibt: Insulindepots, Insulin im Blut, die drei Insulinwirkungen, die Zuckerkompartimente und das Kompartiment des Sensors.
-
-Zwei Einzelheiten zählen:
-
-- **Das Bild ist bewusst grob.** Das Modell der Steuerung ist eine vereinfachte Skizze des Menschen, dem sie Insulin gibt. Der Regelkreis wird genau gegen diese Abweichung getestet, denn das echte System muss mit ihr leben. Es entsteht aus den zwei Zahlen, die du in der App eingibst, deinem Gewicht und deiner durchschnittlichen Tagesinsulinmenge, plus veröffentlichten Mittelwerten aus Hovorka 2004. Der simulierte Körper hat eigene Werte und teilt sie nicht.
-- **Das Bild wird laufend korrigiert.** In jeder Regelperiode vergleicht die Steuerung den neuen Sensorwert mit dem, was ihr Modell erwartet hat. Sie weiß, wie stark der Sensor rauscht und dass ein Sensorfehler eine Weile anhält. Ein einzelner seltsamer Wert verschiebt ihr Bild deshalb nur wenig, Werte, die immer wieder in dieselbe Richtung zeigen, dagegen stark. Außerdem führt sie drei Versionen ihres Bildes: eine ruhige für normale Stunden und zwei, die schneller reagieren, wenn etwas Unerwartetes passiert, etwa eine nicht eingegebene Mahlzeit. Die Version, die die letzten Werte am besten erklärt hat, hat das meiste Gewicht.
-
-Deshalb gerät die Pumpe bei einem einzelnen ungewöhnlich niedrigen Wert nicht in Panik: Ein einzelner Wert ist Information, nicht die Wahrheit. Die harten Sicherheitsregeln weiter unten sind von dieser Glättung getrennt, und die Steuerung kann sie nicht aushebeln.
-
-## Das bewegliche Ziel
-
-Das Ziel ist nicht, sofort bei 5,8 mmol/L zu landen. Insulin hineinzupressen, um einen hohen Wert zu korrigieren, ist genau das, was eine Stunde später einen zu niedrigen verursacht. Stattdessen baut die Steuerung einen beweglichen Zielpfad:
-
-| Wo der Zucker liegt | Der Weg zum Ziel |
-|---|---|
-| Weit über dem Ziel | fällt mit 2 mmol/L pro Stunde |
-| Näher am Ziel | gleitet mit 1 mmol/L pro Stunde, ohne das Ziel zu unterschreiten |
-| Unter dem Ziel | steigt exponentiell wieder an und trifft das Ziel von unten |
-
-Dadurch korrigiert die Pumpe erhöhte Werte kontrolliert ab, ohne ein Hoch in ein Tief zu verwandeln.
+Der Plan wird jedes Mal verworfen und mit frischen Daten neu gemacht. Das System muss nur für die nächsten Minuten richtig liegen, und es kann umdenken, sobald der Zucker etwas Unerwartetes tut.
 
 ```mermaid
 flowchart LR
-    A["weit über dem Ziel"] -->|steil ab, 2 mmol/L/h| B["nahe am Ziel"]
-    B -->|sanft ab, 1 mmol/L/h| C[Ziel 5,8]
-    D["unter dem Ziel"] -->|sanft hoch, setzt von unten auf| C
+    S[Neuer Sensorwert] --> P[Die nächsten Stunden vorhersagen]
+    P --> D[Beste Insulinrate wählen]
+    D --> G[Einen kleinen Schritt geben]
+    G -->|ein paar Minuten später| S
 ```
 
-## Der Score: Nähe und Glätte
+## Es hat es nicht eilig
 
-Jeder Kandidatenplan wird über den Vier-Stunden-Horizont anhand von zwei Strafen bewertet:
+Ein System, das einen hohen Wert sofort beheben will, würde viel Insulin geben, und dieses Insulin wirkt noch, wenn der Zucker längst wieder unten ist. Deshalb plant das System einen allmählichen Weg zum Zielwert statt eines steilen Abfalls. Es nimmt ein Hoch, das etwas länger dauert, in Kauf, um ein Tief danach zu vermeiden.
 
-1. Eine Strafe für jede Abweichung des vorhergesagten Zuckers vom beweglichen Zielpfad, quadriert, damit größere Abweichungen stärker wiegen.
-2. Eine zweite Strafe für jede abrupte Änderung der Insulinrate, damit die Pumpe gleichmäßiges Pumpen dem stückweisen Abgeben vorzieht.
+## Es hat ein Bild von Ihnen
 
-Das Gleichgewicht zwischen beiden regelt eine einzige Zahl, `k_agr`. Ein hohes `k_agr` lässt die Rate frei wandern, ein niedriges hält sie nahe an der bisherigen Rate. Ein sehr niedriger Wert steht für "den stationären Zustand nicht stören", ein sehr hoher für "korrigiere sofort". Es ist der eine Stellknopf dafür, wie stark sich die Rate von Periode zu Periode verändern darf.
+Für die Vorhersage trägt das System ein vereinfachtes Bild Ihres Körpers mit sich: wie schnell Insulin ankommt, wie stark Sie darauf reagieren, wie aus Essen Zucker wird. Es startet mit Ihrem Gewicht und Ihrer üblichen Tagesinsulinmenge und lernt dann aus Ihren Daten weiter: Das gegebene Insulin, die Sensorwerte und die Mahlzeiten passen sein Bild davon an, wie empfindlich Sie sind. Regelmäßige Bewegung, etwa ein Spaziergang jeden Morgen, landet ebenfalls in diesem Bild.
 
-Diese Bewertung macht den Regelkreis vorsichtig: Sie berücksichtigt die ganze vorhergesagte Kurve. Deshalb lässt der Kreis lieber früh von der Korrektur ab und akzeptiert nach einer Mahlzeit ein kleines Resthoch, statt nach der Spitze in ein Tief zu laufen.
+Das Bild ist nie perfekt, deshalb prüft das System es an jedem neuen Wert. Ein einzelner seltsamer Wert verschiebt es nur wenig, weil Sensoren manchmal danebenliegen. Werte, die immer wieder in dieselbe Richtung zeigen, verschieben es stark. Außerdem hält das System mehrere Vermutungen gleichzeitig, zum Beispiel "eine ruhige Stunde" und "da passiert gerade etwas Unerwartetes, vielleicht eine Mahlzeit, die niemand eingetragen hat", und vertraut der, die die letzten Werte am besten erklärt.
 
-## Drei Meinungen, eine Antwort
+## Sicherheit zuerst
 
-Ein einziges Modell von Ihnen kann nicht jede Stunde des Tages treffen: Die Insulinempfindlichkeit ändert sich mit Sport, Schlaf, Krankheit und der Phase des Monats. Die Steuerung hält deshalb drei Kandidatenmodelle ("Modi") parallel, jedes mit einer Wahrscheinlichkeit, gerade jetzt das richtige zu sein.
+- Die höchste Insulinrate ist für jeden Menschen begrenzt.
+- Wenn der Zucker niedrig ist oder schnell fällt, nimmt das System noch mehr Insulin zurück.
+- Kohlenhydrate, die als Hypo-Behandlung eingetragen sind, bekommen kein Insulin.
+- Eine Mahlzeit, die als langsam aufgenommen markiert ist, bekommt ihr Insulin über drei bis vier Stunden, wenn der Zucker steigt.
 
-Jeder neue Wert verschiebt diese Wahrscheinlichkeiten: Der Modus, der den letzten Wert am besten erklärt, gewinnt an Vertrauen (Bayes-Update); ein kleiner Markov-Schritt lässt das Vertrauen über die Zeit driften, sodass der Regelkreis nicht im Modus von gestern hängen bleibt. Aus den drei Wahrscheinlichkeiten wird eine Schätzung gemischt, und diese Schätzung bestimmt die Dosis.
+## Der Zielwert
 
-Der Algorithmus hält also mehrere Versionen der Welt gleichzeitig im Kopf und vertraut im Lauf des Tages derjenigen immer mehr, die Ihre Werte am besten erklärt.
+Das System zielt auf einen persönlichen Zielwert, 5,8 mmol/l (etwa 105 mg/dl), solange Sie keinen eigenen festlegen. Er kann je nach Tageszeit verschieden sein, in Halbstundenblöcken. Ein höherer Zielwert bedeutet weniger Tiefs und mehr Zeit über dem Bereich. Ein niedrigerer das Gegenteil.
 
-Dieses Projekt rechnet mit genau diesem Drei-Filter-Schema, wie es im Patent steht. Wie viel Rauschen jede Version annimmt, ist nicht veröffentlicht; diese Zahlen hat das Projekt selbst gewählt.
+## Mahlzeiten brauchen trotzdem einen Bolus
 
-## Der Sicherheitswächter vor jeder Dosis
+Essen kommt schneller im Blut an als Insulin (siehe [Vom Teller ins Blut](food.md)). Würde das System warten, bis der Zucker steigt, bevor es Insulin fürs Essen gibt, wäre es immer zu spät. Ein Essensbolus gibt dem Insulin einen Vorsprung. Im Auto-Modus deckt der Bolus nur die Kohlenhydrate ab: Um Hochs kümmert sich das automatische System.
 
-Die Entscheidung ist gefallen, doch abgegeben wird erst, wenn der Sicherheitswächter sie freigibt. Der Wächter hat harte Regeln, die kein Optimierer aushebeln kann:
+## Boost und Ease-off
 
-| Regel | Wert | Wirkung |
-|---|---|---|
-| Harte Hypo-Schwelle | unter 4,4 mmol/L | Abgabe wird auf Null gezwungen, auch bei Boli |
-| Ease-off-Modus | unter 7,0 mmol/L vollständig ausgesetzt | erhöhtes Ziel für Sport- und Krankheitsphasen |
-| Boost-Modus | +35 % Abgabe, nie unter der Standardrate | vorübergehende Intensivierung |
-| Maximale Rate | auf das Pumpenlimit begrenzt | keine Abgabe überschreitet diesen Wert |
+Manchmal wissen Sie etwas, das das System noch nicht sehen kann.
 
-Das echte CamAPS-System wird mit drei Modi ausgeliefert: Standard, Ease-off und Boost. Jede dieser Regeln ist in diesem Projekt Gegenstand eines formalen Beweises.
+**Boost** ist für Zeiten, in denen Sie mehr Insulin brauchen als sonst: Krankheit, Stress, Hormone, Kortison. Das System gibt etwa ein Drittel mehr Insulin, solange der Zucker über dem Zielwert liegt, und nimmt trotzdem zurück, wenn er fällt. Länger als etwa 9 Stunden genutzt, kann Boost die Zeit unter dem Bereich über 4 % treiben.
 
-Die Kennzahlen auf einen Blick:
+**Ease-off** ist für Zeiten, in denen Sie weniger Insulin brauchen: Sport, ein langer Spaziergang, ein Tag Gartenarbeit, Alkohol, heißes Wetter, Krankheit mit Erbrechen oder Durchfall, der Beginn der Periode. Das System zielt höher und gibt weniger. Bewegung macht den Körper empfindlicher für Insulin, und Insulin, das vorher gegeben wurde, wirkt währenddessen noch. Deshalb wirkt Ease-off am besten, wenn es 60 bis 90 Minuten vor der Bewegung startet. Länger als etwa 9 Stunden genutzt, kann Ease-off die Zeit über 10 mmol/l über 30 % treiben.
 
-- Zielglukose: 5,8 mmol/L
-- Einstellbarer Zielbereich: 4,4 bis 11,0 mmol/L
-- Harte Hypo-Schwelle: 4,4 mmol/L
-- Ease-off-Ziel: 7,0 mmol/L
-- Boost-Faktor: 1,35
-- Regelperiode: 15 Minuten
-- Vorhersagehorizont: 240 Minuten (4 Stunden)
-
-## Vorhersagen, klein handeln, prüfen, korrigieren
-
-Jeder Zyklus durchläuft dieselben vier Schritte und beginnt dann von vorn. Das ist dasselbe Muster wie beim Vorgehen Ihres Behandlungsteams, nur dass es die Pumpe alle fünfzehn Minuten ausführt, die ganze Nacht, ganz ohne Sie.
-
-Weiter: [Der Regelkreis](loop.md) zeigt Steuerung, Sensor und Körper über einen echten Tag zusammengeschaltet. Die formalen Beweise hinter dem Sicherheitswächter stehen im [Verifikationsbericht](../verification_report.html).
+Weiter: [Der Sensor](sensor.md).

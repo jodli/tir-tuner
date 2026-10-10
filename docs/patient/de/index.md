@@ -1,66 +1,43 @@
 ---
-title: Wie alles zusammenpasst
+title: Typ-1-Diabetes von innen
 lang: de
 alt: ../index.html
 ---
 
-# Wie alles zusammenpasst
+# Typ-1-Diabetes von innen
 
-Diese Seiten erklären, wie die künstliche Bauchspeicheldrüse von innen funktioniert. Sie sind für Menschen mit Typ-1-Diabetes geschrieben, nicht für Ingenieure. Jede Seite behandelt einen Teil des Systems und lässt sich einzeln lesen.
+Diese Seiten erklären, was bei Typ-1-Diabetes im Körper passiert: woher der Blutzucker kommt, wie aus Essen Zucker wird, wie Insulin ihn wieder senkt, und warum dieselbe Mahlzeit und dieselbe Dosis nie zweimal dasselbe Ergebnis bringen. Sie sind für Menschen geschrieben, die mit der Krankheit leben. Mathe braucht man dafür nicht.
 
 ## Die Kurzfassung
 
-Bei Typ-1-Diabetes stellt der Körper kein Insulin mehr her. Ohne Insulin bleibt der Zucker aus der Nahrung im Blut, ebenso der Zucker, den die Leber selbst weiterbildet. Eine künstliche Bauchspeicheldrüse übernimmt diese Aufgabe. Ein Sensor unter der Haut misst, wie viel Zucker in der Gewebeflüssigkeit steckt. Ein kleiner Computer nimmt diesen Wert, entscheidet, wie viel Insulin der Körper in den nächsten Stunden braucht, und teilt der Pumpe mit, wie schnell sie abgeben soll. Das wiederholt sich alle fünfzehn Minuten, den ganzen Tag, ganz ohne Ihr Zutun.
+Im Blut ist immer etwas Zucker. Er ist der Brennstoff für Gehirn und Muskeln. Die Leber gibt rund um die Uhr Zucker ab, das Essen bringt mehr, und die Körperzellen nehmen ihn wieder heraus. Insulin ist das Signal, das beide Seiten steuert: Es sagt den Zellen, dass sie Zucker aufnehmen sollen, und es sagt der Leber, dass sie weniger abgeben soll.
 
-Genau diesen Regelkreis baut dieses Repository nach: einen virtuellen Körper, einen virtuellen Sensor, eine virtuelle Steuerung und eine virtuelle Pumpe. Die vier Teile verbinden wir miteinander und weisen dann nach, dass die Sicherheitsregeln halten. Die folgenden Seiten stellen die einzelnen Teile vor.
+Bei Typ-1-Diabetes bildet der Körper kein Insulin mehr. Der Zucker kommt weiter herein, aus der Leber und aus dem Essen, aber das Signal, ihn herauszuholen, fehlt. Jede Behandlung, ob Spritze, Pumpe oder eine Pumpe, die selbst dosiert, ersetzt dieses fehlende Signal von außen.
 
-## Die Seiten
-
-| Seite | Der Teil des Systems | Das Crate dahinter |
-|---|---|---|
-| [Die Zahlen, auf die es ankommt](math-and-metrics.md) | Einheiten, Kennzahlen und die Uhr, die die Simulation antreibt | `tir-tuner-common` |
-| [Der Sensor](sensor.md) | Was Ihr CGM-Wert misst und warum er schwankt | `tir-tuner-cgm` |
-| [Der Körper](body.md) | Wie Typ-1-Diabetes funktioniert und das Modell, das ihn beschreibt | `tir-tuner-body` |
-| [Das Gehirn](brain.md) | Wie die Pumpe entscheidet, wie viel Insulin sie abgibt | `tir-tuner-aps` |
-| [Der Regelkreis](loop.md) | Wie alles zusammengeschaltet ist, inklusive Ihrer eigenen Pumpdaten | `tir-tuner-cli` |
-
-Alle Namen beginnen mit `tir-tuner`, weil das Projekt ursprünglich angetreten war, die Zeit im Zielbereich (TIR) von Glukosereglern in der Simulation zu optimieren. Der Name blieb; das Projekt ist ihm entwachsen.
-
-## Einmal durch den Regelkreis
+Das Schwierige ist das Timing. Insulin unter der Haut braucht etwa eine Stunde, bis es im Blut am höchsten ist, und das Essen kommt nach seinem eigenen Zeitplan im Blut an. Die meisten Hochs und Tiefs entstehen, weil diese beiden Zeitpläne nicht zusammenpassen.
 
 ```mermaid
 flowchart LR
-    S[(Sensor)] -->|Zuckermessung| G[Gehirn]
-    G -->|Insulinrate| W[Sicherheitswächter]
-    W -->|geprüfte Rate| P[(Pumpe)]
-    P -->|Insulin unter die Haut| V[(Körper)]
-    V -->|Zucker verändert sich, neuer Wert| S
+    F[Essen] -->|verdaut| B((Blutzucker))
+    L[Leber] -->|bildet ständig Zucker| B
+    B -->|ohne Insulin verbraucht| BR[Gehirn]
+    B -->|mit Insulin aufgenommen| M[Muskeln und Fett]
+    I[Insulin] -.öffnet die Tür.-> M
+    I -.bremst.-> L
 ```
 
-```mermaid
-sequenceDiagram
-    participant S as Sensor
-    participant G as Gehirn
-    participant P as Pumpe
-    participant V as Körper
-    S->>G: Wert alle 15 Minuten
-    G->>G: die nächsten 4 Stunden vorhersagen
-    G->>P: die ersten 15 Minuten des besten Plans
-    P->>V: Insulin, mit geprüfter Rate
-    V-->>S: Gewebezucker verändert sich
-    Note over S,V: alle 15 Minuten wiederholen
-```
+## Die Seiten
 
-## Wo Sie anfangen
+1. [Woher der Blutzucker kommt](body.md): Leber, Gehirn, Muskeln und Nieren, und warum der Zucker ohne Insulin steigt, auch wenn man nichts isst.
+2. [Vom Teller ins Blut](food.md): wie schnell Kohlenhydrate ankommen, warum eine große Mahlzeit länger statt schneller ankommt, und warum dieselbe Mahlzeit schwankt.
+3. [Wie Insulin wirkt](insulin.md): wie lange es braucht, seine drei Aufgaben im Körper, wie lange es wirklich wirkt, und was die Aufnahme verändert.
+4. [Kohlenhydratverhältnis, Korrekturfaktor, Zielwert](dosing.md): die Zahlen in Ihrer Pumpe, was jede bedeutet, und wie ein Bolus zusammengesetzt wird.
+5. [Wie die Pumpe selbst entscheidet](brain.md): was ein automatisches Insulinsystem rund um die Uhr tut, und wann Boost und Ease-off helfen.
+6. [Der Sensor](sensor.md): was Ihr Sensorwert misst, und warum er nie genau zum Fingerpiks passt.
+7. [Die Zahlen in Ihrem Bericht](math-and-metrics.md): Zeit im Zielbereich und die anderen Zahlen, auf die Ihre Klinik schaut.
 
-- Wenn Ihnen das alles neu ist, beginnen Sie mit [Der Körper](body.md). Er erklärt die Krankheit in derselben Sprache, die auch das Modell verwendet.
-- Danach lesen Sie [Das Gehirn](brain.md). Es trifft die Entscheidungen und hat die klarsten Sicherheitsregeln.
-- [Der Sensor](sensor.md) erklärt, warum der Wert des Sensors und der des Messgeräts auseinanderliegen können.
-- [Die Zahlen, auf die es ankommt](math-and-metrics.md) erklärt die Kennzahlen und warum Ihr Pumpbericht so viele davon enthält.
-- [Der Regelkreis](loop.md) zeigt das ganze System in Aktion, einschließlich eines Tages aus Ihren eigenen Pumpdaten.
+Jede Seite lässt sich einzeln lesen. Wer neu im Thema ist, liest sie am besten der Reihe nach.
 
-## Ein Wort zur Ehrlichkeit
+## Zu diesen Seiten
 
-Nichts hier ist eine medizinische Empfehlung. Diese Seiten beschreiben ein Forschungsmodell, wie das System funktioniert, und kein Produkt, mit dem Sie Ihre Therapie anpassen sollten. Ihre Pumpe, Ihr Sensor und Ihr Behandlungsteam sind die Quelle der Wahrheit: Das Modell soll Ihnen helfen zu verstehen, was sie zusammen tun.
-
-Der formale Sicherheitskatalog hinter der Steuerung steht im [vollständigen Bericht](../verification_report.html). Er ist in mathematischer Sprache verfasst; die Seiten in diesem Ordner nicht.
+Nichts hier ist eine medizinische Empfehlung. Die Seiten erklären, wie Körper und Behandlung funktionieren, damit Ihre eigenen Daten und die Vorschläge Ihrer Klinik mehr Sinn ergeben. Änderungen an Ihren Einstellungen besprechen Sie mit Ihrem Behandlungsteam.

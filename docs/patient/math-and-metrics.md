@@ -1,66 +1,51 @@
 ---
-title: The numbers that matter
+title: The numbers on your report
 lang: en
 alt: de/math-and-metrics.html
 sources:
   - tir-tuner-common/src/units.rs
   - tir-tuner-common/src/metrics.rs
-  - tir-tuner-common/src/euler.rs
-  - tir-tuner-common/src/random.rs
 ---
 
-# The numbers that matter
+# The numbers on your report
 
-This page covers the units, the report-card metrics, and the simulation clock, the parts every page in this folder relies on.
+A sensor collects hundreds of readings a day. Your clinic sums them up in a few numbers, and the same numbers are used worldwide, so a report from one clinic means the same in another.
 
-## Two languages for the same number
+## Two units for the same thing
 
-Glucose is measured in two units, and you will have seen both. The model works in millimoles per liter (mmol/L), the unit in most of Europe. The US and many meters use milligrams per deciliter (mg/dL). The two are the same measure scaled by the factor `18.0156`, glucose's molar mass of 180.156 g/mol divided by 10.
+Sugar is measured in mg/dL or mmol/L, depending on the country and the device. They are the same thing on a different scale: 1 mmol/L is 18 mg/dL.
 
-1 mmol/L = 18.0156 mg/dL. 5.8 mmol/L is 104.5 mg/dL.
-1 mg/dL = 1 / 18.0156 mmol/L, roughly 0.0555.
-
-So the numbers look different but say the same thing. The ones that recur:
-
-| mmol/L | mg/dL | What it is |
+| mmol/L | mg/dL | Meaning |
 |---|---|---|
-| 3.9 | 70 | lower edge of the in-range band |
-| 5.8 | 104.5 | the target glucose of the controller |
-| 10.0 | 180 | upper edge of the in-range band |
+| 3.0 | 54 | very low |
+| 3.9 | 70 | lower edge of the target range |
+| 10.0 | 180 | upper edge of the target range |
+| 13.9 | 250 | very high |
 
-## From food to blood sugar
+## Time in range
 
-The model counts carbohydrate in grams and glucose in millimoles. One gram of carbohydrate is treated as one gram of glucose, and a gram of glucose is 1 / 180.156 of a mole, so:
+The headline number. It is the share of readings between 70 and 180 mg/dL (3.9 to 10.0 mmol/L). 70 and 180 themselves count as in range.
 
-1 g carbohydrate = 5.551 mmol glucose.
+The international goal for most adults with type 1 diabetes:
 
-A 50 g meal becomes 277.6 mmol of glucose in the model. That conversion links the meal on the plate to the sugar in the blood.
+| Range | Goal | Per day |
+|---|---|---|
+| In range, 70 to 180 | more than 70% | more than 16 h 48 min |
+| Below 70 | less than 4% | less than 1 h |
+| Below 54 | less than 1% | less than 15 min |
+| Above 180 | less than 25% | less than 6 h |
+| Above 250 | less than 5% | less than 1 h 12 min |
 
-## The report card
+Time below range has the strictest goal, because lows are dangerous right away and highs do their harm over years. Raising time in range is only progress if time below range doesn't climb with it.
 
-A day of glucose readings is judged with a few standard numbers.
+## Mean glucose and variation
 
-- **Time in range (TIR)**: the share of readings inside the band 3.9 to 10.0 mmol/L (70 to 180 mg/dL), as a percentage. This is the headline number of a diabetes day. The band comes from the international consensus on time in range (Battelino 2019). Its edges are whole mg/dL, so 70 and 180 count as in range, and the model rounds simulated readings to whole mg/dL before counting.
-- **Time below range (TBR)**: the share of readings below 70 mg/dL. The consensus goal is under 4%.
-- **Mean glucose**: the average of the readings, in mg/dL.
-- **Coefficient of variation (CV)**: the spread of the readings around the mean, as a percentage. It measures how much the day swings around that average, independent of how high. Two days with the same average can feel very different, and CV is what tells them apart.
+The **mean** is the average of all readings. It says where the day sits overall.
 
-These are the numbers behind your pump report and your clinic reviews. The rest of this project exists to move the TIR number up without letting time below range climb.
+The **coefficient of variation** (CV) says how much the readings swing around that mean, as a percentage of it. Two days with the same mean can feel completely different: one flat, one going up and down all day. The CV tells them apart. The goal is 36% or less.
 
-## The clock
+## Reading your own report
 
-A simulation moves forward in small, fixed time steps rather than continuously. The core update is a clamped forward Euler step: take the current value, add the rate of change times the interval length, and never let the result go below zero.
+A single day says little. One forgotten bolus or one wrong carb count can ruin it. Reports usually cover the last 14 days, and patterns over that time are what count: the same high after the same meal, the same low in the same part of the night. Those patterns point at a specific time and a specific setting, as described in [carb ratio, correction factor, target](dosing.md).
 
-The clamp at zero is a safety rule. No amount may ever go negative, insulin or glucose. The rule is enforced at every step, and it is one of the invariants that the formal verification proves. The body integrates in steps of 0.25 minutes; the controller thinks in steps of 15 minutes. Both use the same clamped primitive.
-
-## The seed
-
-The whole simulation is deterministic. Every random element, sensor noise and pump error alike, comes from a generator seeded with a fixed number. Run the same seed twice and you get the same virtual day, byte for byte.
-
-That is why the safety proofs work. A property that holds on one simulated day can be checked across thousands, all reproducible, all checkable. The generator is a small standard one that draws from nothing but the seed.
-
-## Same numbers as your meter
-
-Every number on this page is chosen so the model and your meter read in the same language. Same units as your meter, same band as your report, same risk scores as your clinic. The project exists so the simulated day and your real day can be compared directly.
-
-From here: [the sensor](sensor.md) reads the body's sugar, and [the body](body.md) is where the disease itself lives.
+Back to the [overview](index.md).

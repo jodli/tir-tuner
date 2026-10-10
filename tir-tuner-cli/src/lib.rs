@@ -7,8 +7,6 @@
 //! [`SimConfig`], runs the [`engine`], and prints a metrics line. All the
 //! simulation machinery lives in the library so it can be driven from
 //! tests and future tooling.
-//!
-//! For a patient-facing companion page, see `docs/patient/loop.md`.
 
 pub mod engine;
 pub mod settings_file;

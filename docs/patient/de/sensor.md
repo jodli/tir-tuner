@@ -4,46 +4,36 @@ lang: de
 alt: ../sensor.html
 sources:
   - tir-tuner-cgm/src/device.rs
-  - tir-tuner-cgm/src/lib.rs
-  - tir-tuner-body/src/derivative.rs
+  - tir-tuner-body/src/subject.rs
 ---
 
 # Der Sensor
 
-Diese Seite erklärt, was Ihr CGM-Wert wirklich ist und warum er nie ganz dem entspricht, was Sie erwarten.
+Ein CGM-Sensor liefert alle paar Minuten einen neuen Zuckerwert, Tag und Nacht. Er ist der einzige Blick, den die Pumpe auf Ihren Körper hat, deshalb lohnt es sich zu wissen, was er eigentlich misst.
 
-## Woher der Wert kommt
+## Er misst nicht im Blut
 
-Ihr Sensor misst kein Blut. Er liegt unter der Haut im Gewebe und liest den Zucker aus der Flüssigkeit zwischen den Zellen, der Gewebeflüssigkeit (interstitielle Flüssigkeit). Zucker wandert vom Blut in diese Flüssigkeit; beide liegen nahe beieinander, sind aber nie identisch. Ändert sich der Blutzucker, folgt die Gewebeflüssigkeit mit Verzögerung; deshalb hinkt der Sensorwert dem Blut ein paar Minuten hinterher.
+Der dünne Faden des Sensors sitzt direkt unter der Haut, in der Flüssigkeit zwischen den Zellen. Er misst den Zucker in dieser Flüssigkeit, nicht im Blut. Zucker wandert aus dem Blut in diese Flüssigkeit, die beiden liegen also nah beieinander, aber die Flüssigkeit folgt dem Blut mit einer Verzögerung von grob zehn Minuten.
 
-Das Modell bildet genau das ab: Das Körpermodell hat ein Glukose-Kompartiment für das Blut und ein separates, kleineres für die Gewebeflüssigkeit. Der Sensor liest das Gewebe, denn genauso ist es im echten Leben.
+Wenn der Zucker stabil ist, passen Sensor und Fingerpiks gut zusammen. Wenn er sich schnell bewegt, nach dem Essen oder während eines Tiefs, weichen sie ab: Der Fingerpiks zeigt, wo das Blut jetzt ist, der Sensor, wo es vor ein paar Minuten war. Bei einem schnellen Abfall kann der Sensor noch gut aussehen, während das Blut schon niedrig ist.
 
-## Der Wert ist ungefähr
+## Jeder Wert liegt ein bisschen daneben
 
-Der Sensorwert setzt sich aus dem echten Gewebezucker und einer Abweichung zusammen. Das Fehlermodell stammt von Breton und Kovatchev (2008), die es an einem älteren Abbott-Sensor gemessen haben, dem FreeStyle Navigator. Für den Libre 3 gibt es noch kein veröffentlichtes Modell, das hier ist das nächstliegende. Es hat drei Eigenschaften:
+Jeder Wert hat einen kleinen Fehler. Gemessen an einem früheren Abbott-Sensor liegt ein typischer Wert um etwa 11 mg/dl (0,6 mmol/l) daneben, und die meisten liegen innerhalb von etwa 20 mg/dl um den wahren Wert.
 
-- **Größe.** Ein Wert weicht im Mittel um etwa 11 mg/dL ab (eine Standardabweichung). Die meisten Werte liegen also innerhalb von etwa 20 mg/dL um den echten Wert.
-- **Klebrigkeit.** Weicht der Sensor jetzt ab, weicht er 15 Minuten später meist in dieselbe Richtung ab. Breton hat gemessen, dass 70 % der Abweichung in den nächsten 15-Minuten-Wert mitgenommen werden. Nach einer halben Stunde ist noch etwa die Hälfte übrig.
-- **Schiefe.** Der Fehler ist keine symmetrische Glockenkurve. Große Abweichungen nach oben sind häufiger als nach unten, deshalb liegt der mittlere Fehler leicht im Plus (etwa 0,7 mg/dL).
+Der Fehler ist hartnäckig. Misst der Sensor jetzt zu hoch, misst er wahrscheinlich auch in 15 Minuten noch zu hoch: Etwa 70 % des Fehlers sind eine Viertelstunde später noch da, und etwa die Hälfte nach einer halben Stunde. Und er ist schief: Werte, die weit zu hoch liegen, sind häufiger als Werte, die weit zu niedrig liegen.
 
-Der simulierte Sensor liefert alle 15 Minuten einen Wert, das Intervall, das Breton gemessen hat. Ihr echter Libre 3 liefert jede Minute einen.
-
-## Ganze Zahlen und die Nullgrenze
-
-Werte kommen als ganze mg/dL heraus, so wie Ihr Libre 3 sie exportiert. Außerdem werden sie bei Null abgeschnitten: Der Steuerung wird nie ein Zucker unter Null gemeldet, auch wenn der Rohfehler dorthin zeigt. Die Quellen nennen weder den Messbereich des Libre 3 noch, wie er LO und HI anzeigt, deshalb bildet das Modell das nicht nach.
-
-## Wo der Sensor im Regelkreis sitzt
+Diese Hartnäckigkeit ist der Grund, warum ein einzelner seltsamer Wert keine Reaktion wert ist, und warum ein automatisches System jeden neuen Wert gegen seine eigene Vorhersage abwägt, statt ihm blind zu glauben.
 
 ```mermaid
 flowchart LR
-    V[(Körper)] -->|Gewebezucker| S[Sensor]
-    S -->|verrauschter Wert| G[Gehirn]
-    G[Gehirn] -->|Insulinrate| P[(Pumpe)]
-    P -->|Insulin| V
+    B((Blutzucker)) -->|"etwa 10 min Verzögerung"| F[Flüssigkeit unter der Haut]
+    F --> S[Sensor]
+    S -->|"kleiner, hartnäckiger Fehler"| R[Messwert]
 ```
 
-Der Sensorwert ist die einzige Sicht, die die Steuerung auf den Körper hat. Jede Entscheidung des Gehirns beginnt mit dieser Zahl; deshalb fällt ihre Unvollkommenheit so stark ins Gewicht.
+## Wann ein Fingerpiks sinnvoll ist
 
-## Gebaut für einen unvollkommenen Sensor
+Wenn der Wert nicht dazu passt, wie Sie sich fühlen oder was Sie erwarten, messen Sie mit einem Messgerät nach. Der Fingerpiks misst das Blut selbst.
 
-Der Regelkreis ist dafür gebaut, mit einem verrauschten, langsamen, klebrigen Sensor zu leben. Die Steuerung mischt den Wert mit ihrer eigenen Vorhersage, sodass eine einzelne schlechte Messung die Insulinrate nicht aus der Bahn werfen kann; eine harte Grenze schützt vor den Folgen eines zu niedrigen Werts. Genau deshalb braucht das Gehirn ein Modell. Die nächsten beiden Seiten zeigen, warum: [Der Körper](body.md) erklärt, was der Sensor misst; [Das Gehirn](brain.md), was aus der Zahl wird.
+Weiter: [Die Zahlen in Ihrem Bericht](math-and-metrics.md).

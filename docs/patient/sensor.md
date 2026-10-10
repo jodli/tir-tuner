@@ -4,46 +4,36 @@ lang: en
 alt: de/sensor.html
 sources:
   - tir-tuner-cgm/src/device.rs
-  - tir-tuner-cgm/src/lib.rs
-  - tir-tuner-body/src/derivative.rs
+  - tir-tuner-body/src/subject.rs
 ---
 
 # The sensor
 
-This page explains what your CGM reading really is, and why it never quite matches what you expect.
+A CGM sensor gives a new sugar reading every few minutes, day and night. It is the only view the pump has of your body, so it helps to know what it actually measures.
 
-## Where the reading comes from
+## It doesn't measure blood
 
-Your sensor does not measure blood. It sits under the skin, in the tissue, and reads the sugar in the fluid between the cells: the interstitial fluid. Sugar moves from the blood into that fluid, and the two are close but never identical. When blood sugar changes, the interstitial fluid follows with a delay, which is why the sensor number lags a few minutes behind the blood.
+The sensor's thin filament sits just under the skin, in the fluid between the cells. It measures the sugar in that fluid, not in the blood. Sugar passes from the blood into this fluid, so the two are close, but the fluid follows the blood with a delay of roughly ten minutes.
 
-The model captures this exactly. The body model has a glucose compartment that is the blood, and a separate small compartment that is the interstitial fluid. The sensor reads the interstitial one, because that is what happens in real life.
+When the sugar is steady, sensor and finger prick agree well. When it moves fast, after a meal or during a low, they differ: the finger prick shows where the blood is now, the sensor shows where it was a few minutes ago. During a fast drop the sensor can still look fine while the blood is already low.
 
-## The reading is approximate
+## Every reading is a little off
 
-The sensor output is the true interstitial sugar plus an error. The error model comes from Breton and Kovatchev (2008), who measured it on an older Abbott sensor, the FreeStyle Navigator. No published model covers the Libre 3 yet, so this is the closest one available. It has three properties:
+Each reading carries a small error. Measured on an earlier Abbott sensor, a typical reading is off by about 11 mg/dL (0.6 mmol/L), and most are within about 20 mg/dL of the true value.
 
-- **Size**: on average a reading is off by about 11 mg/dL (one standard deviation), so most readings are within about 20 mg/dL of the truth.
-- **Stickiness**: if the sensor is off now, it tends to be off in the same direction 15 minutes later. Breton measured that 70% of the error carries over to the next 15-minute reading. After half an hour about half of it is still there.
-- **Skew**: the error is not a symmetric bell curve. Big positive errors are more common than big negative ones, which is why the average error is slightly positive (about 0.7 mg/dL).
+The error is sticky. If the sensor reads too high now, it will probably still read too high in 15 minutes: about 70% of the error is still there a quarter of an hour later, and about half after half an hour. And it is lopsided: readings that are far too high are more common than readings that are far too low.
 
-The simulated sensor gives one reading every 15 minutes, the interval Breton measured. Your real Libre 3 gives one every minute.
-
-## Whole numbers and the zero floor
-
-Readings come out as whole mg/dL, the way your Libre 3 exports them. They are also clamped at zero: the controller is never told the sugar is below zero, even if the raw error points there. The published sources don't give the Libre 3 measuring range or how it shows LO and HI, so the model doesn't imitate those.
-
-## Where the sensor sits in the loop
+That stickiness is why one strange reading is not worth acting on, and why an automatic system weighs each new value against its own prediction instead of trusting it blindly.
 
 ```mermaid
 flowchart LR
-    V[(Body)] -->|interstitial sugar| S[Sensor]
-    S -->|noisy reading| B[Brain]
-    B[Brain] -->|insulin rate| P[(Pump)]
-    P -->|insulin| V
+    B((Blood sugar)) -->|"about 10 min delay"| F[Fluid under the skin]
+    F --> S[Sensor]
+    S -->|"small, sticky error"| R[Reading]
 ```
 
-The sensor reading is the controller's only view of the body. Everything the brain decides starts with this number, so its imperfection matters.
+## When to check with a finger prick
 
-## Built for an imperfect sensor
+When the reading doesn't match how you feel or what you expect, check with a meter. The finger prick measures the blood itself.
 
-The loop is built to live with a noisy, lagging, sticky sensor. The controller blends the reading with its own prediction, so a single bad sample cannot yank the insulin rate, and a hard cutoff protects against the consequences of a low reading. The sensor's imperfection is the reason the brain needs a model. The next two pages are about that: [the body](body.md) is what the sensor measures, and [the brain](brain.md) does the thinking about it.
+Next: [the numbers on your report](math-and-metrics.md).
