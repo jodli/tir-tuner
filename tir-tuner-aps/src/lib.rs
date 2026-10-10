@@ -1,22 +1,16 @@
 #![warn(missing_docs)]
-//! CamAPS FX style hybrid closed-loop controller core.
+//! The controller side of Auto mode, aligned with what Cambridge published:
+//! the model of US8977504B2, the NMPC of Hovorka 2004, Boost and Ease-off
+//! as Ware 2022/2022b describe them. CamAPS FX itself isn't published, so
+//! this is the published lineage, not the product.
 //!
-//! This crate implements a minimal, deterministic version of the
-//! Cambridge hybrid closed-loop algorithm building blocks:
+//! * [`hovorka`]: the patent's glucoregulatory model.
+//! * [`controller`]: eq 9 NMPC, the Auto mode variants, the hypo cutoff.
+//! * [`imm`]: the patent's interacting multiple model bookkeeping, not yet
+//!   wired into the simulation.
+//! * [`AutoMode`]: personal target and weight in the controller's units.
 //!
-//! * [`hovorka`] - the 10-dimensional glucoregulatory state model,
-//!   subcutaneous insulin / gut absorption kinetics, EGP and
-//!   interstitial glucose dynamics.
-//! * [`controller`] - the NMPC style dosing calculator for the insulin
-//!   pump including the hard hypoglycemia cutoff and maximum delivery
-//!   limits.
-//! * [`imm`] - the interacting multiple model mode-probability bookkeeping.
-//! * [`AutoMode`] - personal target and weight in the controller's units.
-//!
-//! The Kani formal verification suite lives in [`verification`] and is
-//! only compiled when `cfg(kani)` is set (i.e. under `cargo kani`).
-//!
-//! For a patient-facing companion page, see `docs/patient/brain.md`.
+//! Kani proofs live in [`verification`] (`cargo kani`).
 
 pub mod controller;
 pub mod hovorka;
@@ -29,22 +23,7 @@ pub use settings::AutoMode;
 pub mod verification;
 
 /// Default glucose target (mmol/L), used where no personal target is set.
-/// Ware et al. 2022, user manual p59.
 pub const TARGET_GLUCOSE_MMOL_L: f64 = tir_tuner_common::settings::DEFAULT_TARGET_MMOL_L;
-/// Hard hypoglycemia cutoff: mandatory zero delivery below this
-/// interstitial glucose reading (mmol/L).
-pub const HARD_HYPO_CUTOFF_MMOL_L: f64 = 4.4;
-/// Ease-off (exercise) target (mmol/L).
-pub const EASE_OFF_TARGET_MMOL_L: f64 = 7.0;
-/// Boost mode insulin intensification factor (Ware et al. 2022).
-pub const BOOST_DELIVERY_FACTOR: f64 = 1.35;
-/// Proportional dose gain used by the mode-aware controller (U/h per
-/// mmol/L above target).
-///
-/// Illustrative internal constant: a closed-loop proportional stand-in
-/// for the one-step grid NMPC, not a published CamAPS parameter (the
-/// papers specify the NMPC cost, section 5.1, not a fixed gain).
-pub const DOSE_GAIN_U_H_PER_MMOL_L: f64 = 0.5;
 
 /// Shared configuration for the native `proptest` property suite.
 #[cfg(test)]

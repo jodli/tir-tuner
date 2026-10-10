@@ -82,10 +82,21 @@ pub fn renal_excretion(subject: &VirtualSubject, plasma_glucose_mmol_per_l: f64)
     }
 }
 
-/// Gut glucose appearance rate (mmol/kg/min), clamped at `ug_ceil`.
+/// Gut time-to-maximum (min). Above the flux ceiling Wilinska 2010 (p12-13)
+/// stretches it to `G2 / UG_ceil` for the whole chain, so absorption slows
+/// and no carbs are lost.
+pub fn gut_t_max(subject: &VirtualSubject, g2_mmol: f64) -> f64 {
+    let ceil_mmol_per_min = subject.ug_ceil_mmol_per_kg_min * subject.weight_kg;
+    if g2_mmol / subject.t_max_g_min > ceil_mmol_per_min {
+        g2_mmol / ceil_mmol_per_min
+    } else {
+        subject.t_max_g_min
+    }
+}
+
+/// Gut glucose appearance rate (mmol/kg/min), at most `ug_ceil`.
 pub fn gut_appearance(subject: &VirtualSubject, g2_mmol: f64) -> f64 {
-    let rate = g2_mmol / (subject.t_max_g_min * subject.weight_kg);
-    rate.min(subject.ug_ceil_mmol_per_kg_min)
+    g2_mmol / (gut_t_max(subject, g2_mmol) * subject.weight_kg)
 }
 
 /// Interstitial glucose equilibration rate (mmol/L per min).
@@ -114,8 +125,9 @@ pub fn derivatives(
 
     // Gut chain with the meal input gated by bioavailability.
     let gut_input_mmol_per_min = subject.bio_fraction * inputs.meal_g_per_min * MMOL_PER_GRAM_CHO;
-    let g1 = gut_input_mmol_per_min - state.g1 / subject.t_max_g_min;
-    let g2 = state.g1 / subject.t_max_g_min - state.g2 / subject.t_max_g_min;
+    let t_max = gut_t_max(subject, state.g2);
+    let g1 = gut_input_mmol_per_min - state.g1 / t_max;
+    let g2 = (state.g1 - state.g2) / t_max;
 
     let ug = gut_appearance(subject, state.g2);
 

@@ -1,227 +1,198 @@
-//! Glucoregulatory model: the 10-dimensional extended Hovorka state,
-//! continuous-time equations discretized with a forward Euler step, and
-//! the endogenous glucose production (EGP) submodel.
+//! The controller's glucoregulatory model: the patent's equations
+//! (US8977504B2 eq 1-16), stepped with forward Euler and every mass clamped
+//! at zero.
 //!
-//! The step applies a physiological saturation at zero to every mass /
-//! concentration compartment, which enforces the non-negativity safety
-//! invariant that the Kani suite verifies.
-//!
-//! Units follow Hovorka et al. 2004: subcutaneous insulin masses `i1`,
-//! `i2` are in millie-units (mU), plasma concentrations (`insulin_conc`,
-//! `BIC`, remote actions `r_d`, `r_e`) in mU/L. The dosing inputs `u_basal`
-//! (U/h) and `u_bolus` (U) are converted to the mU mass state internally,
-//! and meal carbohydrate ingestion is accepted as a rate `meal_g_per_min`
-//! (g/min) feeding the gut depot `a1` (section 3.2C).
+//! Units: insulin masses `i1`, `i2` in mU, concentrations in mU/L, carbs
+//! `a1`, `a2` in g, glucose masses in mmol/kg. Inputs: basal U/h, bolus U,
+//! meal g/min.
 
 use tir_tuner_common::euler::clamped_forward_euler;
-use tir_tuner_common::units::{MMOL_PER_GRAM_CHO, MU_PER_UNIT};
+use tir_tuner_common::units::{MIN_PER_HOUR, MMOL_PER_GRAM_CHO, MU_PER_UNIT};
 
-/// Basal insulin concentration `BIC` (mU/L) for given basal insulin
-/// requirement, clearance and body weight.
+/// Basal plasma insulin `BIC` (mU/L), US8977504B2 eq 14.
 pub fn basal_insulin_conc(bir_u_per_h: f64, mcr_i: f64, weight_kg: f64) -> f64 {
-    (1000.0 * bir_u_per_h) / (60.0 * mcr_i * weight_kg)
+    MU_PER_UNIT * bir_u_per_h / (MIN_PER_HOUR * mcr_i * weight_kg)
 }
 
-/// Upper bound on the EGP response, as a multiple of basal EGP.
-/// Mirrors the virtual patient body's implementation, which caps the
-/// low-insulin branch at 3x basal EGP. The cap preserves the basal
-/// identity `egp(bic) == egp_b` and therefore every verified property
-/// (non-negativity, finiteness, the basal steady state anchor).
-pub const EGP_MAX_FOLD_OVER_BASAL: f64 = 3.0;
-
-/// EGP (mmol/kg/min) as a function of the remote insulin action on
-/// hepatic EGP suppression `r_e` (mU/L), given basal EGP, the basal
-/// insulin concentration and the suppression gain `s_egp` (insulin-action
-/// units per mU/L).
-///
-/// Mirrors the virtual patient body's suppression model: the EGP
-/// action `x3 = s_egp * r_e` halves basal EGP every `0.5` units above
-/// its resting value `s_egp * bic`, and the low-insulin branch is capped
-/// at `EGP_MAX_FOLD_OVER_BASAL` times basal. With the population gain
-/// `s_egp = 0.019` (per mU/L) this is a mild, physiological suppression:
-/// 50% higher insulin concentration cuts EGP to about 80% of basal. The
-/// aps crate's earlier fixed `0.5` mU/L per halving made that EGP
-/// collapse to near zero under any sustained above-basal delivery, which
-/// froze the four-hour NMPC prediction; the spec section 3.2D notes the
-/// same divergence from the literal 2004 publication (which uses the
-/// linear form `EGP0[1 - x3]`).
-pub fn egp(r_e: f64, bic: f64, egp_b: f64, s_egp: f64) -> f64 {
-    let x_basal = s_egp * bic;
-    let x = s_egp * r_e;
-    let uncapped = egp_b * (((x_basal - x) / 0.5) * std::f64::consts::LN_2).exp();
-    uncapped.min(EGP_MAX_FOLD_OVER_BASAL * egp_b)
+/// EGP (mmol/kg/min) at remote action `r_e`: halves for every `i_half`
+/// mU/L above `bic`. US8977504B2 eq 12. src: us504-egp
+pub fn egp(r_e: f64, bic: f64, egp_b: f64, i_half: f64) -> f64 {
+    egp_b * (-(r_e - bic) * std::f64::consts::LN_2 / i_half).exp()
 }
 
-/// Subcutaneous insulin absorption parameters (Hovorka et al. 2004).
+/// Model parameters. The patent names them without values.
 #[derive(Clone, Copy, Debug)]
 pub struct HovorkaParams {
-    /// Time-to-peak subcutaneous insulin absorption (min).
+    /// Time-to-peak of subcutaneous insulin absorption (min).
     pub t_max_i: f64,
-    /// Time-to-peak gut glucose absorption (min).
+    /// Time-to-peak of gut absorption (min).
     pub t_max_g: f64,
     /// Metabolic clearance rate of insulin (L/kg/min).
     pub mcr_i: f64,
     /// Body weight (kg).
     pub weight_kg: f64,
-    /// Fractional disappearance rate of remote disposal action (/min).
+    /// Fractional disappearance rate of the remote action on disposal (/min).
     pub p2_d: f64,
-    /// Fractional disappearance rate of remote EGP action (/min).
+    /// Fractional disappearance rate of the remote action on EGP (/min).
     pub p2_e: f64,
-    /// Inter-compartmental transfer rate q2 -> q1 (/min).
+    /// Transfer q2 -> q1 (/min).
     pub k12: f64,
-    /// Inter-compartmental transfer rate q1 -> q2 (/min).
+    /// Transfer q1 -> q2 (/min).
     pub k21: f64,
-    /// Interstitial transfer rate q1 -> q3 (/min).
+    /// Transfer between plasma and interstitial glucose (/min).
     pub k31: f64,
     /// Glucose distribution volume (L/kg).
     pub v_g: f64,
-    /// Non-insulin dependent glucose utilization (mmol/kg/min).
-    ///
-    /// Carried as the published `F01` of section 3.2D and applied through
-    /// the glucose-dependent Michaelis-Menten form
-    /// `F01 / 0.85 * g_P / (g_P + 1)` (Wilinska Table 1, the same form
-    /// the virtual patient body uses): the uptake vanishes as glucose
-    /// approaches zero, so the model keeps a hepatic floor instead of
-    /// predicting a collapse under modest above-basal insulin over the
-    /// four-hour prediction horizon. At `g_P = 5.67` mmol/L the applied
-    /// uptake equals the published constant `F01`.
+    /// Non-insulin-dependent glucose flux (mmol/kg/min), constant as in
+    /// patent eq 9.
     pub f_01: f64,
-    /// Peripheral insulin sensitivity (/min per mU/L).
-    ///
-    /// Chosen so the basal glucose equilibrium of the default
-    /// configuration sits on the nominal target (5.8 mmol/L): at the
-    /// basal steady state `q1 = (egp_b - f_01 / 0.85 * g / (g + 1)) /
-    /// (s_id * bic)`, which equals `5.8 * v_g` for `s_id = 5.7664e-4`.
+    /// Insulin sensitivity of disposal (/min per mU/L).
     pub s_id: f64,
-    /// Basal endogenous glucose production (mmol/kg/min).
+    /// Basal EGP (mmol/kg/min), at plasma insulin `BIC`.
     pub egp_b: f64,
-    /// EGP suppression gain (insulin-action units per mU/L of remote
-    /// EGP action), matching the virtual patient body's `sie_per_mu_l`.
-    pub s_egp: f64,
-    /// Basal insulin requirement (U/h).
+    /// Plasma insulin increment that halves EGP (mU/L), eq 12's `I_1/2`.
+    pub i_half: f64,
+    /// Carb bioavailability `F` (patent eq 9).
+    pub bioavailability: f64,
+    /// Basal insulin requirement (U/h), which sets `BIC`.
     pub bir: f64,
 }
 
 impl HovorkaParams {
-    /// Applied non-insulin dependent glucose uptake (mmol/kg/min) at the
-    /// given plasma glucose, the glucose-dependent Michaelis-Menten form
-    /// `F01 / 0.85 * g_P / (g_P + 1)` that the virtual patient body also
-    /// uses.
-    pub fn f01c(&self, plasma_g: f64) -> f64 {
-        (self.f_01 / 0.85) * plasma_g / (plasma_g + 1.0)
-    }
-
-    /// Basal plasma insulin concentration (mU/L).
+    /// Basal plasma insulin concentration `BIC` (mU/L).
     pub fn basal_insulin_conc(&self) -> f64 {
         basal_insulin_conc(self.bir, self.mcr_i, self.weight_kg)
     }
 
-    /// Endogenous glucose production at remote EGP action `r_e`
-    /// (mmol/kg/min).
-    pub fn egp(&self, r_e: f64) -> f64 {
-        egp(r_e, self.basal_insulin_conc(), self.egp_b, self.s_egp)
+    /// `s_id` solved so basal insulin holds plasma glucose at `g` mmol/L.
+    pub fn resting_at(self, g: f64) -> Self {
+        let surplus = self.egp_b - self.f_01;
+        Self {
+            s_id: surplus / (g * self.v_g * self.basal_insulin_conc()),
+            ..self
+        }
     }
-}
 
-impl Default for HovorkaParams {
-    fn default() -> Self {
+    /// EGP at remote action `r_e` (mmol/kg/min).
+    pub fn egp(&self, r_e: f64) -> f64 {
+        egp(r_e, self.basal_insulin_conc(), self.egp_b, self.i_half)
+    }
+
+    /// Hovorka 2004 Tables 1 and 2 where they give a value, for tests and
+    /// proofs. `k31` is Wilinska 2010's median, `k21 = k12` and `i_half`
+    /// are ours, and EGP0 stands in for basal EGP.
+    #[cfg(any(test, kani, fuzzing))]
+    pub fn hovorka_2004(weight_kg: f64, bir: f64) -> Self {
         Self {
             t_max_i: 55.0,
             t_max_g: 40.0,
-            mcr_i: 0.021,
-            weight_kg: 70.0,
-            p2_d: 0.02,
-            p2_e: 0.011,
+            mcr_i: 0.12 * 0.138,
+            weight_kg,
+            p2_d: 0.06,
+            p2_e: 0.03,
             k12: 0.066,
             k21: 0.066,
-            k31: 0.01,
+            k31: 0.093,
             v_g: 0.16,
-            f_01: 0.01,
-            s_id: 0.00057664,
+            f_01: 0.0097,
+            s_id: 8.2e-4,
             egp_b: 0.0161,
-            s_egp: 0.019,
-            bir: 1.0,
+            i_half: 26.3,
+            bioavailability: 0.8,
+            bir,
         }
     }
 }
 
-/// Extended 10-dimensional glucoregulatory state.
+/// Model state, patent eq 1-16.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HovorkaState {
-    /// Subcutaneous insulin mass, depot 1 (mU).
+    /// Subcutaneous insulin, depot 1 (mU).
     pub i1: f64,
-    /// Subcutaneous insulin mass, depot 2 (mU).
+    /// Subcutaneous insulin, depot 2 (mU).
     pub i2: f64,
-    /// Remote insulin action on peripheral glucose disposal (mU/L).
+    /// Remote insulin action on glucose disposal (mU/L).
     pub r_d: f64,
-    /// Remote insulin action on hepatic EGP suppression (mU/L).
+    /// Remote insulin action on EGP (mU/L).
     pub r_e: f64,
-    /// Carbohydrate mass in gut absorption depot 1 (g).
+    /// Carbs in gut compartment 1 (g).
     pub a1: f64,
-    /// Carbohydrate mass in gut absorption depot 2 (g).
+    /// Carbs in gut compartment 2 (g).
     pub a2: f64,
-    /// Accessible glucose mass in the plasma compartment (mmol/kg).
+    /// Glucose in the accessible compartment (mmol/kg).
     pub q1: f64,
-    /// Non-accessible glucose mass in the peripheral tissue compartment
-    /// (mmol/kg).
+    /// Glucose in the non-accessible compartment (mmol/kg).
     pub q2: f64,
-    /// Interstitial fluid glucose mass, measured by the CGM (mmol/kg).
+    /// Interstitial glucose (mmol/kg), what the CGM reads.
     pub q3: f64,
-    /// Unexplained stochastic glucose influx `u_S` (mmol/kg/min).
-    ///
-    /// Reserved for the process-noise state of section 3.2F
-    /// (`d u_S = d w`). The deterministic core carries it through
-    /// [`HovorkaState::step`] unchanged; the stochastic increment is
-    /// injected by the simulation / filtering layer, so the increment
-    /// produced by [`HovorkaState::derivative`] is zero.
+    /// Unexplained glucose influx `u_S` (mmol/kg/min), patent eq 13. Held
+    /// constant here; nothing estimates it yet.
     pub u_s: f64,
 }
 
 impl HovorkaState {
-    /// Instantaneous subcutaneous insulin concentration `i(t)` (mU/L),
-    /// consistent with the mU mass state and with `BIC`.
+    /// Insulin at its basal steady state, no carbs, glucose at `g` mmol/L.
+    /// Glucose as the patent's initial state, eq 63.
+    pub fn basal(params: &HovorkaParams, g: f64) -> Self {
+        let depot = MU_PER_UNIT * params.bir / MIN_PER_HOUR * params.t_max_i;
+        let bic = params.basal_insulin_conc();
+        let mut s = Self {
+            i1: depot,
+            i2: depot,
+            r_d: bic,
+            r_e: bic,
+            a1: 0.0,
+            a2: 0.0,
+            q1: 0.0,
+            q2: 0.0,
+            q3: 0.0,
+            u_s: 0.0,
+        };
+        s.shift_glucose(params, g);
+        s
+    }
+
+    /// Add `dg` mmol/L to plasma and interstitial glucose, and the matching
+    /// amount to the non-accessible compartment (eq 63's ratio).
+    pub fn shift_glucose(&mut self, params: &HovorkaParams, dg: f64) {
+        let dq = dg * params.v_g;
+        self.q1 += dq;
+        self.q2 += dq * params.k21 / params.k12;
+        self.q3 += dq;
+    }
+
+    /// Plasma insulin `i` (mU/L), patent eq 3.
     pub fn insulin_conc(&self, params: &HovorkaParams) -> f64 {
         self.i2 / (params.t_max_i * params.mcr_i * params.weight_kg)
     }
 
-    /// Gut carbohydrate absorption rate `u_A(t)` (mmol/kg/min).
+    /// Gut absorption `u_A` (mmol/kg/min), patent eq 8: grams to mmol.
     pub fn gut_absorption(&self, params: &HovorkaParams) -> f64 {
-        self.a2 / (params.t_max_g * params.weight_kg * MMOL_PER_GRAM_CHO)
+        MMOL_PER_GRAM_CHO * self.a2 / (params.t_max_g * params.weight_kg)
     }
 
-    /// Increment of the continuous-time differential equations at the
-    /// current state, via the model in section 3.2 of the specification.
-    ///
-    /// `u_basal` is the basal infusion rate (U/h), `u_bolus` a manual
-    /// insulin bolus (U), and `meal_g_per_min` the carbohydrate ingestion
-    /// rate (g/min, section 3.2C); the insulin inputs are converted to
-    /// the mU mass-state convention internally so that the steady state
-    /// under a basal of `BIR` U/h sits exactly at `BIC` mU/L. The
-    /// returned `u_s` increment is zero: the process noise of section
-    /// 3.2F is injected externally (see [`HovorkaState::u_s`]).
+    /// Right-hand side of patent eq 1-16 for an insulin rate (U/h; a bolus
+    /// is a rate over its delivery time) and a meal rate. `u_s` doesn't
+    /// change.
     pub fn derivative(
         &self,
         params: &HovorkaParams,
         u_basal: f64,
-        u_bolus: f64,
         meal_g_per_min: f64,
     ) -> HovorkaState {
         let i = self.insulin_conc(params);
-        let u_a = self.gut_absorption(params);
-        let egp = params.egp(self.r_e);
-        let insulin_influx_mu_per_min = MU_PER_UNIT * u_basal / 60.0 + MU_PER_UNIT * u_bolus;
-
+        let insulin_mu_per_min = MU_PER_UNIT * u_basal / MIN_PER_HOUR;
         HovorkaState {
-            i1: -(1.0 / params.t_max_i) * self.i1 + insulin_influx_mu_per_min,
-            i2: (1.0 / params.t_max_i) * (self.i1 - self.i2),
+            i1: insulin_mu_per_min - self.i1 / params.t_max_i,
+            i2: (self.i1 - self.i2) / params.t_max_i,
             r_d: params.p2_d * (i - self.r_d),
             r_e: params.p2_e * (i - self.r_e),
-            a1: -(1.0 / params.t_max_g) * self.a1 + meal_g_per_min,
-            a2: (1.0 / params.t_max_g) * (self.a1 - self.a2),
+            a1: meal_g_per_min - self.a1 / params.t_max_g,
+            a2: (self.a1 - self.a2) / params.t_max_g,
             q1: -(params.s_id * self.r_d + params.k21) * self.q1 + params.k12 * self.q2
-                - params.f01c(self.q1 / params.v_g)
-                + egp
-                + u_a
+                - params.f_01
+                + params.egp(self.r_e)
+                + params.bioavailability * self.gut_absorption(params)
                 + self.u_s,
             q2: params.k21 * self.q1 - params.k12 * self.q2,
             q3: params.k31 * (self.q1 - self.q3),
@@ -229,43 +200,36 @@ impl HovorkaState {
         }
     }
 
-    /// Forward Euler step of `dt` minutes. `u_basal` is the basal
-    /// infusion (U/h), `u_bolus` a manual insulin bolus (U) and
-    /// `meal_g_per_min` the carbohydrate ingestion rate (g/min).
-    ///
-    /// Every compartment is saturated at zero after the update so that
-    /// physical masses / concentrations can never become negative; this
-    /// is the physiological non-negativity invariant the Kani suite
-    /// proves.
+    /// One forward Euler step of `dt` minutes, every mass clamped at zero.
     pub fn step(
         &self,
         params: &HovorkaParams,
         u_basal: f64,
-        u_bolus: f64,
         meal_g_per_min: f64,
         dt: f64,
     ) -> HovorkaState {
-        let d = self.derivative(params, u_basal, u_bolus, meal_g_per_min);
+        let d = self.derivative(params, u_basal, meal_g_per_min);
+        let e = |x, dx| clamped_forward_euler(x, dx, dt);
         HovorkaState {
-            i1: clamped_forward_euler(self.i1, d.i1, dt),
-            i2: clamped_forward_euler(self.i2, d.i2, dt),
-            r_d: clamped_forward_euler(self.r_d, d.r_d, dt),
-            r_e: clamped_forward_euler(self.r_e, d.r_e, dt),
-            a1: clamped_forward_euler(self.a1, d.a1, dt),
-            a2: clamped_forward_euler(self.a2, d.a2, dt),
-            q1: clamped_forward_euler(self.q1, d.q1, dt),
-            q2: clamped_forward_euler(self.q2, d.q2, dt),
-            q3: clamped_forward_euler(self.q3, d.q3, dt),
+            i1: e(self.i1, d.i1),
+            i2: e(self.i2, d.i2),
+            r_d: e(self.r_d, d.r_d),
+            r_e: e(self.r_e, d.r_e),
+            a1: e(self.a1, d.a1),
+            a2: e(self.a2, d.a2),
+            q1: e(self.q1, d.q1),
+            q2: e(self.q2, d.q2),
+            q3: e(self.q3, d.q3),
             u_s: self.u_s,
         }
     }
 
-    /// Plasma glucose concentration `g_P(t)` (mmol/L).
+    /// Plasma glucose (mmol/L), patent eq 11.
     pub fn plasma_glucose(&self, params: &HovorkaParams) -> f64 {
         self.q1 / params.v_g
     }
 
-    /// Interstitial (sensor) glucose concentration `g_IG(t)` (mmol/L).
+    /// Interstitial glucose (mmol/L), patent eq 16.
     pub fn interstitial_glucose(&self, params: &HovorkaParams) -> f64 {
         self.q3 / params.v_g
     }
@@ -275,269 +239,61 @@ impl HovorkaState {
 mod tests {
     use super::*;
 
-    /// Native fast sweep complementing the Kani saturation proof of
-    /// `clamped_forward_euler`: exercises the real wiring of `step` over
-    /// per-compartment lattice slices plus pseudo-random joint stresses
-    /// and asserts every compartment stays non-negative and finite.
-    #[test]
-    fn step_keeps_all_compartments_non_negative() {
-        let params = HovorkaParams::default();
-        let i_vals = [0.0, 5_000.0, 10_000.0, 25_000.0];
-        let a_vals = [0.0, 40.0, 100.0, 150.0];
-        let q_vals = [0.1, 5.0, 15.0, 30.0];
-        let r_vals = [0.0, 2.0, 10.0, 50.0];
-        let u_basal_vals = [0.0, 10.0, 25.0];
-        let u_bolus_vals = [0.0, 1.0];
-        let meal_vals = [0.0, 1.0, 5.0];
-        let dt_vals = [0.5, 1.0, 2.0];
-
-        let mid_state = HovorkaState {
-            i1: 10_000.0,
-            i2: 10_000.0,
-            r_d: 2.0,
-            r_e: 2.0,
-            a1: 100.0,
-            a2: 100.0,
-            q1: 15.0,
-            q2: 15.0,
-            q3: 15.0,
-            u_s: 0.0,
-        };
-
-        let check = |s: HovorkaState, u_basal: f64, u_bolus: f64, meal: f64, dt: f64| {
-            let n = s.step(&params, u_basal, u_bolus, meal, dt);
-            for (name, v) in [
-                ("i1", n.i1),
-                ("i2", n.i2),
-                ("r_d", n.r_d),
-                ("r_e", n.r_e),
-                ("a1", n.a1),
-                ("a2", n.a2),
-                ("q1", n.q1),
-                ("q2", n.q2),
-                ("q3", n.q3),
-            ] {
-                assert!(!v.is_nan(), "{name} is NaN");
-                assert!(v >= 0.0, "{name} became negative: {v}");
-            }
-        };
-
-        for &u_basal in &u_basal_vals {
-            for &u_bolus in &u_bolus_vals {
-                for &meal in &meal_vals {
-                    for &dt in &dt_vals {
-                        for &v in &i_vals {
-                            check(
-                                HovorkaState { i1: v, ..mid_state },
-                                u_basal,
-                                u_bolus,
-                                meal,
-                                dt,
-                            );
-                            check(
-                                HovorkaState { i2: v, ..mid_state },
-                                u_basal,
-                                u_bolus,
-                                meal,
-                                dt,
-                            );
-                        }
-                        for &v in &a_vals {
-                            check(
-                                HovorkaState { a1: v, ..mid_state },
-                                u_basal,
-                                u_bolus,
-                                meal,
-                                dt,
-                            );
-                            check(
-                                HovorkaState { a2: v, ..mid_state },
-                                u_basal,
-                                u_bolus,
-                                meal,
-                                dt,
-                            );
-                        }
-                        for &v in &q_vals {
-                            check(
-                                HovorkaState { q1: v, ..mid_state },
-                                u_basal,
-                                u_bolus,
-                                meal,
-                                dt,
-                            );
-                            check(
-                                HovorkaState { q2: v, ..mid_state },
-                                u_basal,
-                                u_bolus,
-                                meal,
-                                dt,
-                            );
-                            check(
-                                HovorkaState { q3: v, ..mid_state },
-                                u_basal,
-                                u_bolus,
-                                meal,
-                                dt,
-                            );
-                        }
-                        for &v in &r_vals {
-                            check(
-                                HovorkaState {
-                                    r_d: v,
-                                    ..mid_state
-                                },
-                                u_basal,
-                                u_bolus,
-                                meal,
-                                dt,
-                            );
-                            check(
-                                HovorkaState {
-                                    r_e: v,
-                                    ..mid_state
-                                },
-                                u_basal,
-                                u_bolus,
-                                meal,
-                                dt,
-                            );
-                        }
-                    }
-                }
-            }
-        }
-
-        // Pseudo-random joint stress (deterministic LCG).
-        let mut seed = 0x2545_F491_4F6C_DD1Du64;
-        let mut next_f = move || {
-            seed ^= seed << 13;
-            seed ^= seed >> 7;
-            seed ^= seed << 17;
-            seed as f64 / u64::MAX as f64
-        };
-        for _ in 0..500 {
-            let s = HovorkaState {
-                i1: next_f() * 25_000.0,
-                i2: next_f() * 25_000.0,
-                r_d: next_f() * 50.0,
-                r_e: next_f() * 50.0,
-                a1: next_f() * 150.0,
-                a2: next_f() * 150.0,
-                q1: 0.1 + next_f() * 29.9,
-                q2: 0.1 + next_f() * 29.9,
-                q3: 0.1 + next_f() * 29.9,
-                u_s: next_f() * 5.0,
-            };
-            check(
-                s,
-                next_f() * 25.0,
-                next_f() * 2.0,
-                next_f() * 5.0,
-                0.5 + next_f() * 3.0,
-            );
-        }
+    /// A basal other than 1 U/h, so scaling by it shows.
+    fn params() -> HovorkaParams {
+        HovorkaParams::hovorka_2004(70.0, 0.8)
     }
 
-    /// The low-insulin EGP branch is capped at
-    /// `EGP_MAX_FOLD_OVER_BASAL` times the basal EGP; the basal identity
-    /// `EGP(BIC) = EGP_B` is preserved.
+    /// Patent eq 8: u_A = 5.551 a2 / (W t_max,G).
     #[test]
-    fn egp_is_capped_on_low_insulin_branch() {
-        let params = HovorkaParams::default();
-        let bic = params.basal_insulin_conc();
-        let cap = EGP_MAX_FOLD_OVER_BASAL * params.egp_b;
-
-        for r_e in [0.0, 1.0, 5.0, bic - 1.0, bic - 0.5, bic, 20.0, 100.0] {
-            let v = params.egp(r_e);
-            assert!(
-                v >= 0.0 && v <= cap,
-                "EGP escaped the cap at r_e={r_e}: {v} not in [0, {cap}]"
-            );
-        }
-        assert!(
-            (params.egp(bic) - params.egp_b).abs() < 1e-12,
-            "basal identity lost by the cap"
-        );
+    fn us504_gut_absorption_is_grams_times_5_551() {
+        let p = params();
+        let s = HovorkaState {
+            a2: 50.0,
+            ..HovorkaState::basal(&p, 6.0)
+        };
+        let expected = 5.551 * 50.0 / (p.weight_kg * p.t_max_g);
+        assert!((s.gut_absorption(&p) - expected).abs() < 1e-4);
     }
 
-    /// Basal steady-state anchor (Hovorka et al. 2004): under a constant
-    /// basal infusion of `BIR` U/h and no meals / boluses, the system has
-    /// an equilibrium at which depot masses sit at
-    /// `1000 * BIR / 60 * t_max_i` mU, the insulin concentration equals
-    /// `BIC` (mU/L), the remote actions `r_d`/`r_e` settle on `BIC`, and
-    /// EGP returns to its basal value `egp_b` instead of diverging. With
-    /// the default parameters the equilibrium plasma glucose sits on the
-    /// nominal target (5.8 mmol/L), pinning the `i`/`BIC` unit convention
-    /// that the qualitative Kani proofs cannot observe. The glucose
-    /// uptake uses the Michaelis-Menten form (see [`HovorkaParams::f01c`]),
-    /// so the equilibrium is the fixed point
-    /// `q1 = (egp_b - f01c(q1/v_g)) / (s_id * bic)`.
+    /// Patent eq 12: EGP_B at BIC, half of it one I_1/2 higher.
     #[test]
-    fn basal_steady_state_matches_target() {
-        let params = HovorkaParams::default();
-        let bic = params.basal_insulin_conc();
+    fn us504_egp_halves_per_i_half() {
+        let p = params();
+        let bic = p.basal_insulin_conc();
+        assert_eq!(p.egp(bic), p.egp_b);
+        assert!((p.egp(bic + p.i_half) - p.egp_b / 2.0).abs() < 1e-12);
+    }
 
-        let depot_mass = MU_PER_UNIT * params.bir / 60.0 * params.t_max_i;
-        let mut q_star = params.v_g * crate::TARGET_GLUCOSE_MMOL_L;
-        for _ in 0..8 {
-            q_star = (params.egp_b - params.f01c(q_star / params.v_g)) / (params.s_id * bic);
+    /// Patent eq 6, 7, 9 (u_S term) and 15.
+    #[test]
+    fn us504_gut_and_interstitial_terms() {
+        let p = params();
+        let s = HovorkaState {
+            a1: 40.0,
+            a2: 10.0,
+            q3: 0.5,
+            ..HovorkaState::basal(&p, 6.0)
+        };
+        let d = s.derivative(&p, p.bir, 2.0);
+        assert!((d.a1 - (2.0 - 40.0 / p.t_max_g)).abs() < 1e-12);
+        assert!((d.a2 - 30.0 / p.t_max_g).abs() < 1e-12);
+        assert!((d.q3 - p.k31 * (s.q1 - 0.5)).abs() < 1e-12);
+        let with_u_s = HovorkaState { u_s: 0.01, ..s }.derivative(&p, p.bir, 2.0);
+        assert!((with_u_s.q1 - d.q1 - 0.01).abs() < 1e-12);
+    }
+
+    /// Patent eq 3 and 14 agree: a basal of BIR U/h holds plasma insulin
+    /// and both remote actions at BIC.
+    #[test]
+    fn us504_basal_insulin_holds_bic() {
+        let p = params();
+        let s = HovorkaState::basal(&p, 6.0);
+        assert!((s.insulin_conc(&p) - p.basal_insulin_conc()).abs() < 1e-9);
+        let d = s.derivative(&p, p.bir, 0.0);
+        for v in [d.i1, d.i2, d.r_d, d.r_e] {
+            assert!(v.abs() < 1e-9);
         }
-        let eq = HovorkaState {
-            i1: depot_mass,
-            i2: depot_mass,
-            r_d: bic,
-            r_e: bic,
-            a1: 0.0,
-            a2: 0.0,
-            q1: q_star,
-            q2: q_star,
-            q3: q_star,
-            u_s: 0.0,
-        };
-
-        assert!(
-            (eq.insulin_conc(&params) - bic).abs() < 1e-6,
-            "basal depot concentration equals BIC"
-        );
-        assert!(
-            (params.egp(bic) - params.egp_b).abs() < 1e-12,
-            "EGP at basal remote action returns to egp_b"
-        );
-        assert!(
-            (eq.plasma_glucose(&params) - crate::TARGET_GLUCOSE_MMOL_L).abs() < 0.01,
-            "basal equilibrium glucose is on target: {}",
-            eq.plasma_glucose(&params)
-        );
-
-        let d = eq.derivative(&params, params.bir, 0.0, 0.0);
-        let check = |name: &str, v: f64| assert!(v.abs() < 1e-9, "{name} off equilibrium: {v}");
-        check("i1", d.i1);
-        check("i2", d.i2);
-        check("r_d", d.r_d);
-        check("r_e", d.r_e);
-        check("a1", d.a1);
-        check("a2", d.a2);
-        check("q1", d.q1);
-        check("q2", d.q2);
-        check("q3", d.q3);
-
-        let n = eq.step(&params, params.bir, 0.0, 0.0, 1.0);
-        let at_equilibrium = |name: &str, after: f64, before: f64| {
-            assert!(
-                (after - before).abs() < 1e-6,
-                "{name} drifts off equilibrium after one basal step: {after} vs {before}"
-            );
-        };
-        at_equilibrium("i1", n.i1, eq.i1);
-        at_equilibrium("i2", n.i2, eq.i2);
-        at_equilibrium("r_d", n.r_d, eq.r_d);
-        at_equilibrium("r_e", n.r_e, eq.r_e);
-        at_equilibrium("a1", n.a1, eq.a1);
-        at_equilibrium("a2", n.a2, eq.a2);
-        at_equilibrium("q1", n.q1, eq.q1);
-        at_equilibrium("q2", n.q2, eq.q2);
-        at_equilibrium("q3", n.q3, eq.q3);
     }
 
     #[cfg(test)]
@@ -597,30 +353,17 @@ mod tests {
             #![proptest_config(config())]
 
             #[test]
-            fn step_keeps_all_compartments_finite_and_nonnegative(
-                state in state_strategy(),
-                u_basal in 0.0..25.0f64,
-                u_bolus in 0.0..5.0f64,
-                meal in 0.0..5.0f64,
-                dt in 0.5..3.0f64,
-            ) {
-                let params = HovorkaParams::default();
-                let next = state.step(&params, u_basal, u_bolus, meal, dt);
-                assert_finite_nonnegative(&next)?;
-            }
-
-            #[test]
             fn random_walk_stays_finite_and_nonnegative(
                 start in state_strategy(),
                 inputs in prop::collection::vec(
-                    (0.0..25.0f64, 0.0..5.0f64, 0.0..5.0f64, 0.5..3.0f64),
+                    (0.0..25.0f64, 0.0..5.0f64, 0.5..3.0f64),
                     0..64,
                 ),
             ) {
-                let params = HovorkaParams::default();
+                let params = super::params();
                 let mut state = start;
-                for (u_basal, u_bolus, meal, dt) in inputs {
-                    state = state.step(&params, u_basal, u_bolus, meal, dt);
+                for (u_basal, meal, dt) in inputs {
+                    state = state.step(&params, u_basal, meal, dt);
                     assert_finite_nonnegative(&state)?;
                 }
             }

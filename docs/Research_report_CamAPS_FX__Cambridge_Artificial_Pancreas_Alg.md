@@ -22,7 +22,7 @@
 
 4. **Substance Monitoring and Control in Human or Animal Bodies** (the Cambridge multi-model algorithm; the US family member is titled *Glucose Monitoring and Control Using Multi-Model Approach*)
    - **Authors:** Roman Hovorka (inventor), assigned to Cambridge Enterprise Ltd
-   - **Patent:** CA2702345C / US9402953B2
+   - **Patent:** CA2702345C / US8977504B2
    - **URL:** https://patents.google.com/patent/CA2702345C/en
    - **Summary:** Patentdokumentation des multi-modell-basierten Algorithmus, der in CamAPS FX zum Einsatz kommt. Enthält exakte Steuerungs- und Vorhersagealgorithmen, Gewichtigungsverfahren für Multi-Modell-Prädiktoren und Sicherheitsgrenzen für die Dosierung.
 

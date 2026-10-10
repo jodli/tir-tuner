@@ -1,682 +1,446 @@
-//! NMPC style dosing calculator and pump safety layer.
+//! NMPC dose selection (Hovorka 2004 eq 9) and the Auto mode rules applied
+//! to its rate: Boost, Ease-off and the hypo cutoff.
 //!
-//! Enforces the hard hypoglycemia cutoff (zero delivery when the CGM
-//! reading is below the cutoff) and the maximum hourly delivery cap,
-//! plus the Ease-off and Boost operating modes for the internal
-//! proportional controller, and the section 5.1 NMPC dose selector.
-//!
-//! The dose selector implements the published formulation (Hovorka et
-//! al 2004, eq 9):
-//!
-//! `min over 0 <= u(t+1) .. u(t+N) <= u_max
-//!     sum_{i=1..N} (g_IG(t+i) - w(t+i))^2
-//!   + (1/k_agr) sum_{i=1..N} ((u(t+i) - u(t+i-1)) / K_u)^2`
-//!
-//! `K_u = NMPC_EFFORT_UNIT_U_PER_H` is a reference delivery step that
-//! normalizes the effort term to the scale of the glucose term (see the
-//! constant's documentation); with `K_u = 1` the formulation is eq 9 as
-//! published. `w` is the moving target trajectory of section 3.3 in the
-//! paper: from the measured glucose a clamped linear fall above target,
-//! an exponential rise below. The optimizer is a local search over the
-//! quantized rate sequence: a constant-rate grid init plus a bounded
-//! coordinate-descent refinement (an iterative stand-in for the paper's
-//! Marquardt minimization over the sequence). Only `u(t+1)`, the first
-//! element, is applied; the horizon is re-solved each control period
-//! (receding horizon).
+//! Every period the controller predicts plasma glucose over the horizon for
+//! candidate rate sequences, picks the sequence with the lowest eq 9 cost
+//! and applies its first rate. H04 minimizes with Marquardt; here a grid
+//! search seeds a coordinate descent, our own stand-in.
 
 use crate::hovorka::{HovorkaParams, HovorkaState};
-use crate::{
-    BOOST_DELIVERY_FACTOR, DOSE_GAIN_U_H_PER_MMOL_L, EASE_OFF_TARGET_MMOL_L,
-    HARD_HYPO_CUTOFF_MMOL_L, TARGET_GLUCOSE_MMOL_L,
-};
+use tir_tuner_common::settings::AUTO_TARGET_MMOL_L;
+use tir_tuner_common::units::MIN_PER_HOUR;
 
-/// Resolution of the NMPC candidate grid: candidate rates
-/// `k / NMPC_GRID_STEPS * u_max` for `k in 0..=NMPC_GRID_STEPS`.
-pub const NMPC_GRID_STEPS: usize = 6;
+/// Control period (min): one CGM reading, one rate. src: h04-period
+pub const CONTROL_PERIOD_MIN: f64 = 15.0;
 
-/// Number of candidate rates on the NMPC grid
-/// (`NMPC_GRID_STEPS + 1`, including the zero rate).
-pub const NMPC_GRID_POINTS: usize = NMPC_GRID_STEPS + 1;
+/// Prediction horizon N (min). src: h04-horizon
+pub const HORIZON_MIN: f64 = 240.0;
 
-/// Fine-resolution divisor for the refinement step: the coordinate
-/// descent moves in `u_max / (NMPC_GRID_STEPS * NMPC_REFINE_SUBSTEPS)`
-/// increments, a fifth of the coarse grid quantum, so it can settle on a
-/// smooth rate taper instead of hammering between adjacent grid levels.
-pub const NMPC_REFINE_SUBSTEPS: usize = 5;
+/// Maximum rate (U/h). CamAPS sets it per person and doesn't publish how.
+/// src: h04-max-rate
+pub const MAX_RATE_U_PER_H: f64 = 4.0;
 
-/// Upper bound on the number of coordinate-descent passes over the
-/// sequence.
-pub const NMPC_REFINEMENT_PASSES: usize = 8;
+/// Aggressiveness `k_agr`. H04 publishes the tuning rule, not the value.
+/// src: own-kagr
+pub const K_AGR: f64 = 5.0;
 
-/// Offset above target (mmol/L) at which the moving target trajectory
-/// switches from the moderate to the steep linear decline.
-pub const TRAJECTORY_MAX_OFFSET_MMOL_L: f64 = 2.0;
+/// Euler step of the prediction (min). The patent discretizes exactly;
+/// 1 min keeps `k31 dt` well below 1. src: own-rollout-step
+pub const ROLLOUT_STEP_MIN: f64 = 1.0;
 
-/// Steepest linear decline of the moving target trajectory (mmol/L/h),
-/// used while the trajectory sits more than
-/// [`TRAJECTORY_MAX_OFFSET_MMOL_L`] above the target (Hovorka et al
-/// 2004, section 3.3).
-pub const TRAJECTORY_MAX_DECLINE_MMOL_PER_H: f64 = 2.0;
-
-/// Moderate linear decline of the moving target trajectory (mmol/L/h),
-/// used between the target and the steep band.
-pub const TRAJECTORY_MODERATE_DECLINE_MMOL_PER_H: f64 = 1.0;
-
-/// Half-time (min) of the exponential rise of the moving target
-/// trajectory below the target.
+/// Trajectory bands: 2 mmol/L/h more than this above target, 1 mmol/L/h
+/// below it. H04 states them for target 6 as 8 and 6 mmol/L.
+/// src: h04-trajectory
+pub const TRAJECTORY_STEEP_ABOVE_MMOL_L: f64 = 2.0;
+/// src: h04-trajectory
+pub const TRAJECTORY_STEEP_MMOL_L_PER_H: f64 = 2.0;
+/// src: h04-trajectory
+pub const TRAJECTORY_MODERATE_MMOL_L_PER_H: f64 = 1.0;
+/// Below target the trajectory rises with this halftime (min).
+/// src: h04-trajectory
 pub const TRAJECTORY_RISE_HALFTIME_MIN: f64 = 15.0;
 
-/// Reference delivery step (U/h) that makes the eq-9 effort term
-/// commensurable with the glucose tracking term.
-///
-/// The two sums of eq 9 live in different magnitudes: the glucose term
-/// sums squared deviations in (mmol/L)^2, typically tens of units over
-/// the 4h horizon, while a rate change around the operating point is a
-/// few tenths of a U/h, so the squared effort sum stays about two orders
-/// below the glucose sum for any reasonable k_agr. Measuring the rate
-/// change in reference steps `(u_j - u_{j-1}) / NMPC_EFFORT_UNIT_U_PER_H`
-/// brings the two sums to a comparable scale, which is what makes k_agr
-/// actually balance adherence against rate variation as the paper
-/// intends.
-///
-/// The value is the delivery step that moves this subject's glucose by
-/// about 1 mmol/L over the 4h prediction horizon, from the measured
-/// open-loop step response (+0.5 U/h over basal drops glucose roughly
-/// 2.7 mmol/L in 8h). The paper folds this normalization into the
-/// numeric value of k_agr; naming it keeps the equation readable while
-/// keeping eq 9 itself as written.
-pub const NMPC_EFFORT_UNIT_U_PER_H: f64 = 0.5;
+/// Grid of the constant-rate seed: `u_max k / GRID_STEPS`. src: own-optimizer
+pub const GRID_STEPS: usize = 6;
+/// The descent moves in `u_max / (GRID_STEPS * REFINE_SUBSTEPS)`.
+/// src: own-optimizer
+pub const REFINE_SUBSTEPS: usize = 5;
+/// Descent passes at most, H04's Marquardt iteration cap. src: own-optimizer
+pub const REFINE_PASSES: usize = 50;
+/// Candidates on the seed grid, zero included.
+pub const GRID_POINTS: usize = GRID_STEPS + 1;
 
-/// Operating modes of the closed-loop system (Ware et al. 2022).
+/// No insulin below this reading (mmol/L): the lowest personal target. No
+/// source has a threshold; the manual says insulin may be reduced further
+/// when glucose is low or falling. src: own-hypo-cutoff
+pub const HYPO_CUTOFF_MMOL_L: f64 = AUTO_TARGET_MMOL_L.0;
+
+/// Ease-off suspends insulin below this reading (mmol/L). Its raised
+/// target isn't published; we use this value, so the target never sits
+/// below the suspension. src: ware2022-ease-off
+pub const EASE_OFF_SUSPEND_MMOL_L: f64 = 7.0;
+
+/// Boost multiplies the algorithm's rate by this while above target.
+/// src: ware2022b-boost
+pub const BOOST_FACTOR: f64 = 1.35;
+
+/// Share of the CGM error the belief takes each period. Our stand-in for
+/// the patent's Kalman/IMM update (eq 72-77). src: own-reanchor
+pub const REANCHOR_GAIN: f64 = 0.5;
+
+/// User-selected Auto mode variants.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DosingMode {
-    /// Standard closed-loop control at the nominal target.
+pub enum Mode {
+    /// Plain Auto mode.
     Standard,
-    /// Ease-off: raised target and full suspension while below the
-    /// exercise threshold.
+    /// Raised target, suspension below [`EASE_OFF_SUSPEND_MMOL_L`].
     EaseOff,
-    /// Boost: temporary delivery intensification.
+    /// About 35% more insulin until glucose reaches the target.
     Boost,
 }
 
-/// Raw proportional-delivery target error comparison which is negative,
-/// zero, or positive in a monotone way across all operating modes.
-fn controller_target_error(ig_reading: f64, mode: DosingMode) -> f64 {
-    match mode {
-        DosingMode::Standard => DOSE_GAIN_U_H_PER_MMOL_L * (ig_reading - TARGET_GLUCOSE_MMOL_L),
-        DosingMode::EaseOff => DOSE_GAIN_U_H_PER_MMOL_L * (ig_reading - EASE_OFF_TARGET_MMOL_L),
-        DosingMode::Boost => {
-            BOOST_DELIVERY_FACTOR * DOSE_GAIN_U_H_PER_MMOL_L * (ig_reading - TARGET_GLUCOSE_MMOL_L)
+impl Mode {
+    /// The target the NMPC aims at in this mode (mmol/L). Ease-off's raised
+    /// target is ours. src: own-ease-off-target
+    pub fn target(self, target: f64) -> f64 {
+        match self {
+            Mode::EaseOff => target.max(EASE_OFF_SUSPEND_MMOL_L),
+            Mode::Standard | Mode::Boost => target,
         }
     }
-}
 
-/// Unclamped insulin delivery (U/h) for the given mode, honoring the
-/// Ease-off suspension rule.
-pub fn uncapped_dose(ig_reading: f64, mode: DosingMode) -> f64 {
-    if mode == DosingMode::EaseOff && ig_reading < EASE_OFF_TARGET_MMOL_L {
-        return 0.0;
+    /// No algorithm insulin at this reading.
+    pub fn suspended(self, reading: f64) -> bool {
+        reading < HYPO_CUTOFF_MMOL_L || (self == Mode::EaseOff && reading < EASE_OFF_SUSPEND_MMOL_L)
     }
-    controller_target_error(ig_reading, mode)
-}
 
-/// Mode-aware NMPC calculated insulin delivery rate (U/h).
-///
-/// Safety invariants (proved by the Kani suite for every mode):
-/// 1. `0.0 <= result <= max_delivery_rate`.
-/// 2. If `ig_reading < HARD_HYPO_CUTOFF_MMOL_L` then `result == 0.0`.
-/// 3. In Ease-off, delivery is fully suspended while
-///    `ig_reading < EASE_OFF_TARGET_MMOL_L`.
-/// 4. Boost never delivers less than Standard on the same reading.
-pub fn compute_nmpc_dose_mode(ig_reading: f64, max_delivery_rate: f64, mode: DosingMode) -> f64 {
-    if ig_reading < HARD_HYPO_CUTOFF_MMOL_L {
-        0.0
-    } else {
-        uncapped_dose(ig_reading, mode).clamp(0.0, max_delivery_rate)
-    }
-}
-
-/// NMPC calculated insulin delivery rate (U/h) in Standard mode.
-///
-/// Safety invariants (proved by the Kani suite):
-/// 1. `0.0 <= result <= max_delivery_rate`.
-/// 2. If `ig_reading < HARD_HYPO_CUTOFF_MMOL_L` then `result == 0.0`.
-pub fn compute_nmpc_dose(ig_reading: f64, max_delivery_rate: f64) -> f64 {
-    compute_nmpc_dose_mode(ig_reading, max_delivery_rate, DosingMode::Standard)
-}
-
-/// The moving target trajectory `w(t+j)` of Hovorka et al 2004,
-/// section 3.3: the desired glucose profile the NMPC cost tracks.
-///
-/// Starting from the measured glucose `y_start`, the trajectory falls
-/// linearly at [`TRAJECTORY_MAX_DECLINE_MMOL_PER_H`] while more than
-/// [`TRAJECTORY_MAX_OFFSET_MMOL_L`] above the target, falls at
-/// [`TRAJECTORY_MODERATE_DECLINE_MMOL_PER_H`] between that and the
-/// target, and settles on the target once reached (the decline is
-/// clamped at the target so hypers cannot undershoot). Below the target
-/// it rises exponentially with halftime
-/// [`TRAJECTORY_RISE_HALFTIME_MIN`], converging on the target from
-/// below. The trajectory is projected every `step_min` over `n` samples;
-/// with `y_start` exactly on target it stays flat.
-pub fn moving_target_trajectory(y_start: f64, target: f64, n: usize, step_min: f64) -> Vec<f64> {
-    let mut w = Vec::with_capacity(n);
-    let decline_steep = TRAJECTORY_MAX_DECLINE_MMOL_PER_H * step_min / 60.0;
-    let decline_moderate = TRAJECTORY_MODERATE_DECLINE_MMOL_PER_H * step_min / 60.0;
-    let rise_factor = 0.5f64.powf(step_min / TRAJECTORY_RISE_HALFTIME_MIN);
-    let mut prev = y_start;
-    w.push(prev);
-    for _ in 1..n {
-        if prev > target + TRAJECTORY_MAX_OFFSET_MMOL_L {
-            prev = (prev - decline_steep).max(target);
-        } else if prev > target {
-            prev = (prev - decline_moderate).max(target);
-        } else if prev < target {
-            prev = target + (prev - target) * rise_factor;
+    /// The rate delivered (U/h) for the NMPC rate `nmpc` at `reading`.
+    /// Invariants: `verify_mode_rate_invariants`.
+    pub fn rate(self, nmpc: f64, reading: f64, target: f64, u_max: f64) -> f64 {
+        if self.suspended(reading) {
+            return 0.0;
         }
-        w.push(prev);
+        let boosted = self == Mode::Boost && reading > target;
+        let rate = if boosted { nmpc * BOOST_FACTOR } else { nmpc };
+        rate.clamp(0.0, u_max)
+    }
+}
+
+/// Move the belief's glucose toward the reading by [`REANCHOR_GAIN`] of the
+/// interstitial error, keeping its plasma-interstitial gradient.
+pub fn reanchor(state: &mut HovorkaState, params: &HovorkaParams, reading: f64) {
+    let error = reading - state.interstitial_glucose(params);
+    state.shift_glucose(params, REANCHOR_GAIN * error);
+}
+
+/// The moving target trajectory, H04 section 3.3 and Fig 4: `w[0]` is
+/// glucose now, `w[j]` the target at `t + j step_min`.
+pub fn trajectory(y: f64, target: f64, n: usize, step_min: f64) -> Vec<f64> {
+    let per_h = step_min / MIN_PER_HOUR;
+    let rise = (-std::f64::consts::LN_2 * step_min / TRAJECTORY_RISE_HALFTIME_MIN).exp();
+    let mut w = Vec::with_capacity(n + 1);
+    let mut g = y;
+    w.push(g);
+    for _ in 0..n {
+        g = if g > target + TRAJECTORY_STEEP_ABOVE_MMOL_L {
+            (g - TRAJECTORY_STEEP_MMOL_L_PER_H * per_h).max(target)
+        } else if g > target {
+            (g - TRAJECTORY_MODERATE_MMOL_L_PER_H * per_h).max(target)
+        } else {
+            target + (g - target) * rise
+        };
+        w.push(g);
     }
     w
 }
 
-/// NMPC cost of a candidate rate sequence `u` against the target
-/// trajectory `w`, section 5.1 (Hovorka et al 2004, eq 9):
-///
-/// `J(u) = sum_{j=1..N} (g_IG(t+j) - w(t+j))^2
-///         + (1/k_agr) sum_{j=1..N} ((u(t+j) - u(t+j-1)) / K_u)^2`
-///
-/// with `u[-1] = u_prev`, the rate infused over the previous control
-/// period, and `K_u = NMPC_EFFORT_UNIT_U_PER_H` the reference delivery
-/// step that makes the two sums commensurable. The glucose term is the
-/// summed squared interstitial glucose deviation predicted by rolling
-/// the model forward under the sequence; the effort term prices changes
-/// in the rate measured in reference steps, not deviation from an
-/// operating point. `k_agr` is the aggressiveness constant: larger
-/// values weight the effort term less and let the optimizer move the
-/// rate more freely.
-pub fn nmpc_sequence_cost(
-    params: &HovorkaParams,
-    state: HovorkaState,
-    u: &[f64],
-    w: &[f64],
-    u_prev: f64,
-    k_agr: f64,
-    step_min: f64,
-) -> f64 {
-    debug_assert_eq!(u.len(), w.len());
-    let mut sum = 0.0;
-    let mut predict = state;
-    let mut prev_rate = u_prev;
-    let effort_weight = 1.0 / k_agr;
-    for j in 0..u.len() {
-        predict = predict.step(params, u[j], 0.0, 0.0, step_min);
-        let glucose_err = predict.interstitial_glucose(params) - w[j];
-        let rate_change = (u[j] - prev_rate) / NMPC_EFFORT_UNIT_U_PER_H;
-        sum += glucose_err * glucose_err + effort_weight * rate_change * rate_change;
-        prev_rate = u[j];
-    }
-    sum
-}
-
-/// Cost of holding a single constant rate `u` over the whole trajectory
-/// `w`, as a repeated sequence through [`nmpc_sequence_cost`].
-pub fn nmpc_constant_cost(
-    params: &HovorkaParams,
-    state: HovorkaState,
-    u: f64,
-    w: &[f64],
-    u_prev: f64,
-    k_agr: f64,
-    step_min: f64,
-) -> f64 {
-    let mut seq = vec![0.0; w.len()];
-    seq.fill(u);
-    nmpc_sequence_cost(params, state, &seq, w, u_prev, k_agr, step_min)
-}
-
-/// Index of the first candidate attaining the minimum cost. Pure
-/// selection logic over the supplied costs; the Kani suite proves this
-/// index is minimal, independently of how the costs were computed.
-pub fn best_grid_candidate_index(costs: &[f64; NMPC_GRID_POINTS]) -> usize {
-    let mut best_index = 0;
-    let mut best_cost = costs[0];
-    let mut i = 1;
-    while i < NMPC_GRID_POINTS {
-        if costs[i] < best_cost {
-            best_cost = costs[i];
-            best_index = i;
+/// Index of the first minimum.
+pub fn argmin(costs: &[f64; GRID_POINTS]) -> usize {
+    let mut best = 0;
+    for i in 1..GRID_POINTS {
+        if costs[i] < costs[best] {
+            best = i;
         }
-        i += 1;
     }
-    best_index
+    best
 }
 
-/// Constant-rate NMPC init: the argument of the minimum of the section
-/// 5.1 cost over the candidate grid
-/// `{ k / NMPC_GRID_STEPS * u_max : k = 0..=N }`, where the glucose
-/// term is the summed squared deviation over the `w` trajectory rolled
-/// out at `step_min` resolution under the candidate rate. This seeds the
-/// sequence solver; the Kani suite proves the candidate rates stay in
-/// `[0, u_max]` and the position selected by
-/// [`best_grid_candidate_index`] attains the minimal cost.
-pub fn nmpc_grid_dose(
-    params: &HovorkaParams,
-    state: HovorkaState,
-    w: &[f64],
-    u_prev: f64,
-    u_max: f64,
-    k_agr: f64,
-    step_min: f64,
-) -> f64 {
-    let mut rates = [0.0; NMPC_GRID_POINTS];
-    let mut costs = [0.0; NMPC_GRID_POINTS];
-    for k in 0..=NMPC_GRID_STEPS {
-        let u = u_max * (k as f64 / NMPC_GRID_STEPS as f64);
-        rates[k] = u;
-        costs[k] = nmpc_constant_cost(params, state, u, w, u_prev, k_agr, step_min);
-    }
-    rates[best_grid_candidate_index(&costs)]
+/// NMPC settings.
+#[derive(Clone, Copy, Debug)]
+pub struct Nmpc {
+    /// Aggressiveness `k_agr` of eq 9.
+    pub k_agr: f64,
+    /// Upper rate bound (U/h).
+    pub u_max: f64,
+    /// Sample spacing of the prediction (min), also the control period.
+    pub step_min: f64,
+    /// Samples in the horizon, N.
+    pub n: usize,
 }
 
-/// Bounded coordinate-descent refinement of the rate sequence: each
-/// pass tries a one-grid-step change of every window and keeps moves
-/// that lower the full-sequence cost. Deterministic, bounded at
-/// [`NMPC_REFINEMENT_PASSES`] passes, and monotonically non-increasing
-/// in cost; it is the iterative stand-in for the paper's Marquardt
-/// minimization over the sequence.
-fn refine_sequence(
-    params: &HovorkaParams,
-    state: HovorkaState,
-    mut seq: Vec<f64>,
-    w: &[f64],
-    u_prev: f64,
-    u_max: f64,
-    k_agr: f64,
-    step_min: f64,
-) -> Vec<f64> {
-    let step = u_max / (NMPC_GRID_STEPS * NMPC_REFINE_SUBSTEPS) as f64;
-    let mut best = nmpc_sequence_cost(params, state, &seq, w, u_prev, k_agr, step_min);
-    for _ in 0..NMPC_REFINEMENT_PASSES {
-        let mut improved = false;
-        for j in 0..seq.len() {
-            let base = seq[j];
-            for cand in [base + step, base - step] {
-                let cand = cand.clamp(0.0, u_max);
-                seq[j] = cand;
-                let cost = nmpc_sequence_cost(params, state, &seq, w, u_prev, k_agr, step_min);
-                if cost < best {
-                    best = cost;
-                    improved = true;
-                } else {
-                    seq[j] = base;
+impl Default for Nmpc {
+    fn default() -> Self {
+        Self {
+            k_agr: K_AGR,
+            u_max: MAX_RATE_U_PER_H,
+            step_min: CONTROL_PERIOD_MIN,
+            n: (HORIZON_MIN / CONTROL_PERIOD_MIN) as usize,
+        }
+    }
+}
+
+impl Nmpc {
+    /// Eq 9 cost of rates `u` (one per sample, U/h) against trajectory `w`
+    /// (`n + 1` points, `w[0]` now): squared plasma glucose error at
+    /// `t + i`, plus rate changes from `u_prev` weighted `1 / k_agr`.
+    pub fn cost(
+        &self,
+        params: &HovorkaParams,
+        state: HovorkaState,
+        u: &[f64],
+        w: &[f64],
+        u_prev: f64,
+    ) -> f64 {
+        debug_assert_eq!(u.len() + 1, w.len());
+        let substeps = (self.step_min / ROLLOUT_STEP_MIN).round() as usize;
+        let mut s = state;
+        let mut prev = u_prev;
+        let mut sum = 0.0;
+        for (&rate, &target) in u.iter().zip(&w[1..]) {
+            for _ in 0..substeps {
+                s = s.step(params, rate, 0.0, ROLLOUT_STEP_MIN);
+            }
+            let err = s.plasma_glucose(params) - target;
+            sum += err * err + (rate - prev) * (rate - prev) / self.k_agr;
+            prev = rate;
+        }
+        sum
+    }
+
+    /// Candidate `k` of the seed grid (U/h).
+    pub fn grid_rate(&self, k: usize) -> f64 {
+        // Divide first: (u_max k) / N can round one ulp above u_max.
+        self.u_max * (k as f64 / GRID_STEPS as f64)
+    }
+
+    /// Best constant rate on the seed grid, and its cost.
+    pub fn seed(
+        &self,
+        params: &HovorkaParams,
+        state: HovorkaState,
+        w: &[f64],
+        u_prev: f64,
+    ) -> (f64, f64) {
+        let costs: [f64; GRID_POINTS] = std::array::from_fn(|k| {
+            self.cost(params, state, &vec![self.grid_rate(k); self.n], w, u_prev)
+        });
+        let k = argmin(&costs);
+        (self.grid_rate(k), costs[k])
+    }
+
+    /// Rate sequence for this period: the seed, refined by coordinate
+    /// descent, against a trajectory from the belief's plasma glucose (the
+    /// patent tracks estimated plasma, eq 83). Every rate lies in
+    /// `[0, u_max]` and the result costs no more than the seed.
+    pub fn sequence(
+        &self,
+        params: &HovorkaParams,
+        state: HovorkaState,
+        target: f64,
+        u_prev: f64,
+    ) -> Vec<f64> {
+        let w = trajectory(state.plasma_glucose(params), target, self.n, self.step_min);
+        let (seed, mut best) = self.seed(params, state, &w, u_prev);
+        let mut u = vec![seed; self.n];
+        let delta = self.u_max / (GRID_STEPS * REFINE_SUBSTEPS) as f64;
+        for _ in 0..REFINE_PASSES {
+            let mut improved = false;
+            for j in 0..self.n {
+                let base = u[j];
+                for cand in [base + delta, base - delta] {
+                    u[j] = cand.clamp(0.0, self.u_max);
+                    let c = self.cost(params, state, &u, &w, u_prev);
+                    if c < best {
+                        best = c;
+                        improved = true;
+                        break;
+                    }
+                    u[j] = base;
                 }
             }
+            if !improved {
+                break;
+            }
         }
-        if !improved {
-            break;
-        }
+        u
     }
-    seq
-}
 
-/// Section 5.1 NMPC sequence solver: builds the moving target
-/// trajectory from the measured glucose, optimizes a constant-rate init
-/// over the candidate grid, and refines the rate sequence with bounded
-/// coordinate descent. Every element lies in `[0, u_max]`, and the
-/// refined sequence costs no more than the constant-rate init; the
-/// paper's Marquart minimization is replaced by this bounded local
-/// search over the quantized sequence.
-pub fn nmpc_sequence(
-    params: &HovorkaParams,
-    state: HovorkaState,
-    y_meas: f64,
-    target: f64,
-    k_agr: f64,
-    u_max: f64,
-    u_prev: f64,
-    horizon_min: f64,
-    step_min: f64,
-) -> Vec<f64> {
-    let n = (horizon_min / step_min).round() as usize;
-    let w = moving_target_trajectory(y_meas, target, n, step_min);
-    let init = nmpc_grid_dose(params, state, &w, u_prev, u_max, k_agr, step_min);
-    let mut seq = vec![0.0; n];
-    seq.fill(init);
-    refine_sequence(params, state, seq, &w, u_prev, u_max, k_agr, step_min)
-}
-
-/// Section 5.1 NMPC dose selector: the first element `u(t+1)` of the
-/// refined rate sequence, the rate to apply this control period
-/// (receding horizon, as in the paper). The result lies in `[0, u_max]`;
-/// the hypoglycemia guard is applied by the caller.
-pub fn nmpc_sequence_dose(
-    params: &HovorkaParams,
-    state: HovorkaState,
-    y_meas: f64,
-    target: f64,
-    k_agr: f64,
-    u_max: f64,
-    u_prev: f64,
-    horizon_min: f64,
-    step_min: f64,
-) -> f64 {
-    nmpc_sequence(
-        params,
-        state,
-        y_meas,
-        target,
-        k_agr,
-        u_max,
-        u_prev,
-        horizon_min,
-        step_min,
-    )[0]
-}
-
-/// True when a CGM reading triggers the mandatory insulin suspension.
-pub fn is_hypoglycemic(ig_reading: f64) -> bool {
-    ig_reading < HARD_HYPO_CUTOFF_MMOL_L
+    /// The first rate of [`Nmpc::sequence`]; H04 p7 discards the rest.
+    pub fn dose(
+        &self,
+        params: &HovorkaParams,
+        state: HovorkaState,
+        target: f64,
+        u_prev: f64,
+    ) -> f64 {
+        self.sequence(params, state, target, u_prev)[0]
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hovorka::{HovorkaParams, HovorkaState};
     use crate::test_support::config;
     use proptest::prelude::*;
-    use tir_tuner_common::units::MU_PER_UNIT;
 
-    fn state_strategy() -> impl Strategy<Value = HovorkaState> {
-        (
-            0.0..25_000.0f64,
-            0.0..25_000.0f64,
-            0.0..50.0f64,
-            0.0..50.0f64,
-            0.0..150.0f64,
-            0.0..150.0f64,
-            0.1..30.0f64,
-            0.1..30.0f64,
-            0.1..30.0f64,
-        )
-            .prop_map(|(i1, i2, r_d, r_e, a1, a2, q1, q2, q3)| HovorkaState {
-                i1,
-                i2,
-                r_d,
-                r_e,
-                a1,
-                a2,
-                q1,
-                q2,
-                q3,
-                u_s: 0.0,
-            })
+    fn params() -> HovorkaParams {
+        HovorkaParams::hovorka_2004(70.0, 1.0).resting_at(6.0)
     }
 
-    fn trajectory_strategy() -> impl Strategy<Value = (f64, f64, usize, f64, Vec<f64>)> {
-        (2.0..20.0f64, 4.0..11.0f64, 1usize..20, 1.0..15.0f64).prop_map(
-            |(y_start, target, n, step)| {
-                let w = moving_target_trajectory(y_start, target, n, step);
-                (y_start, target, n, step, w)
-            },
-        )
+    /// H04 Fig 4: 2 mmol/L/h more than 2 above target, 1 mmol/L/h below,
+    /// a 15 min halftime below target.
+    #[test]
+    fn h04_trajectory_bands() {
+        let w = trajectory(10.0, 6.0, 1, 15.0);
+        assert!((w[1] - 9.5).abs() < 1e-12);
+        let w = trajectory(7.0, 6.0, 1, 15.0);
+        assert!((w[1] - 6.75).abs() < 1e-12);
+        let w = trajectory(4.0, 6.0, 2, 15.0);
+        assert!((w[1] - 5.0).abs() < 1e-12);
+        assert!((w[2] - 5.5).abs() < 1e-12);
+        assert_eq!(trajectory(6.1, 6.0, 1, 15.0)[1], 6.0);
+        // H04: 8 itself is in the 1 mmol/L/h band.
+        assert!((trajectory(8.0, 6.0, 1, 15.0)[1] - 7.75).abs() < 1e-12);
     }
 
-    /// A bounded rate sequence for the full-horizon cost sweep,
-    /// truncated to the trajectory length at runtime.
-    fn rate_sequence_strategy() -> impl Strategy<Value = Vec<f64>> {
-        proptest::collection::vec(0.0..20.0f64, 20)
+    #[test]
+    fn argmin_takes_the_first_of_equal_costs() {
+        assert_eq!(argmin(&[1.0; GRID_POINTS]), 0);
+        let mut c = [2.0; GRID_POINTS];
+        c[GRID_STEPS] = 1.0;
+        assert_eq!(argmin(&c), GRID_STEPS);
+    }
+
+    #[test]
+    fn grid_spans_zero_to_u_max() {
+        let nmpc = Nmpc::default();
+        assert_eq!(nmpc.grid_rate(0), 0.0);
+        assert_eq!(nmpc.grid_rate(GRID_STEPS / 2), nmpc.u_max / 2.0);
+        assert_eq!(nmpc.grid_rate(GRID_STEPS), nmpc.u_max);
+    }
+
+    /// Half the interstitial error goes in, the gradient stays.
+    #[test]
+    fn reanchor_shifts_by_half_the_error() {
+        let p = params();
+        let mut s = HovorkaState::basal(&p, 6.0);
+        s.q1 += 0.1 * p.v_g;
+        reanchor(&mut s, &p, 8.0);
+        assert!((s.interstitial_glucose(&p) - 7.0).abs() < 1e-12);
+        assert!((s.plasma_glucose(&p) - 7.1).abs() < 1e-12);
+    }
+
+    /// Eq 9 compares the prediction at `t + i` with the target at `t + i`:
+    /// a trajectory equal to the prediction costs nothing.
+    #[test]
+    fn h04_cost_matches_prediction_and_target_at_the_same_time() {
+        let p = params();
+        let nmpc = Nmpc::default();
+        let start = HovorkaState::basal(&p, 9.0);
+        let u = vec![p.bir; nmpc.n];
+        let mut w = vec![start.plasma_glucose(&p)];
+        let mut s = start;
+        let substeps = (nmpc.step_min / ROLLOUT_STEP_MIN) as usize;
+        for _ in 0..nmpc.n {
+            for _ in 0..substeps {
+                s = s.step(&p, p.bir, 0.0, ROLLOUT_STEP_MIN);
+            }
+            w.push(s.plasma_glucose(&p));
+        }
+        assert!(nmpc.cost(&p, start, &u, &w, p.bir) < 1e-20);
+        // Same glucose, a step of 1 U/h from u_prev: the effort term alone.
+        let effort = nmpc.cost(&p, start, &u, &w, p.bir - 1.0);
+        assert!((effort - 1.0 / nmpc.k_agr).abs() < 1e-12, "{effort}");
+    }
+
+    /// Ware 2022b p3: about 35% more, only above target.
+    #[test]
+    fn ware2022b_boost_only_above_target() {
+        assert!((Mode::Boost.rate(1.0, 8.0, 6.0, 4.0) - 1.35).abs() < 1e-12);
+        assert_eq!(Mode::Boost.rate(1.0, 6.0, 6.0, 4.0), 1.0);
+        assert_eq!(Mode::Boost.rate(3.5, 8.0, 6.0, 4.0), 4.0);
+    }
+
+    /// Ware 2022 p4: Ease-off suspends below 7.0 and raises the target.
+    #[test]
+    fn ware2022_ease_off_suspends_below_7() {
+        assert_eq!(Mode::EaseOff.rate(1.0, 6.9, 6.0, 4.0), 0.0);
+        assert_eq!(Mode::EaseOff.rate(1.0, 7.0, 6.0, 4.0), 1.0);
+        assert_eq!(Mode::EaseOff.target(6.0), 7.0);
+        assert_eq!(Mode::EaseOff.target(8.0), 8.0);
+        assert_eq!(Mode::Standard.target(6.0), 6.0);
+    }
+
+    #[test]
+    fn suspended_below_hypo_cutoff() {
+        assert_eq!(Mode::Standard.rate(1.0, 4.39, 6.0, 4.0), 0.0);
+        assert_eq!(Mode::Standard.rate(1.0, 4.4, 6.0, 4.0), 1.0);
+        assert_eq!(Mode::Standard.rate(5.0, 9.0, 6.0, 4.0), 4.0);
+    }
+
+    /// More insulin when high, none needed when low.
+    #[test]
+    fn dose_follows_glucose() {
+        let p = params();
+        let nmpc = Nmpc::default();
+        let high = nmpc.dose(&p, HovorkaState::basal(&p, 12.0), 6.0, p.bir);
+        let low = nmpc.dose(&p, HovorkaState::basal(&p, 4.5), 6.0, p.bir);
+        assert!(high > p.bir, "{high}");
+        assert!(low < p.bir, "{low}");
+    }
+
+    /// High glucose: the seed reaches u_max, and the descent ends at a
+    /// local minimum on its u_max/30 lattice, below the seed's cost.
+    #[test]
+    fn descent_converges_on_its_lattice() {
+        let p = params();
+        let nmpc = Nmpc::default();
+        let s = HovorkaState::basal(&p, 9.0);
+        let w = trajectory(9.0, 6.0, nmpc.n, nmpc.step_min);
+        assert_eq!(
+            nmpc.seed(&p, HovorkaState::basal(&p, 25.0), &w, p.bir).0,
+            nmpc.u_max
+        );
+        let (_, seed_cost) = nmpc.seed(&p, s, &w, p.bir);
+        let u = nmpc.sequence(&p, s, 6.0, p.bir);
+        let best = nmpc.cost(&p, s, &u, &w, p.bir);
+        assert!(best < seed_cost);
+        let delta = nmpc.u_max / (GRID_STEPS * REFINE_SUBSTEPS) as f64;
+        for j in 0..nmpc.n {
+            let steps = u[j] / delta;
+            assert!((steps - steps.round()).abs() < 1e-9, "u[{j}] = {}", u[j]);
+            for d in [delta, -delta] {
+                let mut v = u.clone();
+                v[j] = (v[j] + d).clamp(0.0, nmpc.u_max);
+                assert!(nmpc.cost(&p, s, &v, &w, p.bir) >= best);
+            }
+        }
+    }
+
+    /// Carbs in the gut raise the dose: the controller sees meals.
+    #[test]
+    fn dose_sees_carbs_in_the_gut() {
+        let p = params();
+        let nmpc = Nmpc::default();
+        let fasting = HovorkaState::basal(&p, 7.0);
+        let fed = HovorkaState {
+            a1: 40.0,
+            ..fasting
+        };
+        let d0 = nmpc.dose(&p, fasting, 6.0, p.bir);
+        let d1 = nmpc.dose(&p, fed, 6.0, p.bir);
+        assert!(d1 > d0, "{d1} <= {d0}");
     }
 
     proptest! {
         #![proptest_config(config())]
 
-        /// The composition link the Kani suite does not close: the rate
-        /// returned by the constant-rate init `nmpc_grid_dose` is one of
-        /// the grid candidates, stays in `[0, u_max]`, and its realized
-        /// cost is the minimum over the computed candidate costs.
+        /// Every rate in `[0, u_max]`, and the refined sequence costs no
+        /// more than its seed.
         #[test]
-        fn grid_dose_is_min_cost_candidate(
-            state in state_strategy(),
-            (y_start, target, _, _, w) in trajectory_strategy(),
-            u_prev in 0.0..20.0f64,
-            u_max in 0.1..20.0f64,
-            k_agr in 0.5..50.0f64,
-            step in 1.0..15.0f64,
+        fn sequence_is_bounded_and_improves_on_the_seed(
+            g in 3.0..20.0f64,
+            target in AUTO_TARGET_MMOL_L.0..AUTO_TARGET_MMOL_L.1,
+            u_prev in 0.0..4.0f64,
         ) {
-            let params = HovorkaParams::default();
-            let u = nmpc_grid_dose(&params, state, &w, u_prev, u_max, k_agr, step);
-            let _ = (y_start, target);
-
-            prop_assert!(u >= 0.0 && u <= u_max, "init dose out of bounds: {u}");
-
-            let mut rates = [0.0; NMPC_GRID_POINTS];
-            let mut costs = [0.0; NMPC_GRID_POINTS];
-            for k in 0..=NMPC_GRID_STEPS {
-                let rate = u_max * (k as f64 / NMPC_GRID_STEPS as f64);
-                rates[k] = rate;
-                costs[k] = nmpc_constant_cost(&params, state, rate, &w, u_prev, k_agr, step);
-            }
-
-            let best = best_grid_candidate_index(&costs);
-            prop_assert_eq!(u, rates[best]);
-
-            let min = costs.iter().cloned().fold(f64::INFINITY, f64::min);
-            prop_assert_eq!(costs[best], min);
+            let p = params();
+            let nmpc = Nmpc { n: 4, ..Nmpc::default() };
+            let s = HovorkaState::basal(&p, g);
+            let w = trajectory(g, target, nmpc.n, nmpc.step_min);
+            let (_, seed_cost) = nmpc.seed(&p, s, &w, u_prev);
+            let u = nmpc.sequence(&p, s, target, u_prev);
+            prop_assert!(u.iter().all(|&r| (0.0..=nmpc.u_max).contains(&r)));
+            prop_assert!(nmpc.cost(&p, s, &u, &w, u_prev) <= seed_cost);
         }
-
-        /// The full 16-window instance the simulation drives: the
-        /// summed sequence cost stays finite and non-negative across the
-        /// full state and tuning space (the Kani harness only covers a
-        /// two-step roll-out slice).
-        #[test]
-        fn cost_is_finite_nonnegative_over_full_state(
-            state in state_strategy(),
-            y_start in 2.0..20.0f64,
-            target in 4.0..11.0f64,
-            n in 1usize..21,
-            step in 1.0..15.0f64,
-            u in rate_sequence_strategy(),
-            u_prev in 0.0..20.0f64,
-            k_agr in 0.5..50.0f64,
-        ) {
-            let params = HovorkaParams::default();
-            let w = moving_target_trajectory(y_start, target, n, step);
-            let u = &u[..u.len().min(w.len())];
-            let cost = nmpc_sequence_cost(&params, state, u, &w, u_prev, k_agr, step);
-            prop_assert!(cost.is_finite(), "cost is not finite: {cost}");
-            prop_assert!(cost >= 0.0, "cost is negative: {cost}");
-        }
-
-        /// The sequence solver is a pure cost-improver: every element of
-        /// the refined sequence lies in `[0, u_max]`, its first element
-        /// is the returned dose, and it costs no more than the
-        /// constant-rate init it seeds.
-        #[test]
-        fn sequence_dose_is_refined_init(
-            state in state_strategy(),
-            y_meas in 2.0..20.0f64,
-            target in 4.0..11.0f64,
-            u_prev in 0.0..20.0f64,
-            u_max in 0.1..20.0f64,
-            k_agr in 0.5..50.0f64,
-            horizon in 60.0..300.0f64,
-            step in 5.0..20.0f64,
-        ) {
-            let params = HovorkaParams::default();
-            let seq = nmpc_sequence(
-                &params, state, y_meas, target, k_agr, u_max, u_prev, horizon, step,
-            );
-            for &v in &seq {
-                prop_assert!(v >= 0.0 && v <= u_max, "sequence rate out of bounds: {v}");
-            }
-            let dose = nmpc_sequence_dose(
-                &params, state, y_meas, target, k_agr, u_max, u_prev, horizon, step,
-            );
-            prop_assert_eq!(dose, seq[0], "dose is not the first element");
-
-            let n = (horizon / step).round() as usize;
-            let w = moving_target_trajectory(y_meas, target, n, step);
-            let init = vec![nmpc_grid_dose(&params, state, &w, u_prev, u_max, k_agr, step); n];
-            let init_cost = nmpc_sequence_cost(&params, state, &init, &w, u_prev, k_agr, step);
-            let refined_cost = nmpc_sequence_cost(&params, state, &seq, &w, u_prev, k_agr, step);
-            prop_assert!(
-                refined_cost <= init_cost + 1e-9,
-                "refined sequence not cheaper than init: {refined_cost} vs {init_cost}"
-            );
-        }
-
-        /// The full moving target trajectory is finite, stays inside the
-        /// band `[min(y_start, target), max(y_start, target)]`, moves
-        /// monotonically toward the target and strictly approaches it
-        /// each sample (native cover for the exponential rise branch and
-        /// the piecewise band switch; the Kani suite proves the coarse
-        /// decline band).
-        #[test]
-        fn moving_target_trajectory_tracks_target(
-            y_start in 2.0..20.0f64,
-            target in 4.0..11.0f64,
-            n in 2usize..30,
-            step in 0.5..20.0f64,
-        ) {
-            let w = moving_target_trajectory(y_start, target, n, step);
-            let lo = y_start.min(target);
-            let hi = y_start.max(target);
-
-            for &v in &w {
-                prop_assert!(v.is_finite(), "trajectory not finite: {v}");
-                prop_assert!(
-                    (lo - 1e-9..=hi + 1e-9).contains(&v),
-                    "trajectory escaped band: {v} not in [{lo}, {hi}]"
-                );
-            }
-
-            if y_start > target {
-                for pair in w.windows(2) {
-                    prop_assert!(pair[1] <= pair[0] + 1e-9, "decline not monotone");
-                }
-            } else if y_start < target {
-                for pair in w.windows(2) {
-                    prop_assert!(pair[1] >= pair[0] - 1e-9, "rise not monotone");
-                }
-            } else {
-                for &v in &w {
-                    prop_assert_eq!(v, target, "flat trajectory drifted");
-                }
-            }
-
-            if (y_start - target).abs() > 1e-9 {
-                let err0 = (w[0] - target).abs();
-                let errn = (w[w.len() - 1] - target).abs();
-                prop_assert!(
-                    errn < err0,
-                    "trajectory did not approach target: err {errn} vs {err0}"
-                );
-            }
-        }
-
-        /// `nmpc_sequence_dose` is a pure cost minimizer: it does not
-        /// itself know the CGM reading or the hard hypoglycemia cutoff
-        /// (the two layers are kept separate, as in CamAPS). Once the
-        /// dose is passed through the hypoglycemia guard the delivered
-        /// rate honors the `[0, u_max]` bounds and the mandatory zero
-        /// below the cutoff.
-        #[test]
-        fn sequence_dose_composed_with_hypo_cutoff_is_safe(
-            state in state_strategy(),
-            y_meas in 2.0..20.0f64,
-            ig_reading in 2.0..14.0f64,
-            target in 4.0..11.0f64,
-            u_prev in 0.0..20.0f64,
-            u_max in 0.1..20.0f64,
-            k_agr in 0.5..50.0f64,
-        ) {
-            let params = HovorkaParams::default();
-            let dose = nmpc_sequence_dose(
-                &params, state, y_meas, target, k_agr, u_max, u_prev, 240.0, 15.0,
-            );
-            let delivered = if is_hypoglycemic(ig_reading) {
-                0.0
-            } else {
-                dose.clamp(0.0, u_max)
-            };
-
-            prop_assert!(delivered >= 0.0 && delivered <= u_max, "delivered out of bounds");
-            if is_hypoglycemic(ig_reading) {
-                prop_assert_eq!(delivered, 0.0, "hypo cutoff not honored in composition");
-            }
-        }
-    }
-
-    /// `k_agr` is genuinely the eq-9 balancing constant, not a dead
-    /// knob: at a fixed hyperglycemic belief state the selected dose
-    /// grows with `k_agr` (larger values price rate changes less, so
-    /// the optimizer moves the rate more freely toward the target
-    /// trajectory). Pins the behavior the unit normalization exists
-    /// for; without `NMPC_EFFORT_UNIT_U_PER_H` the effort sum sits
-    /// two orders below the glucose sum and the dose is flat across a
-    /// wide `k_agr` range. The fixed state is the clamped
-    /// above-target belief at 10 mmol/L with the depot equilibrated
-    /// to basal insulin.
-    #[test]
-    fn kagr_monotonically_increases_dose_at_hyper() {
-        let params = HovorkaParams::default();
-        let vg = params.v_g;
-        let g = 10.0;
-        let depot = MU_PER_UNIT * params.bir / 60.0 * params.t_max_i;
-        let bic = params.basal_insulin_conc();
-        let state = HovorkaState {
-            i1: depot,
-            i2: depot,
-            r_d: bic,
-            r_e: bic,
-            a1: 0.0,
-            a2: 0.0,
-            q1: g * vg,
-            q2: g * vg,
-            q3: g * vg,
-            u_s: 0.0,
-        };
-        let u_prev = 1.0;
-        let u_max = 20.0;
-        let step_min = 15.0;
-        let n = 16;
-        let w = moving_target_trajectory(g, TARGET_GLUCOSE_MMOL_L, n, step_min);
-
-        let dose_low = nmpc_grid_dose(&params, state, &w, u_prev, u_max, 0.5, step_min);
-        let dose_high = nmpc_grid_dose(&params, state, &w, u_prev, u_max, 40.0, step_min);
-        let refined_low = nmpc_sequence_dose(
-            &params,
-            state,
-            g,
-            TARGET_GLUCOSE_MMOL_L,
-            0.5,
-            u_max,
-            u_prev,
-            240.0,
-            step_min,
-        );
-        let refined_high = nmpc_sequence_dose(
-            &params,
-            state,
-            g,
-            TARGET_GLUCOSE_MMOL_L,
-            40.0,
-            u_max,
-            u_prev,
-            240.0,
-            step_min,
-        );
-
-        // More aggressive k_agr must pull harder: the returned dose
-        // is strictly larger, and both stay within the delivery cap.
-        assert!(
-            dose_high > dose_low,
-            "grid dose flat: {dose_low} -> {dose_high}"
-        );
-        assert!(
-            refined_high > refined_low,
-            "refined dose flat: {refined_low} -> {refined_high}"
-        );
-        assert!(dose_low >= 0.0 && dose_high <= u_max);
-        assert!(refined_low >= 0.0 && refined_high <= u_max);
     }
 }

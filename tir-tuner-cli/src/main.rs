@@ -9,6 +9,7 @@ use tir_tuner_common::units::{MgDl, mg_dl_series};
 use chrono::NaiveDateTime;
 use clap::{Parser, Subcommand};
 use std::path::{Path, PathBuf};
+use tir_tuner_aps::controller::Nmpc;
 use tir_tuner_aps::{AutoMode, TARGET_GLUCOSE_MMOL_L};
 use tir_tuner_cli::settings_file;
 use tir_tuner_store::{ProfileChanges, Store};
@@ -48,7 +49,7 @@ enum Command {
     /// Replay one Glooko export through the closed-loop simulation
     Simulate {
         dir: PathBuf,
-        #[arg(long, default_value_t = tir_tuner_cli::engine::CONTROLLER_KAGR_DEFAULT)]
+        #[arg(long, default_value_t = tir_tuner_aps::controller::K_AGR)]
         kagr: f64,
     },
 }
@@ -236,7 +237,7 @@ fn simulate_export(dir: &Path, kagr: f64, db: &Path) -> Result<(), Error> {
         Some((_, p)) => AutoMode::new(p.auto()),
         None => {
             println!("no settings stored for {cgm_start}, using the default target and weight");
-            AutoMode::default()
+            AutoMode::without_personal_target(subject.weight_kg)
         }
     };
     println!(
@@ -251,8 +252,10 @@ fn simulate_export(dir: &Path, kagr: f64, db: &Path) -> Result<(), Error> {
         admit_glucose_mg_per_dl: 140.0,
         duration_hours: 24.0,
         meals,
-        max_delivery_u_per_h: 20.0,
-        controller_kagr: kagr,
+        nmpc: Nmpc {
+            k_agr: kagr,
+            ..Nmpc::default()
+        },
         ..SimConfig::default()
     };
     let trace = simulate(&cfg);

@@ -2,8 +2,6 @@ use chrono::NaiveTime;
 use tir_tuner_common::settings::{AutoSettings, Schedule, default_auto_target};
 use tir_tuner_common::units::MgDl;
 
-use crate::hovorka::HovorkaParams;
-
 /// Auto mode settings in the controller's units.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AutoMode {
@@ -20,6 +18,14 @@ impl AutoMode {
         }
     }
 
+    /// Personal target switched off, as for a user without settings.
+    pub fn without_personal_target(weight_kg: f64) -> Self {
+        Self {
+            target_mg_dl: default_auto_target(),
+            weight_kg,
+        }
+    }
+
     /// Personal glucose target at `t`, mmol/L.
     pub fn target_mmol_l(&self, t: NaiveTime) -> f64 {
         MgDl(self.target_mg_dl.at(t)).to_mmol_l().0
@@ -28,16 +34,6 @@ impl AutoMode {
     /// Body weight the model scales glucose and insulin volumes by.
     pub fn weight_kg(&self) -> f64 {
         self.weight_kg
-    }
-}
-
-/// No personal target, the model's reference weight.
-impl Default for AutoMode {
-    fn default() -> Self {
-        Self {
-            target_mg_dl: default_auto_target(),
-            weight_kg: HovorkaParams::default().weight_kg,
-        }
     }
 }
 

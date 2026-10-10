@@ -9,6 +9,7 @@
 #         derived = follows from the source, `note` says how
 #         user    = the user told us
 #         open    = unknown; the code refuses or leaves it out
+#         assumption = no source; our choice for the simulation, `note` says why
 #
 # Pages are PDF pages. The PDFs stay local in docs/papers/ (gitignored).
 
@@ -20,6 +21,10 @@ files = [
   "tir-tuner-common/src/settings.rs",
   "tir-tuner-common/src/units.rs",
   "tir-tuner-aps/src/settings.rs",
+  "tir-tuner-aps/src/lib.rs",
+  "tir-tuner-aps/src/hovorka.rs",
+  "tir-tuner-aps/src/controller.rs",
+  "tir-tuner-aps/src/imm.rs",
 ]
 # Literals allowed anywhere. Everything else is a named, tagged const.
 allowed = [0, 1]
@@ -32,6 +37,10 @@ battelino2019 = "Battelino T et al. Clinical targets for continuous glucose moni
 iupac = "IUPAC standard atomic weights: C 12.011, H 1.008, O 15.999"
 definition = "Unit definitions (SI prefixes, clock)"
 user = "The user, in conversation"
+h04 = "Hovorka R et al. Nonlinear model predictive control of glucose concentration in subjects with type 1 diabetes. Physiol Meas 2004;25(4):905-920. doi:10.1088/0967-3334/25/4/010"
+us504 = "US8977504B2, Hovorka R. Substance monitoring and control in human or animal bodies (US member of the CA2702345C family)"
+wilinska2010 = "Wilinska ME et al. Simulation environment to evaluate closed-loop insulin delivery systems in type 1 diabetes. J Diabetes Sci Technol 2010;4(1):132-144. doi:10.1177/193229681000400117"
+own = "Our own choice, no source"
 
 # Units
 
@@ -251,3 +260,108 @@ source = "user"
 at = "2026-10-10"
 status = "user"
 note = "Carbs logged with 0 U are hypo treatments."
+
+# Controller (tir-tuner-aps). CamAPS FX itself isn't published: these are
+# its published lineage and our stand-ins.
+
+[[claim]]
+id = "us504-egp"
+source = "us504"
+at = "p11, eq 12"
+status = "source"
+note = "EGP_B exp(-(r_E - BIC) ln2 / I_1/2). No values for EGP_B or I_1/2."
+
+[[claim]]
+id = "h04-period"
+source = "h04"
+at = "p7"
+values = [15.0]
+status = "source"
+note = "CamAPS FX adjusts every 8-12 min (ware2022 p4); the manual allows 5-15 min cycles (p72)."
+
+[[claim]]
+id = "h04-horizon"
+source = "h04"
+at = "p9"
+values = [240.0]
+status = "source"
+note = "Wilinska 2010 used 2.5 h. The FX horizon is unknown."
+
+[[claim]]
+id = "h04-max-rate"
+source = "h04"
+at = "p9, eq 9"
+values = [4.0]
+status = "source"
+note = "4 U/h for 2004 pumps. CamAPS sets it per person (manual p70), rule unpublished."
+
+[[claim]]
+id = "h04-trajectory"
+source = "h04"
+at = "p8, Fig 4"
+values = [2.0, 2.0, 1.0, 15.0]
+status = "derived"
+note = "H04 gives bands for target 6: 2 mmol/L/h above 8, 1 mmol/L/h for 6-8, 15 min halftime below 6. Here relative to the personal target."
+
+[[claim]]
+id = "own-kagr"
+source = "own"
+values = [5.0]
+status = "assumption"
+note = "H04 p9 gives the tuning rule (<5% of 36 runs below 3.3 mmol/L, fasting near 6), not the value."
+
+[[claim]]
+id = "own-rollout-step"
+source = "own"
+values = [1.0]
+status = "assumption"
+note = "The patent discretizes exactly (us504 eq 18-45). One minute matches the belief's own steps and keeps k31 dt < 1."
+
+[[claim]]
+id = "own-optimizer"
+source = "own"
+values = [6, 5, 50]
+status = "assumption"
+note = "Grid seed plus coordinate descent, at most 50 passes like H04 p9 capped Marquardt at 50 iterations. The patent uses a closed form (eq 99)."
+
+[[claim]]
+id = "own-hypo-cutoff"
+source = "own"
+status = "assumption"
+note = "The lowest personal target, 4.4 (ware2022-target-range). No source has a suspend threshold. The manual (p70) only says insulin may be reduced further when glucose is low or falling fast."
+
+[[claim]]
+id = "own-reanchor"
+source = "own"
+values = [0.5]
+status = "assumption"
+note = "Stand-in for the patent's Kalman/IMM update (eq 72-77)."
+
+[[claim]]
+id = "ware2022-ease-off"
+source = "ware2022"
+at = "p4; 126 mg/dL in ware2022b p3"
+values = [7.0]
+status = "source"
+note = "Suspends algorithm insulin below 7.0 and raises the target."
+
+[[claim]]
+id = "own-ease-off-target"
+source = "own"
+status = "assumption"
+note = "The raised Ease-off target isn't published (ware2022 p4, manual p47 'slightly higher'). We use at least the 7.0 suspension level."
+
+[[claim]]
+id = "ware2022b-boost"
+source = "ware2022b"
+at = "p3"
+values = [1.35]
+status = "source"
+note = "'approximately 35%', glucose-responsive, inactive once target is reached."
+
+[[claim]]
+id = "own-imm"
+source = "own"
+values = [3, 0.95, 0.05, 0.05, 0.03, 0.90, 0.05, 0.02, 0.05, 0.90]
+status = "assumption"
+note = "The patent (us504 p14, eq 65) defines N models and the transition matrix without values."

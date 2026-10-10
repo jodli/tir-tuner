@@ -7,5 +7,20 @@ examine_globs = [
   "tir-tuner-common/src/settings.rs",
   "tir-tuner-common/src/units.rs",
   "tir-tuner-aps/src/settings.rs",
+  "tir-tuner-aps/src/lib.rs",
+  "tir-tuner-aps/src/hovorka.rs",
+  "tir-tuner-aps/src/controller.rs",
+  "tir-tuner-aps/src/imm.rs",
 ]
 test_package = ["tir-tuner-bolus", "tir-tuner-common", "tir-tuner-aps", "tir-tuner-store", "tir-tuner-cli"]
+# Mutants that can't change a result, and the test-only H04 fixture. Exact
+# positions: update them when these lines move.
+exclude_re = [
+  # g == target lands on target in either branch.
+  "controller.rs:127:21: replace > with >= in trajectory$",
+  # Divides by ROLLOUT_STEP_MIN = 1.
+  "controller.rs:185:39: replace / with \\* in Nmpc::cost$",
+  # An equal-cost move changes nothing but the pass count.
+  "controller.rs:243:26: replace < with <= in Nmpc::sequence$",
+  "HovorkaParams::hovorka_2004",
+]

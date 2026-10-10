@@ -20,11 +20,22 @@ struct Scan {
     current: Option<Vec<f64>>,
 }
 
+/// Built only for tests, proofs or fuzzing: `cfg(test)`, `cfg(kani)`,
+/// `cfg(fuzzing)` or `cfg(any(..))` of those.
 fn is_test(attrs: &[syn::Attribute]) -> bool {
+    fn test_only(m: &syn::Meta) -> bool {
+        match m {
+            syn::Meta::Path(p) => ["test", "kani", "fuzzing"].iter().any(|t| p.is_ident(t)),
+            syn::Meta::List(l) if l.path.is_ident("any") => l
+                .parse_args_with(
+                    syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+                )
+                .is_ok_and(|ms| ms.iter().all(test_only)),
+            _ => false,
+        }
+    }
     attrs.iter().any(|a| {
-        a.path().is_ident("cfg")
-            && a.parse_args::<syn::Meta>()
-                .is_ok_and(|m| m.path().is_ident("test"))
+        a.path().is_ident("cfg") && a.parse_args::<syn::Meta>().is_ok_and(|m| test_only(&m))
     })
 }
 

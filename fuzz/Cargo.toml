@@ -11,6 +11,9 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 arbitrary = { version = "1", features = ["derive"] }
 
+[dependencies.tir-tuner-common]
+path = "../tir-tuner-common"
+
 [dependencies.tir-tuner-aps]
 path = "../tir-tuner-aps"
 
@@ -22,8 +25,8 @@ doc = false
 bench = false
 
 [[bin]]
-name = "nmpc_grid_dose"
-path = "fuzz_targets/nmpc_grid_dose.rs"
+name = "nmpc_sequence"
+path = "fuzz_targets/nmpc_sequence.rs"
 test = false
 doc = false
 bench = false

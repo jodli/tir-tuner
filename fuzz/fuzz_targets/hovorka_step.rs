@@ -18,7 +18,6 @@ struct Input {
     q3: f64,
     u_s: f64,
     u_basal: f64,
-    u_bolus: f64,
     meal: f64,
     dt: f64,
 }
@@ -40,7 +39,6 @@ fuzz_target!(|input: Input| {
         Some(q3),
         Some(u_s),
         Some(u_basal),
-        Some(u_bolus),
         Some(meal),
         Some(dt),
     ) = (
@@ -55,7 +53,6 @@ fuzz_target!(|input: Input| {
         bounded(input.q3, 0.0, 30.0),
         bounded(input.u_s, 0.0, 5.0),
         bounded(input.u_basal, 0.0, 25.0),
-        bounded(input.u_bolus, 0.0, 5.0),
         bounded(input.meal, 0.0, 5.0),
         bounded(input.dt, 0.5, 3.0),
     )
@@ -63,7 +60,7 @@ fuzz_target!(|input: Input| {
         return;
     };
 
-    let params = HovorkaParams::default();
+    let params = HovorkaParams::hovorka_2004(70.0, 1.0);
     let state = HovorkaState {
         i1,
         i2,
@@ -77,7 +74,7 @@ fuzz_target!(|input: Input| {
         u_s,
     };
 
-    let next = state.step(&params, u_basal, u_bolus, meal, dt);
+    let next = state.step(&params, u_basal, meal, dt);
 
     for (name, value) in [
         ("i1", next.i1),

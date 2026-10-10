@@ -20,6 +20,9 @@ pub const MMOL_PER_GRAM_CHO: f64 = 1000.0 / GLUCOSE_G_PER_MOL;
 /// src: si-milli
 pub const MU_PER_UNIT: f64 = 1000.0;
 
+/// Minutes per hour, for U/h rates in per-minute models. src: clock
+pub const MIN_PER_HOUR: f64 = 60.0;
+
 /// Glucose concentration, mg/dL: what the CGM, the export and the mg/dL app
 /// show.
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]

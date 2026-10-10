@@ -1,437 +1,200 @@
-//! Kani formal verification suite (only built under `cargo kani`).
+//! Kani proofs (`cargo kani -p tir-tuner-aps`).
 //!
-//! Kani is used for the properties it is actually built for: universal
-//! statements over bounded symbolic inputs whose operations are
-//! comparisons, clamps, additions and multiplications by constants. The
-//! remaining floating-point-level claims (rounding identities, dense
-//! sweeps, the wired non-negativity of the numerical model) are covered
-//! by the native `proptest` and exhaustive lattice tests in `hovorka.rs`,
-//! `imm.rs` and `controller.rs`, plus the coverage-guided `fuzz/`
-//! targets.
-//!
-//! # Source
-//!
-//! The claim families trace to the literature and the patent as follows:
-//!
-//! * the NMPC proofs reference the blueprint section 5.1 objective, which
-//!   is Hovorka et al. 2004 eq. 9 with the moving target trajectory of
-//!   its section 3.3 (`[W04]`);
-//! * the Ease-off / Boost mode invariants and the dosing bounds follow
-//!   the Ware et al. 2022 cohort trial and its intensification follow-up
-//!   (`[W22]`, `[W22B]`);
-//! * the IMM normalization proof covers the mixture update of patent
-//!   CA2702345C paragraph range [0102]-[0116] (`[CA2345]`);
-//! * `verify_step_compartment_non_negativity` is the clamped Euler
-//!   saturation primitive, an algebraic fact, not a literature claim.
-//!
-//! # What Kani proves here
-//!
-//! 1. `verify_step_compartment_non_negativity` - `HovorkaState::step`
-//!    routes every compartment through the `clamped_forward_euler`
-//!    primitive (proved in `tir_tuner_common`) on a narrow symbolic
-//!    physiological range.
-//! 2. `verify_hypo_cutoff_and_dosing_bounds` - the pump dose honors the
-//!    hard hypoglycemia cutoff and the `[0, u_max]` delivery bounds.
-//! 3. `verify_no_floating_point_panics` - the EGP submodel never emits
-//!    NaN, infinities or negative values and stays within the
-//!    low-insulin-branch cap.
-//! 4. `verify_mode_specific_dosing_invariants` - the Ease-off suspension
-//!    rule and Boost's `+35%` intensification honor the safety envelope
-//!    of the mode-aware dose calculator.
-//! 5. NMPC proofs (`verify_nmpc_candidate_rates_in_bounds`,
-//!    `verify_nmpc_cost_finite_nonneg`,
-//!    `verify_nmpc_selection_minimal_cost`,
-//!    `verify_moving_target_trajectory_decline_bounded`) - the NMPC dose
-//!    selector of the section 5.1 cost
-//!    `J(u) = sum_{j=1}^{N2} ((g_IG(t+j) - w(t+j))^2
-//!            + (1/k_agr) ((u(t+j) - u(t+j-1)) / K_u)^2)` with
-//!    `K_u = NMPC_EFFORT_UNIT_U_PER_H`:
-//!    candidate rates lie in `[0, u_max]`, a short roll-out slice of the
-//!    sequence cost is finite and non-negative, the position chosen by
-//!    `best_grid_candidate_index` attains the minimal cost over the
-//!    grid, and the coarse-decline band of the moving target trajectory
-//!    stays finite, bounded and monotone toward the target.
-//! 6. `verify_imm_probability_normalization` - normalizing a
-//!    non-negative mode-probability mixture keeps every entry
-//!    non-negative.
-//!
-//! # What is deliberately not proved by Kani
-//!
-//! CBMC bit-blasts full-`f64` multiply/divide chains with symbolic
-//! mantissas into circuits no current backend discharges in reasonable
-//! time; transcendental-heavy expressions and long multi-step model
-//! unrolling compound this. The historical effort to quantify the full
-//! `f64` domain pushed the suite past 30 minutes. Those claims therefore
-//! live in the native suite:
-//!
-//! * the rounding-dependent IMM sum-to-one and mixing/update identities
-//!   (`proptest` plus the exhaustive divisor-16 lattice in `imm.rs`),
-//! * the full-state wired non-negativity and finiteness of the model
-//!   (exhaustive slices plus a `proptest` random walk in `hovorka.rs`),
-//! * the full 16-window 240-minute roll-out instance the simulation
-//!   drives (`proptest` in `controller.rs`; the Kani cost harness only
-//!   covers a short slice), the exponential rise and band-switch of the
-//!   moving target trajectory (transcendental `powf`, hence native),
-//!   `nmpc_sequence_dose`'s realized-cost composition and the
-//!   composition of the dose with the hypoglycemia guard (native
-//!   `proptest` in `controller.rs`). The dose selector is deliberately a
-//!   pure cost minimizer: it does not see the CGM reading, so the
-//!   delivered pump rate must pass through the cutoff guard
-//!   (`is_hypoglycemic` / `compute_nmpc_dose_mode`), and that
-//!   composition is what the native test checks.
-//!
-//! Out of scope (future work): the bayesian real-time adaptation of the
-//! six individual dynamic parameters (section 3) and the process-noise
-//! state of section 3.2F. Both would require a tractable linearization
-//! or stubbing of the nonlinear model; the quantized sequence solver is
-//! the largest NMPC slice kept here.
+//! Kani proves what it handles well: bounded symbolic inputs through
+//! comparisons, clamps and short arithmetic. Long `f64` chains, the full
+//! horizon and the IMM rounding identities are covered by the proptests in
+//! `hovorka.rs`, `controller.rs`, `imm.rs` and the `fuzz/` targets.
 
 use crate::controller::{
-    DosingMode, NMPC_GRID_POINTS, NMPC_GRID_STEPS, TRAJECTORY_MAX_OFFSET_MMOL_L,
-    best_grid_candidate_index, compute_nmpc_dose, compute_nmpc_dose_mode, moving_target_trajectory,
-    nmpc_sequence_cost,
+    EASE_OFF_SUSPEND_MMOL_L, GRID_POINTS, GRID_STEPS, HYPO_CUTOFF_MMOL_L, Mode, Nmpc,
+    ROLLOUT_STEP_MIN, TRAJECTORY_STEEP_ABOVE_MMOL_L, argmin, trajectory,
 };
-use crate::hovorka::{EGP_MAX_FOLD_OVER_BASAL, HovorkaParams, HovorkaState, egp};
+use crate::hovorka::{HovorkaParams, HovorkaState, egp};
 use crate::imm::normalize_imm_probabilities;
-use crate::{EASE_OFF_TARGET_MMOL_L, HARD_HYPO_CUTOFF_MMOL_L, TARGET_GLUCOSE_MMOL_L};
+use tir_tuner_common::settings::AUTO_TARGET_MMOL_L;
 
-/// Bounds used by `verify_nmpc_cost_finite_nonneg` for the symbolic
-/// glucose-state slice, matching the specification.
-const MIN_GLUCOSE_MASS_MMOL_PER_KG: f64 = 0.1;
-const MAX_GLUCOSE_MASS_MMOL_PER_KG: f64 = 30.0;
+/// Above any CGM reading in mmol/L.
+const READING_MAX_MMOL_L: f64 = 30.0;
 
-/// Basal plasma insulin concentration of the default parameter set
-/// (1000 mU - U conversion, BIR = 1 U/h, MCR = 0.021 L/kg/min, 70 kg),
-/// used as the fixed operating point of the EGP panic-freedom proof.
-const REFERENCE_BIC_MU_PER_L: f64 = 1000.0 / (60.0 * 0.021 * 70.0);
-/// Basal EGP of the default parameter set (mmol/kg/min).
-const REFERENCE_EGP_B_MMOL_PER_KG_MIN: f64 = 0.0161;
-const REFERENCE_S_EGP_PER_MU_L: f64 = 0.019;
-
-/// Above any CGM reading (Libre 3 reads up to 400 mg/dl, 22.2 mmol/L).
-const READING_MAX_MMOL_L: f64 = 25.0;
-
-/// Proof 2: the NMPC dose calculator never prescribes a negative rate or
-/// a rate above the user-defined maximum, and it enforces the mandatory
-/// zero delivery when the CGM reads below the hard hypo cutoff.
-#[kani::proof]
-pub fn verify_hypo_cutoff_and_dosing_bounds() {
-    let ig_reading: f64 = kani::any();
-    let max_delivery_rate: f64 = 10.0; // U/h limit
-
-    kani::assume(ig_reading >= 1.0 && ig_reading <= READING_MAX_MMOL_L);
-
-    let calculated_dose = compute_nmpc_dose(ig_reading, max_delivery_rate);
-
-    kani::assert(calculated_dose >= 0.0, "dose is never negative");
-    kani::assert(
-        calculated_dose <= max_delivery_rate,
-        "dose never exceeds u_max",
-    );
-
-    if ig_reading < HARD_HYPO_CUTOFF_MMOL_L {
-        kani::assert(
-            calculated_dose == 0.0,
-            "hard hypo cutoff forces zero delivery",
-        );
-    }
+fn params() -> HovorkaParams {
+    HovorkaParams::hovorka_2004(70.0, 1.0)
 }
 
-/// Normalizing an arbitrary non-negative mode-probability mixture (with
-/// positive total weight) keeps every entry non-negative, for symbolic
-/// `f64` inputs. The rounding-dependent upper bound `<= 1.0` and the
-/// sum-to-one identity are covered natively by the exhaustive divisor-16
-/// lattice and the `proptest` cases in `imm.rs`.
+/// Every Auto mode variant delivers within `[0, u_max]`, nothing below the
+/// hypo cutoff, nothing in Ease-off below its suspension, and Boost never
+/// less than Standard.
 #[kani::proof]
-pub fn verify_imm_probability_normalization() {
-    let mut mu: [f64; 3] = [kani::any(), kani::any(), kani::any()]; // N = 3 modes
-
-    kani::assume(mu[0] >= 0.0 && mu[0] <= 1.0);
-    kani::assume(mu[1] >= 0.0 && mu[1] <= 1.0);
-    kani::assume(mu[2] >= 0.0 && mu[2] <= 1.0);
-    let sum = mu[0] + mu[1] + mu[2];
-    kani::assume(sum > 0.001); // Avoid division by zero
-
-    normalize_imm_probabilities(&mut mu);
-
-    kani::assert(mu[0] >= 0.0, "mu[0] stays non-negative");
-    kani::assert(mu[1] >= 0.0, "mu[1] stays non-negative");
-    kani::assert(mu[2] >= 0.0, "mu[2] stays non-negative");
-}
-
-/// Proof 4: the EGP submodel is NaN/infinity free, non-negative and
-/// capped at `EGP_MAX_FOLD_OVER_BASAL` times the basal EGP over the
-/// physiological remote-insulin-action domain, operating at the default
-/// configuration's basal insulin concentration.
-#[kani::proof]
-pub fn verify_no_floating_point_panics() {
-    let r_e: f64 = kani::any();
-    let bic: f64 = REFERENCE_BIC_MU_PER_L;
-    let egp_b: f64 = REFERENCE_EGP_B_MMOL_PER_KG_MIN;
-
-    kani::assume(r_e >= 0.0 && r_e <= 100.0);
-
-    let egp = egp(r_e, bic, egp_b, REFERENCE_S_EGP_PER_MU_L);
-
-    kani::assert(!egp.is_nan(), "EGP is never NaN");
-    kani::assert(!egp.is_infinite(), "EGP is never infinite");
-    kani::assert(egp >= 0.0, "EGP is never negative");
-    kani::assert(
-        egp <= EGP_MAX_FOLD_OVER_BASAL * egp_b,
-        "EGP stays within the cap on the low-insulin branch",
-    );
-}
-
-/// Proof 5: the mode-aware dose calculator keeps every operating mode
-/// (Standard / Ease-off / Boost) inside the safety envelope:
-/// `[0, u_max]` bounds, hard hypoglycemia cutoff, Ease-off suspension
-/// below the elevated target and Boost never delivering less than
-/// Standard.
-#[kani::proof]
-pub fn verify_mode_specific_dosing_invariants() {
-    let ig_reading: f64 = kani::any();
-    let max_delivery_rate: f64 = kani::any();
-
-    kani::assume(ig_reading >= 0.5 && ig_reading <= 30.0);
-    kani::assume(max_delivery_rate >= 0.1 && max_delivery_rate <= 20.0);
-
-    let standard = compute_nmpc_dose_mode(ig_reading, max_delivery_rate, DosingMode::Standard);
-    let ease_off = compute_nmpc_dose_mode(ig_reading, max_delivery_rate, DosingMode::EaseOff);
-    let boost = compute_nmpc_dose_mode(ig_reading, max_delivery_rate, DosingMode::Boost);
-
-    for dose in [standard, ease_off, boost] {
-        kani::assert(dose >= 0.0, "dose is never negative in any mode");
-        kani::assert(
-            dose <= max_delivery_rate,
-            "dose never exceeds u_max in any mode",
-        );
-    }
-
-    if ig_reading < HARD_HYPO_CUTOFF_MMOL_L {
-        kani::assert(
-            standard == 0.0,
-            "hard hypo cutoff forces zero Standard delivery",
-        );
-        kani::assert(
-            ease_off == 0.0,
-            "hard hypo cutoff forces zero Ease-off delivery",
-        );
-        kani::assert(boost == 0.0, "hard hypo cutoff forces zero Boost delivery");
-    }
-
-    if ig_reading < EASE_OFF_TARGET_MMOL_L {
-        kani::assert(
-            ease_off == 0.0,
-            "Ease-off suspends below the elevated target",
-        );
-    }
-
-    kani::assert(boost >= standard, "Boost never delivers less than Standard");
-}
-
-/// Proof 6a: every candidate rate `k / NMPC_GRID_STEPS * u_max` of the
-/// one-step NMPC grid lies in `[0, u_max]`, hence so does the selected
-/// dose. Pure rate arithmetic, deliberately separate from the cost
-/// model so this stays cheap.
-#[kani::proof]
-pub fn verify_nmpc_candidate_rates_in_bounds() {
+pub fn verify_mode_rate_invariants() {
+    let nmpc: f64 = kani::any();
+    let reading: f64 = kani::any();
+    let target: f64 = kani::any();
     let u_max: f64 = kani::any();
+    kani::assume(nmpc >= 0.0 && nmpc <= 20.0);
+    kani::assume(reading >= 0.0 && reading <= READING_MAX_MMOL_L);
+    kani::assume(target >= AUTO_TARGET_MMOL_L.0 && target <= AUTO_TARGET_MMOL_L.1);
     kani::assume(u_max >= 0.1 && u_max <= 20.0);
 
-    let mut k = 0;
-    while k <= NMPC_GRID_STEPS {
-        // Divide first, then multiply: `u_max * (k/N)` stays <= u_max
-        // under IEEE rounding, whereas `(u_max * k) / N` can round one
-        // ulp above it.
-        let u = u_max * (k as f64 / NMPC_GRID_STEPS as f64);
-        kani::assert(u >= 0.0 && u <= u_max, "candidate rate stays in [0, u_max]");
-        k += 1;
+    let standard = Mode::Standard.rate(nmpc, reading, target, u_max);
+    let ease_off = Mode::EaseOff.rate(nmpc, reading, target, u_max);
+    let boost = Mode::Boost.rate(nmpc, reading, target, u_max);
+    for r in [standard, ease_off, boost] {
+        kani::assert(r >= 0.0 && r <= u_max, "rate in [0, u_max]");
+        if reading < HYPO_CUTOFF_MMOL_L {
+            kani::assert(r == 0.0, "nothing below the hypo cutoff");
+        }
+    }
+    if reading < EASE_OFF_SUSPEND_MMOL_L {
+        kani::assert(ease_off == 0.0, "Ease-off suspends below 7.0");
+    }
+    kani::assert(boost >= standard, "Boost never below Standard");
+}
+
+/// EGP is finite and non-negative over the remote action range.
+#[kani::proof]
+pub fn verify_egp_finite_nonneg() {
+    let r_e: f64 = kani::any();
+    kani::assume(r_e >= 0.0 && r_e <= 100.0);
+    let p = params();
+    let v = egp(r_e, p.basal_insulin_conc(), p.egp_b, p.i_half);
+    kani::assert(v.is_finite() && v >= 0.0, "EGP finite and non-negative");
+}
+
+/// Every seed grid candidate lies in `[0, u_max]`.
+#[kani::proof]
+pub fn verify_grid_rates_in_bounds() {
+    let u_max: f64 = kani::any();
+    kani::assume(u_max >= 0.1 && u_max <= 20.0);
+    let nmpc = Nmpc {
+        u_max,
+        ..Nmpc::default()
+    };
+    for k in 0..=GRID_STEPS {
+        let u = nmpc.grid_rate(k);
+        kani::assert(u >= 0.0 && u <= u_max, "candidate in [0, u_max]");
     }
 }
 
-/// Proof 6b: a short roll-out slice of the section 5.1 sequence cost
-/// `J(u) = sum_{j=1..N} ((g_IG - w)^2
-///         + (1/k_agr) ((u_j - u_{j-1}) / K_u)^2)` is
-/// finite and non-negative. The state is sliced to the glucose
-/// compartments (`q1`, `q2`, `q3`, with the insulin/gut depots at zero)
-/// plus two symbolic rate sequence steps `u` and two symbolic target
-/// steps `w` (CBMC bit-blasts a long symbolic `f64` roll-out into an
-/// intractable circuit); this keeps the symbolic circuit for the
-/// prediction tractable while still exercising the real model, the EGP
-/// and the sum-of-squares cost. Finiteness of the wider model and of the
-/// full 16-window 240-minute instance the simulation drives are covered
-/// by the EGP proof, the wiring proof
-/// `verify_step_compartment_non_negativity`, the native `proptest` walk
-/// in `hovorka.rs` and the `proptest` cost test in `controller.rs`.
+/// The selected grid position has the minimal cost.
 #[kani::proof]
-pub fn verify_nmpc_cost_finite_nonneg() {
+pub fn verify_argmin_is_minimal() {
+    let costs: [f64; GRID_POINTS] = kani::any();
+    for c in costs {
+        kani::assume(c >= -10.0 && c <= 10.0);
+    }
+    let best = argmin(&costs);
+    for c in costs {
+        kani::assert(costs[best] <= c, "selected cost is minimal");
+    }
+}
+
+/// A two-sample eq 9 cost is finite and non-negative. One-minute samples
+/// keep the symbolic rollout to two model steps.
+#[kani::proof]
+pub fn verify_cost_finite_nonneg() {
     let q1: f64 = kani::any();
     let q2: f64 = kani::any();
     let q3: f64 = kani::any();
-    let u0: f64 = kani::any();
-    let u1: f64 = kani::any();
-    let w0: f64 = kani::any();
-    let w1: f64 = kani::any();
+    let u: [f64; 2] = kani::any();
+    let w: [f64; 3] = kani::any();
     let u_prev: f64 = kani::any();
-    let k_agr: f64 = kani::any();
-    let step_min: f64 = kani::any();
-
-    kani::assume(q1 >= MIN_GLUCOSE_MASS_MMOL_PER_KG && q1 <= MAX_GLUCOSE_MASS_MMOL_PER_KG);
-    kani::assume(q2 >= MIN_GLUCOSE_MASS_MMOL_PER_KG && q2 <= MAX_GLUCOSE_MASS_MMOL_PER_KG);
-    kani::assume(q3 >= MIN_GLUCOSE_MASS_MMOL_PER_KG && q3 <= MAX_GLUCOSE_MASS_MMOL_PER_KG);
-    kani::assume(u0 >= 0.0 && u0 <= 25.0);
-    kani::assume(u1 >= 0.0 && u1 <= 25.0);
-    kani::assume(w0 >= 2.0 && w0 <= 15.0);
-    kani::assume(w1 >= 2.0 && w1 <= 15.0);
+    for q in [q1, q2, q3] {
+        kani::assume(q >= 0.1 && q <= 30.0);
+    }
+    for r in u {
+        kani::assume(r >= 0.0 && r <= 20.0);
+    }
+    for g in w {
+        kani::assume(g >= 2.0 && g <= 15.0);
+    }
     kani::assume(u_prev >= 0.0 && u_prev <= 20.0);
-    kani::assume(k_agr >= 0.5 && k_agr <= 50.0);
-    kani::assume(step_min >= 5.0 && step_min <= 20.0);
 
+    let p = params();
     let state = HovorkaState {
-        i1: 0.0,
-        i2: 0.0,
-        r_d: 0.0,
-        r_e: 0.0,
-        a1: 0.0,
-        a2: 0.0,
         q1,
         q2,
         q3,
-        u_s: 0.0,
+        ..HovorkaState::basal(&p, 6.0)
     };
-    let params = HovorkaParams::default();
-    let u = [u0, u1];
-    let w = [w0, w1];
-
-    let cost = nmpc_sequence_cost(&params, state, &u, &w, u_prev, k_agr, step_min);
-
-    kani::assert(!cost.is_nan(), "NMPC cost is never NaN");
-    kani::assert(!cost.is_infinite(), "NMPC cost is never infinite");
-    kani::assert(cost >= 0.0, "NMPC cost is never negative");
+    let nmpc = Nmpc {
+        step_min: ROLLOUT_STEP_MIN,
+        n: 2,
+        ..Nmpc::default()
+    };
+    let cost = nmpc.cost(&p, state, &u, &w, u_prev);
+    kani::assert(
+        cost.is_finite() && cost >= 0.0,
+        "cost finite and non-negative",
+    );
 }
 
-/// Proof 6d: the linear decline band of the moving target trajectory
-/// (Hovorka 2004, section 3.3) stays finite, at or above the target and
-/// monotone toward it. The start is assumed at least
-/// `2 * TRAJECTORY_MAX_OFFSET_MMOL_L` above the fixed target over three
-/// steps, so the steady decline can never fall below the target and the
-/// transcendental exponential-rise branch is unreachable in this band.
-/// The band switch and the exponential rise are covered natively (see
-/// the module docs).
+/// Far above target the trajectory falls monotonically and never below
+/// the target (H04 section 3.3).
 #[kani::proof]
-pub fn verify_moving_target_trajectory_decline_bounded() {
-    let target = TARGET_GLUCOSE_MMOL_L;
-    let n = 3;
-    let step_min = 15.0;
-    let y_start: f64 = kani::any();
-
-    kani::assume(y_start >= target + 2.0 * TRAJECTORY_MAX_OFFSET_MMOL_L);
-    kani::assume(y_start <= 16.0);
-
-    let w = moving_target_trajectory(y_start, target, n, step_min);
-
-    let mut i = 0;
-    while i < n {
-        kani::assert(!w[i].is_nan(), "trajectory is never NaN");
-        kani::assert(!w[i].is_infinite(), "trajectory is never infinite");
-        kani::assert(w[i] >= target, "trajectory never undershoots the target");
-        if i > 0 {
-            kani::assert(
-                w[i] <= w[i - 1],
-                "decline band is monotone toward the target",
-            );
-        }
-        i += 1;
-    }
-}
-
-/// Proof 6c: `best_grid_candidate_index` returns the position of the
-/// minimal cost among the candidates. The costs are abstracted with
-/// `kani::any()` so the proof is pure selection logic over a bounded
-/// `f64` array and stays fast; it does not inline the physiological
-/// model.
-#[kani::proof]
-pub fn verify_nmpc_selection_minimal_cost() {
-    let mut costs = [0.0; NMPC_GRID_POINTS];
-    let mut i = 0;
-    while i < NMPC_GRID_POINTS {
-        costs[i] = kani::any();
-        kani::assume(costs[i] >= -10.0 && costs[i] <= 10.0); // finite, no NaN/infinity
-        i += 1;
-    }
-
-    let best = best_grid_candidate_index(&costs);
-
-    let mut j = 0;
-    while j < NMPC_GRID_POINTS {
+pub fn verify_trajectory_decline_bounded() {
+    let target = 6.0;
+    let y: f64 = kani::any();
+    kani::assume(y >= target + 2.0 * TRAJECTORY_STEEP_ABOVE_MMOL_L && y <= 16.0);
+    let w = trajectory(y, target, 3, 15.0);
+    for i in 1..w.len() {
+        kani::assert(w[i].is_finite(), "finite");
         kani::assert(
-            costs[best] <= costs[j],
-            "selected candidate attains the minimal cost",
+            w[i] >= target && w[i] <= w[i - 1],
+            "monotone, not below target",
         );
-        j += 1;
     }
 }
 
-/// `HovorkaState::step` routes every compartment through the
-/// `clamped_forward_euler` saturation primitive, so each compartment
-/// stays non-negative for a bounded symbolic physiological state and
-/// bounded inputs (basal/bolus insulin, meal ingestion rate and the
-/// external process-noise influx `u_s`). This complements the primitive
-/// proof above with the actual wiring of the model; the unbounded state
-/// space is covered by the native `proptest` walk in `hovorka.rs`.
+/// Normalizing a non-negative mode probability mixture keeps every entry
+/// non-negative.
 #[kani::proof]
-pub fn verify_step_compartment_non_negativity() {
-    let i1: f64 = kani::any();
-    let i2: f64 = kani::any();
-    let r_d: f64 = kani::any();
-    let r_e: f64 = kani::any();
-    let a1: f64 = kani::any();
-    let a2: f64 = kani::any();
-    let q1: f64 = kani::any();
-    let q2: f64 = kani::any();
-    let q3: f64 = kani::any();
-    let u_s: f64 = kani::any();
-    let u_basal: f64 = kani::any();
-    let u_bolus: f64 = kani::any();
-    let meal: f64 = kani::any();
+pub fn verify_imm_probability_normalization() {
+    let mut mu: [f64; 3] = kani::any();
+    for m in mu {
+        kani::assume(m >= 0.0 && m <= 1.0);
+    }
+    kani::assume(mu[0] + mu[1] + mu[2] > 0.001);
+    normalize_imm_probabilities(&mut mu);
+    for m in mu {
+        kani::assert(m >= 0.0, "stays non-negative");
+    }
+}
 
-    kani::assume(i1 >= 0.0 && i1 <= 25_000.0);
-    kani::assume(i2 >= 0.0 && i2 <= 25_000.0);
-    kani::assume(r_d >= 0.0 && r_d <= 50.0);
-    kani::assume(r_e >= 0.0 && r_e <= 50.0);
-    kani::assume(a1 >= 0.0 && a1 <= 150.0);
-    kani::assume(a2 >= 0.0 && a2 <= 150.0);
-    kani::assume(q1 >= 0.0 && q1 <= 30.0);
-    kani::assume(q2 >= 0.0 && q2 <= 30.0);
-    kani::assume(q3 >= 0.0 && q3 <= 30.0);
-    kani::assume(u_s >= 0.0 && u_s <= 5.0);
+/// `step` clamps every compartment at zero.
+#[kani::proof]
+pub fn verify_step_non_negative() {
+    let s = HovorkaState {
+        i1: kani::any(),
+        i2: kani::any(),
+        r_d: kani::any(),
+        r_e: kani::any(),
+        a1: kani::any(),
+        a2: kani::any(),
+        q1: kani::any(),
+        q2: kani::any(),
+        q3: kani::any(),
+        u_s: kani::any(),
+    };
+    for (v, hi) in [
+        (s.i1, 25_000.0),
+        (s.i2, 25_000.0),
+        (s.r_d, 50.0),
+        (s.r_e, 50.0),
+        (s.a1, 150.0),
+        (s.a2, 150.0),
+        (s.q1, 30.0),
+        (s.q2, 30.0),
+        (s.q3, 30.0),
+        (s.u_s, 5.0),
+    ] {
+        kani::assume(v >= 0.0 && v <= hi);
+    }
+    let u_basal: f64 = kani::any();
+    let meal: f64 = kani::any();
     kani::assume(u_basal >= 0.0 && u_basal <= 25.0);
-    kani::assume(u_bolus >= 0.0 && u_bolus <= 5.0);
     kani::assume(meal >= 0.0 && meal <= 5.0);
 
-    let state = HovorkaState {
-        i1,
-        i2,
-        r_d,
-        r_e,
-        a1,
-        a2,
-        q1,
-        q2,
-        q3,
-        u_s,
-    };
-    let params = HovorkaParams::default();
-
-    let next = state.step(&params, u_basal, u_bolus, meal, 1.0);
-
-    kani::assert(next.i1 >= 0.0, "i1 stays non-negative");
-    kani::assert(next.i2 >= 0.0, "i2 stays non-negative");
-    kani::assert(next.r_d >= 0.0, "r_d stays non-negative");
-    kani::assert(next.r_e >= 0.0, "r_e stays non-negative");
-    kani::assert(next.a1 >= 0.0, "a1 stays non-negative");
-    kani::assert(next.a2 >= 0.0, "a2 stays non-negative");
-    kani::assert(next.q1 >= 0.0, "q1 stays non-negative");
-    kani::assert(next.q2 >= 0.0, "q2 stays non-negative");
-    kani::assert(next.q3 >= 0.0, "q3 stays non-negative");
+    let n = s.step(&params(), u_basal, meal, 1.0);
+    for v in [n.i1, n.i2, n.r_d, n.r_e, n.a1, n.a2, n.q1, n.q2, n.q3] {
+        kani::assert(v >= 0.0, "compartment non-negative");
+    }
 }

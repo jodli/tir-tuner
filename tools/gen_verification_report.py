@@ -221,11 +221,11 @@ FUZZ_TARGETS = [
      "Arbitrary bounded f64 inputs clamped to the physiological domain (NaN / infinite inputs are skipped); "
      "after one forward-Euler step every compartment stays finite and non-negative.",
      "fuzz/fuzz_targets/hovorka_step.rs"),
-    ("nmpc_grid_dose",
+    ("nmpc_sequence",
      "The grid dose stays in [0, u_max]; every candidate roll-out cost is finite and non-negative; "
      "the selected rate equals the min-cost candidate. The refined sequence stays in [0, u_max] and "
      "its full-sequence cost is finite and non-negative.",
-     "fuzz/fuzz_targets/nmpc_grid_dose.rs"),
+     "fuzz/fuzz_targets/nmpc_sequence.rs"),
 ]
 
 
@@ -258,7 +258,7 @@ REFS = [
      "https://pubmed.ncbi.nlm.nih.gov/19750186/"),
     ("P09", "Patek, S. D., Bequette, B. W., Breton, M., Buckingham, B. A., Dassau, E., Doyle, F. J. III, Lum, J., Magni, L., Zisser, H. In Silico Preclinical Trials: Methodology and Engineering Guide to Closed-Loop Control in Type 1 Diabetes Mellitus. Journal of Diabetes Science and Technology 2009;3(2):269-282. PMC2771529.",
      "https://pubmed.ncbi.nlm.nih.gov/20144358/"),
-    ("CA2345", "Hovorka, R. (inventor). Substance Monitoring and Control in Human or Animal Bodies. Canadian patent CA2702345C, granted 2018, assigned to Cambridge Enterprise Ltd. (US family: US9402953B2, Glucose Monitoring and Control Using Multi-Model Approach.)",
+    ("CA2345", "Hovorka, R. (inventor). Substance Monitoring and Control in Human or Animal Bodies. Canadian patent CA2702345C, granted 2018, assigned to Cambridge Enterprise Ltd. (US family: US8977504B2, same title.)",
      "https://patents.google.com/patent/CA2702345C/en"),
 ]
 
@@ -270,39 +270,36 @@ DOCUMENTS = [
 # Constant name -> (reference keys, annotation). The extracted doc
 # comment is shown in the table; this adds the citation and the role.
 CONSTANT_NOTES = {
-    "TARGET_GLUCOSE_MMOL_L": (["W22"], "Default glucose target; also the basal-equilibrium anchor tuned in hovorka.rs."),
-    "TARGET_RANGE_MIN_MMOL_L": (["W22"], "User-adjustable target range."),
-    "TARGET_RANGE_MAX_MMOL_L": (["W22"], "User-adjustable target range; also the upper bound of the Kani dose-domain slice."),
-    "HARD_HYPO_CUTOFF_MMOL_L": ([], "Engineering safety invariant: mandatory zero delivery below this reading."),
-    "EASE_OFF_TARGET_MMOL_L": (["W22"], "Ease-off exercise target and suspension threshold."),
-    "BOOST_DELIVERY_FACTOR": (["W22", "W22B"], "User-initiated intensification factor."),
-    "DOSE_GAIN_U_H_PER_MMOL_L": ([], "Illustrative internal stand-in for the one-step grid NMPC (spec section 5.1); not a published CamAPS parameter."),
-    "TIME_IN_RANGE_MIN_MMOL_L": (["B26", "A23"], "TIR band lower bound (3.9 mmol/L)."),
-    "TIME_IN_RANGE_MAX_MMOL_L": (["B26", "A23"], "TIR band upper bound (10.0 mmol/L)."),
-    "SENSOR_NOISE_SD_MMOL_L": (["W10"], "In-silico scenario noise."),
-    "NMPC_GRID_STEPS": ([], "Internal grid resolution, spec section 5.1."),
-    "NMPC_GRID_POINTS": ([], "Internal: STEPS + 1, including the zero rate."),
-    "IMM_MODE_COUNT": (["CA2345"], "Number of parallel modes (N = 3)."),
-    "IMM_PROBABILITY_SUM_TOLERANCE": ([], "Accepted deviation of the normalized mixture sum from 1.0."),
-    "IMM_MARKOV_TRANSITION": (["CA2345"], "Matrix structure (column-stochastic, diagonal-dominant) from the patent; entries are illustrative tuning values."),
-    "EGP_MAX_FOLD_OVER_BASAL": ([], "Crate safety cap on the low-insulin EGP branch; documented in spec section 3.2D."),
-    "MU_PER_UNIT": (["W04"], "mU-per-U convention of the insulin mass state."),
+    "TARGET_GLUCOSE_MMOL_L": (["W22"], "Default glucose target."),
+    "CONTROL_PERIOD_MIN": (["W04"], "One reading, one rate."),
+    "HORIZON_MIN": (["W04"], "Prediction horizon N."),
+    "MAX_RATE_U_PER_H": (["W04"], "H04 rate bound; CamAPS sets it per person."),
+    "K_AGR": ([], "Own tuning; H04 publishes the rule, not the value."),
+    "ROLLOUT_STEP_MIN": ([], "Own: Euler step of the prediction."),
+    "HYPO_CUTOFF_MMOL_L": ([], "Own: no source has a suspend threshold."),
+    "EASE_OFF_SUSPEND_MMOL_L": (["W22", "W22B"], "Ease-off suspension."),
+    "BOOST_FACTOR": (["W22B"], "About 35% more, above target only."),
+    "REANCHOR_GAIN": ([], "Own stand-in for the patent's Kalman/IMM update."),
+    "GRID_STEPS": ([], "Own optimizer."),
+    "GRID_POINTS": ([], "GRID_STEPS + 1."),
+    "IMM_MODE_COUNT": (["CA2345"], "N; the patent gives no value."),
+    "IMM_MARKOV_TRANSITION": (["CA2345"], "Defined in the patent without values; ours."),
+    "MU_PER_UNIT": (["W04"], "mU per U."),
 }
 
 MODEL_PARAM_DEFAULTS = [
-    ("t_max, I", "55.0", "min", ["W04"], "Time-to-peak subcutaneous insulin absorption."),
-    ("t_max, G", "40.0", "min", ["W04"], "Time-to-peak gut glucose absorption."),
-    ("MCR_I", "0.021", "L/kg/min", ["W04"], "Metabolic clearance rate of insulin."),
-    ("weight", "70", "kg", [], "Adult reference body weight."),
-    ("p2_D", "0.02", "/min", ["W04"], "Fractional disappearance of remote disposal action."),
-    ("p2_E", "0.011", "/min", ["W04"], "Fractional disappearance of remote EGP action."),
-    ("k12 = k21", "0.066", "/min", ["W04"], "Inter-compartmental glucose transfer."),
-    ("k31", "0.01", "/min", ["W04"], "Interstitial transport to the CGM compartment."),
-    ("V_G", "0.16", "L/kg", ["W04"], "Glucose distribution volume."),
-    ("F01", "0.01", "mmol/kg/min", ["W04"], "Non-insulin dependent utilization; applied through the glucose-dependent Michaelis-Menten form F01/0.85*g_P/(g_P+1) (spec 3.2D), the same form the virtual patient body uses."),
-    ("S_ID", "5.7664e-4", "/min per mU/L", [], "Tuned so the basal equilibrium sits on the 5.8 target under the saturable uptake; not a published catch-all value."),
-    ("EGP_B", "0.0161", "mmol/kg/min", ["W04"], "Basal endogenous glucose production."),
-    ("BIR", "1.0", "U/h", [], "Basal insulin requirement of the default configuration."),
+    ("t_max, I", "55", "min", ["W04"], "H04 Table 2."),
+    ("t_max, G", "40", "min", ["W04"], "H04 Table 1."),
+    ("MCR_I", "0.12 x 0.138", "L/kg/min", ["W04"], "V_I k_e from H04 Table 1."),
+    ("p2_D, p2_E", "0.06, 0.03", "/min", ["W04"], "H04 deactivation rates ka2, ka3."),
+    ("k12", "0.066", "/min", ["W04"], "H04 Table 1; k21 = k12 is ours."),
+    ("k31", "0.093", "/min", ["W10"], "Wilinska 2010 median ka_int."),
+    ("V_G", "0.16", "L/kg", ["W04"], "H04 Table 1."),
+    ("F01", "0.0097", "mmol/kg/min", ["W04"], "H04 Table 2, constant as in the patent."),
+    ("S_ID", "8.2e-4", "/min per mU/L", ["W04"], "H04 Table 2."),
+    ("EGP_B", "0.0161", "mmol/kg/min", ["W04"], "H04's EGP0 standing in for basal EGP."),
+    ("I_1/2", "26.3", "mU/L", [], "Ours; the patent gives no value."),
+    ("F", "0.8", "", ["W04"], "H04 A_G."),
 ]
 
 
@@ -464,7 +461,7 @@ def render():
         "",
         "# coverage-guided soak",
         "cargo +nightly fuzz run hovorka_step",
-        "cargo +nightly fuzz run nmpc_grid_dose",
+        "cargo +nightly fuzz run nmpc_sequence",
     ]) + "</code></pre>"
 
     return f"""<!DOCTYPE html>
@@ -552,20 +549,16 @@ and clearance <code>MCR_I &middot; W</code>; basal/bolus inputs converted to the
 non-insulin utilization <code>F01</code>, insulin disposal <code>S_ID &middot; r_d</code>, EGP, gut
 absorption, and interstitial kinetics driving the sensor value <code>g_IG</code>.</td>
 <td>{ref_keys(['CA2345'])}{ref_keys(['W04'])}</td></tr>
-<tr><td>EGP</td><td>Exponential suppression halving basal EGP per 0.5 units of the remote EGP action <code>S_EGP*r_E</code>
-risen above its resting value, capped at <code>EGP_MAX_FOLD_OVER_BASAL &times; EGP_B</code> on the low-insulin branch;
-with the population gain this mirrors the virtual patient's suppression
-(see <a href="#caveats">caveats</a>).</td>
-<td>spec &sect;3.2D; {ref_keys(['W04'])}</td></tr>
-<tr><td>NMPC dose calculator</td><td>Hovorka 2004 eq. 9 sequence objective
-<code>J = &Sigma;(g_IG(t+j)-w(t+j))&sup2; + &Sigma; ((u(t+j)-u(t+j-1))/K_u)&sup2;/k_agr</code> over a moving target
-trajectory (&sect;3.3), seeded by a candidate-grid constant rate and refined by bounded coordinate descent;
-the first rate of the best sequence is applied. <code>K_u</code> normalizes the effort term to the glucose
-scale (with <code>K_u = 1</code> the objective is eq. 9 as published). Hard hypoglycemia cutoff and
-<code>[0, u_max]</code> delivery bounds.</td>
-<td>spec &sect;5.1; {ref_keys(['BQ13'])}</td></tr>
-<tr><td>Operating modes</td><td>Standard, Ease-off (exercise, elevated target and suspension below it),
-Boost (temporary +35% intensification).</td>
+<tr><td>EGP</td><td>Patent eq 12: basal EGP halving for every <code>I_1/2</code> of remote EGP action above
+<code>BIC</code>. The patent gives no value for <code>I_1/2</code>.</td>
+<td>{ref_keys(['CA2345'])}</td></tr>
+<tr><td>NMPC dose calculator</td><td>Hovorka 2004 eq. 9:
+<code>J = &Sigma;(g_P(t+i)-w(t+i))&sup2; + &Sigma;(u(t+i)-u(t+i-1))&sup2;/k_agr</code> over the moving target
+trajectory (&sect;3.3), predicted plasma glucose as in the patent (eq 83). A grid seed refined by coordinate
+descent replaces Marquardt; the first rate is applied.</td>
+<td>{ref_keys(['W04'])}{ref_keys(['CA2345'])}</td></tr>
+<tr><td>Auto mode variants</td><td>Applied to the NMPC rate: Boost &times;1.35 above target, Ease-off
+suspends below 7.0 mmol/L and raises the target (value ours), no insulin below the hypo cutoff (ours).</td>
 <td>{ref_keys(['W22'])}{ref_keys(['W22B'])}</td></tr>
 <tr><td>IMM bookkeeping</td><td>Bayesian mode-probability update, mixing of per-mode estimates, Markov
 transition matrix (column-stochastic, diagonal-dominant).</td>
@@ -604,12 +597,10 @@ exhaustive lattice sweeps and the <code>proptest</code> cases live in the <code>
 of the crate and are extracted here alongside their doc comments.</p>
 { ''.join(native_groups) }
 
-<h3>Grid-selector composition detail</h3>
-<p><code>nmpc_grid_dose</code> is deliberately a pure cost minimizer: it does not see the CGM reading. The
-delivered pump rate must pass through the hypoglycemia guard (<code>is_hypoglycemic</code> /
-<code>compute_nmpc_dose_mode</code>), and that composition is what the native
-<code>grid_dose_composed_with_hypo_cutoff_is_safe</code> case checks. It is not a single Kani harness
-because the two layers are proved separately there.</p>
+<h3>Dose and Auto mode rules</h3>
+<p><code>Nmpc::dose</code> is a pure cost minimizer and doesn't see the hypo cutoff. The delivered rate goes
+through <code>Mode::rate</code>, which applies the cutoff, Ease-off and Boost; Kani proves its invariants in
+<code>verify_mode_rate_invariants</code>.</p>
 """)}
 
 {section("5. Coverage-guided fuzz targets", f"""
@@ -629,28 +620,11 @@ budget about 10 seconds).</p>
 """)}
 
 {section("7. Out of scope and future work", inline("""\
-Per the blueprint section 6.4 and the suite module docs: the full 10-state IMM extended Kalman filter
-(state/covariance mixing, predict, update, likelihood) is not implemented; the crate covers
-mode-probability bookkeeping only. Multi-step eq. 9 NMPC over the full 240-minute sequence is implemented
-and wired into the closed-loop simulation (`nmpc_sequence` + refinement),
-but the Marquardt minimization of the paper is replaced by bounded
-coordinate descent over the quantized sequence. The bayesian real-time adaptation of the six
-individual dynamic parameters (section 3) is future work and would require a tractable linearization or
-stubbing of the nonlinear model before it could be verified. The process-noise state u_s is reserved
-and carried through unchanged; the stochastic increment is injected externally."""))}
-
-<div class="lint" id="caveats">
-<strong>Source-mapping caveats</strong>
-<p>The EGP submodel is the specification form of section 3.2D: a fixed 0.5 mU/L relative half-increment
-denominator plus the low-insulin-branch cap at <code>EGP_MAX_FOLD_OVER_BASAL &times; EGP_B</code>, and
-<code>F01</code> is constant (no glucose-dependent saturable elimination). This is the model the suite
-verifies, not the literal functional form of the 2004 publication; the divergence is documented in
-<code>tir-tuner-aps/src/hovorka.rs</code>. <code>S_ID</code> is a crate calibration chosen so the basal equilibrium sits
-on the 5.8 mmol/L target; it is not a published catch-all value. The IMM Markov entries are illustrative
-tuning values; the verified properties rely only on column stochasticity and non-negativity. The patent
-paragraph pointers [0102]-[0108] and [0109]-[0116] used in the blueprint could not be cross-checked
-against the flattened patent text and are unverified.</p>
-</div>
+Not implemented: the patent's per-mode Kalman filters (state and covariance mixing, prediction, update,
+likelihood), the estimation of u_S and bioavailability, and the Bayesian adaptation of the controller's
+parameters. The crate covers the IMM probability arithmetic only. Marquardt minimization is replaced by a
+grid seed plus coordinate descent. Every number in the controller is traced in `docs/sources.toml`, where
+our own choices have status `assumption`."""))}
 
 {section("References", f"""
 <ol>
