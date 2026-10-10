@@ -6,7 +6,7 @@
 use crate::derivative::{derivatives, egp, f01c, renal_excretion};
 use crate::state::BodyState;
 use crate::subject::VirtualSubject;
-use tir_tuner_common::euler::clamped_forward_euler;
+use tir_tuner_common::euler::{bisect_falling, clamped_forward_euler};
 
 /// Euler step (min). W10 doesn't give its solver; at 0.25 min the fastest
 /// rate times the step stays below 0.05. src: own-body-step
@@ -31,9 +31,6 @@ pub fn step(subject: &VirtualSubject, state: &BodyState, u_mu_per_min: f64, dt: 
     }
 }
 
-/// src: math-bisection
-const BISECTIONS: usize = 60;
-
 /// Plasma insulin (mU/L) that holds glucose at rest at `g_mmol_per_l`, as
 /// W10 p7 sets each subject to steady state at the start. Zero when uptake
 /// beats EGP even without insulin.
@@ -49,19 +46,10 @@ pub fn resting_insulin(subject: &VirtualSubject, g_mmol_per_l: f64) -> f64 {
         let x2 = subject.sid_per_mu_l * i;
         egp(subject, subject.sie_per_mu_l * i) - uptake - x1 * q1 * x2 / (x2 + subject.k12_per_min)
     };
-    let (mut lo, mut hi) = (0.0, 1.0 / subject.sie_per_mu_l);
-    if surplus(lo) <= 0.0 {
+    if surplus(0.0) <= 0.0 {
         return 0.0;
     }
-    for _ in 0..BISECTIONS {
-        let mid = f64::midpoint(lo, hi);
-        if surplus(mid) > 0.0 {
-            lo = mid;
-        } else {
-            hi = mid;
-        }
-    }
-    f64::midpoint(lo, hi)
+    bisect_falling(surplus, 0.0, 1.0 / subject.sie_per_mu_l)
 }
 
 /// The resting state at `g_mmol_per_l`: insulin from [`resting_insulin`],

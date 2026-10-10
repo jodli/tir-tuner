@@ -17,7 +17,7 @@ use tir_tuner_common::settings::AUTO_TARGET_MMOL_L;
 const READING_MAX_MMOL_L: f64 = 30.0;
 
 fn params() -> HovorkaParams {
-    HovorkaParams::hovorka_2004(70.0, 1.0)
+    HovorkaParams::from_weight_and_tdd(70.0, 50.0)
 }
 
 /// Every Auto mode variant delivers within `[0, u_max]`, nothing below the

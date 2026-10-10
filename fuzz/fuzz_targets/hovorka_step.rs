@@ -60,7 +60,7 @@ fuzz_target!(|input: Input| {
         return;
     };
 
-    let params = HovorkaParams::hovorka_2004(70.0, 1.0);
+    let params = HovorkaParams::from_weight_and_tdd(70.0, 50.0);
     let state = HovorkaState {
         i1,
         i2,

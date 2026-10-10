@@ -264,7 +264,7 @@ mod tests {
     use proptest::prelude::*;
 
     fn params() -> HovorkaParams {
-        HovorkaParams::hovorka_2004(70.0, 1.0).resting_at(6.0)
+        HovorkaParams::from_weight_and_tdd(70.0, 50.0).resting_at(6.0)
     }
 
     /// H04 Fig 4: 2 mmol/L/h more than 2 above target, 1 mmol/L/h below,

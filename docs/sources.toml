@@ -17,6 +17,7 @@
 files = [
   "tir-tuner-bolus/src/lib.rs",
   "tir-tuner-common/src/data.rs",
+  "tir-tuner-common/src/euler.rs",
   "tir-tuner-common/src/metrics.rs",
   "tir-tuner-common/src/settings.rs",
   "tir-tuner-common/src/units.rs",
@@ -287,6 +288,36 @@ status = "source"
 note = "EGP_B exp(-(r_E - BIC) ln2 / I_1/2). No values for EGP_B or I_1/2."
 
 [[claim]]
+id = "us504-bic-rest"
+source = "us504"
+at = "p11, eq 12"
+values = [5.5]
+status = "source"
+note = "BIC is the basal plasma insulin 'resulting in plasma glucose concentration of 5.5 mmol/l'."
+
+[[claim]]
+id = "h04-table1"
+source = "h04"
+at = "p5, Table 1"
+values = [0.066, 0.06, 0.03, 0.138, 0.12, 0.16, 0.8, 40.0]
+status = "source"
+note = "k12, ka2, ka3, ke, VI, VG, AG, tmax,G. MCR_I = VI ke."
+
+[[claim]]
+id = "h04-table2"
+source = "h04"
+at = "p5, Table 2"
+values = [51.2e-4, 8.2e-4, 520e-4, 0.0161, 0.0097, 55.0]
+status = "source"
+note = "SIT, SID, SIE, EGP0, F01, tmax,I. Means of the Bayesian priors from healthy subjects (H02); tmax,I is lispro. At a T1D basal they can't hold rest: for 36 U/day at 50 kg, EGP0 (1 - SIE BIC) is 0.0040 against F01 0.0097."
+
+[[claim]]
+id = "own-tdd-sensitivity"
+source = "own"
+status = "assumption"
+note = "Weight and TDD to the patent's parameters. Sourced steps: Walsh eq 1 (BIR), us504 eq 14 (BIC), us504 eq 12 (BIC holds 5.5), manual p70 (TDD indicates sensitivity). Ours: one factor on H04's three sensitivities so H04's model rests at 5.5 on BIC (0.39 for 36 U/day at 50 kg), then the patent's EGP and insulin-dependent uptake matched to the scaled H04 model in level and slope at BIC, k21 as H04's x1 at basal, F01 closing the rest. CamAPS then learns (ware2022 p4); this model doesn't."
+
+[[claim]]
 id = "h04-period"
 source = "h04"
 at = "p7"
@@ -323,7 +354,7 @@ id = "own-kagr"
 source = "own"
 values = [5.0]
 status = "assumption"
-note = "H04 p9 gives the tuning rule (<5% of 36 runs below 3.3 mmol/L, fasting near 6), not the value."
+note = "H04 p9 gives the tuning rule (<5% of 36 runs below 3.3 mmol/L, fasting near 6), not the value. With the weight + TDD model every k_agr from 0.5 to 50 meets it (0 of 36 fasting runs from 72-270 mg/dL below 3.3, fasting mean 5.8), and none changes the realistic day (TBR 9-10% on one seed set). Those dips come from W10's variability: off, the day has 0% TBR with or without sensor noise."
 
 [[claim]]
 id = "own-rollout-step"

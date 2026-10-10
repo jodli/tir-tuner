@@ -44,7 +44,7 @@ To simulate the next four hours, the controller needs a picture of the body it i
 
 Two details matter:
 
-- **The picture is deliberately approximate.** The controller's model is a simplified sketch of the person it doses, and the loop is tested against the mismatch, because the real system lives with it.
+- **The picture is deliberately approximate.** The controller's model is a simplified sketch of the person it doses, and the loop is tested against the mismatch, because the real system lives with it. It is built from the two numbers you enter in the app, your weight and your average daily insulin, plus published averages from Hovorka 2004. The simulated body has its own values and doesn't share them.
 - **The picture is corrected constantly.** Every control period, the controller weighs the new sensor reading against what its model expected. It knows how noisy the sensor is and that a sensor error tends to persist for a while, so a single odd reading moves its picture only a little, while readings that keep pointing the same way move it a lot. It also keeps three versions of its picture: a calm one for quiet hours and two that react faster, for when something unexpected like an unannounced meal is going on. Whichever version explained the recent readings best gets the most say.
 
 This is why the pump does not panic at one weird low reading: a single reading is information, not the truth. The hard safety rules below are separate from this smoothing, and the controller cannot override them.

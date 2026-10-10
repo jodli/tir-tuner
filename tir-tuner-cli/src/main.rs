@@ -1,5 +1,5 @@
-use tir_tuner_body::subject::{VirtualSubject, W10_WEIGHT_KG};
-use tir_tuner_cli::engine::{Bolus, Meal, SimConfig, simulate};
+use tir_tuner_body::subject::VirtualSubject;
+use tir_tuner_cli::engine::{Bolus, Meal, SimConfig, simulate, w10_auto};
 use tir_tuner_common::data::BolusKind;
 use tir_tuner_common::metrics::{
     coefficient_of_variation, mean_glucose, time_below_range_pct, time_in_range_pct,
@@ -242,15 +242,16 @@ fn simulate_export(dir: &Path, kagr: f64, db: &Path) -> Result<(), Error> {
         Some((_, p)) => AutoMode::new(p.auto()),
         None => {
             println!(
-                "no settings stored for {cgm_start}, using the default target and W10's weight"
+                "no settings stored for {cgm_start}, using the default target and W10's subject"
             );
-            AutoMode::without_personal_target(W10_WEIGHT_KG)
+            w10_auto()
         }
     };
     println!(
-        "Auto mode: target {:.1} mmol/L at start, weight {} kg",
+        "Auto mode: target {:.1} mmol/L at start, weight {} kg, TDD {} U",
         auto.target_mmol_l(cgm_start.time()),
-        auto.weight_kg()
+        auto.weight_kg(),
+        auto.tdd_u()
     );
     let cfg = SimConfig {
         subject: VirtualSubject::nominal(auto.weight_kg()),

@@ -51,10 +51,13 @@ $$\frac{dq_3}{dt} = k_{31}(q_1 - q_3), \qquad g_P = \frac{q_1}{V_G}, \qquad g_{I
 
 ### 2.1 Parameters
 
-The patent names the parameters without values. Two sets exist in the code:
+The patent names the parameters without values. `HovorkaParams::from_weight_and_tdd` builds them from the two numbers CamAPS asks for, weight and TDD (manual p29, p70) [own-tdd-sensitivity]:
 
-* **Simulation belief** (`controller_model` in `tir-tuner-cli/src/engine.rs`): mapped from the virtual patient's own parameters, an oracle. CamAPS starts from weight and TDD and learns (ware2022 p4, manual p70), and nothing published says how. The mapping linearizes the body at its rest: `I_1/2` and `S_ID` match the slopes of the body's EGP and insulin-dependent uptake at basal insulin, and `F01` keeps the belief at rest on the subject's basal. `t_max,I = 1/ka`, `MCR_I = V_I ke`, `p2D = kb2`, `p2E = kb3`, `k21 = k12`, `k31 = ka_int`. The weight is the one entered in the app.
-* **Test fixture** (`HovorkaParams::hovorka_2004`): H04 Tables 1-2 where they give a value. `k31` is Wilinska 2010's median, `k21 = k12` and `I_1/2` are ours, and H04's EGP0 stands in for basal EGP.
+1. Walsh eq 1 gives the basal requirement, `BIR = 0.48 TDD / 24` [walsh-basal-share], and eq 14 gives `BIC` from it and the weight.
+2. Eq 12 defines `BIC` as the insulin that holds 5.5 mmol/L [us504-bic-rest]. H04's population values [h04-table1, h04-table2] can't hold rest at a T1D basal, so H04's three sensitivities are scaled by one factor until H04's model rests there (0.39 for 36 U/day at 50 kg). The manual calls TDD "an initial indicator of insulin sensitivity" (p70).
+3. The patent's parameters linearize the scaled H04 model at `BIC`: `EGP_B` and `I_1/2` match H04's EGP in level and slope, `S_ID` matches the slope of H04's insulin-dependent uptake, `k21` is H04's `x1` at basal, and `F01` closes the rest at 5.5. `t_max,I` is H04's lispro 55 min, `k31` Wilinska 2010's median [w10-table2].
+
+CamAPS then learns these values (ware2022 p4); this model stays fixed. Tests and proofs use the same constructor.
 
 ---
 
@@ -80,7 +83,7 @@ $$J(u) = \sum_{j=1}^{N} \big(g_P(t + j) - w(t + j)\big)^2 + \frac{1}{k_{agr}} \s
 * The prediction tracks plasma glucose, as H04 eq 9 and the patent's eq 83 do. Sample `j` is compared with the target at the same time `t + j`.
 * `u(t)` in the effort term is the rate delivered in the previous period.
 * **Rate bound:** 4 U/h, H04's value for 2004 pumps [h04-max-rate]. CamAPS sets it per person (manual p70) and doesn't publish the rule.
-* **k_agr = 5** [own-kagr]. H04 gives the tuning rule (fewer than 5% of 36 runs below 3.3 mmol/L, fasting near 6), not the value.
+* **k_agr = 5** [own-kagr]. H04 gives the tuning rule (fewer than 5% of 36 runs below 3.3 mmol/L, fasting near 6), not the value. Every value from 0.5 to 50 meets it on the simulation, and none changes the dips after meals, which come from W10's parameter variability.
 * **Trajectory** `w` (H04 section 3.3, Fig 4) [h04-trajectory]: starts at the belief's plasma glucose, falls 2 mmol/L/h while more than 2 mmol/L above target, 1 mmol/L/h between that and the target, and rises toward the target with a 15 min halftime below it. H04 states the bands for a target of 6 as 8 and 6 mmol/L; here they are relative to the personal target.
 * **Solver** [own-optimizer]: a constant-rate grid of 7 rates `k u_max / 6` seeds a coordinate descent in steps of `u_max / 30`, at most 50 passes (H04 capped Marquardt at 50 iterations), never increasing the cost. H04 uses Marquardt; the patent has a closed form (eq 99). Only the first rate is applied (H04 p7).
 
@@ -133,7 +136,7 @@ Kani proves bounded symbolic statements; long `f64` chains, the full horizon and
 
 ## 8. Open
 
-The assumptions are marked where they apply: the oracle belief (2.1), the filter's noise values (3), `k_agr` and the solver (4), the hypo cutoff and the Ease-off target (5). Not covered there:
+The assumptions are marked where they apply: the weight + TDD model (2.1), the filter's noise values (3), `k_agr` and the solver (4), the hypo cutoff and the Ease-off target (5). Not covered there:
 
 1. **Control cadence:** CamAPS FX adjusts every 8-12 min (ware2022 p4); the code uses H04's 15 min, which the sensor model also needs.
 2. **No adaptive learning.** CamAPS learns daily insulin needs, diurnal variations and meal patterns (ware2022 p4); none of it is published in detail.

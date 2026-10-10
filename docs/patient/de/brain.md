@@ -44,7 +44,7 @@ Um die nächsten vier Stunden durchzurechnen, braucht die Steuerung ein Bild des
 
 Zwei Einzelheiten zählen:
 
-- **Das Bild ist bewusst grob.** Das Modell der Steuerung ist eine vereinfachte Skizze des Menschen, dem sie Insulin gibt. Der Regelkreis wird genau gegen diese Abweichung getestet, denn das echte System muss mit ihr leben.
+- **Das Bild ist bewusst grob.** Das Modell der Steuerung ist eine vereinfachte Skizze des Menschen, dem sie Insulin gibt. Der Regelkreis wird genau gegen diese Abweichung getestet, denn das echte System muss mit ihr leben. Es entsteht aus den zwei Zahlen, die du in der App eingibst, deinem Gewicht und deiner durchschnittlichen Tagesinsulinmenge, plus veröffentlichten Mittelwerten aus Hovorka 2004. Der simulierte Körper hat eigene Werte und teilt sie nicht.
 - **Das Bild wird laufend korrigiert.** In jeder Regelperiode vergleicht die Steuerung den neuen Sensorwert mit dem, was ihr Modell erwartet hat. Sie weiß, wie stark der Sensor rauscht und dass ein Sensorfehler eine Weile anhält. Ein einzelner seltsamer Wert verschiebt ihr Bild deshalb nur wenig, Werte, die immer wieder in dieselbe Richtung zeigen, dagegen stark. Außerdem führt sie drei Versionen ihres Bildes: eine ruhige für normale Stunden und zwei, die schneller reagieren, wenn etwas Unerwartetes passiert, etwa eine nicht eingegebene Mahlzeit. Die Version, die die letzten Werte am besten erklärt hat, hat das meiste Gewicht.
 
 Deshalb gerät die Pumpe bei einem einzelnen ungewöhnlich niedrigen Wert nicht in Panik: Ein einzelner Wert ist Information, nicht die Wahrheit. Die harten Sicherheitsregeln weiter unten sind von dieser Glättung getrennt, und die Steuerung kann sie nicht aushebeln.

@@ -5,14 +5,12 @@
 //! so there is one nominal subject, scaled to a body weight.
 
 use tir_tuner_common::random::SeededRng;
-use tir_tuner_common::settings::DEFAULT_TARGET_MMOL_L;
-use tir_tuner_common::units::{HOURS_PER_DAY, MIN_PER_HOUR, MU_PER_UNIT};
+use tir_tuner_common::settings::{DEFAULT_TARGET_MMOL_L, walsh_tdd_u};
+use tir_tuner_common::units::{MIN_PER_HOUR, MU_PER_UNIT};
 
 /// W10 population mean body weight (kg). src: w10-population
 pub const W10_WEIGHT_KG: f64 = 74.9;
 
-/// Basal share of the total daily dose. src: walsh-basal-share
-const WALSH_BASAL_SHARE: f64 = 0.48;
 /// Carb factor `CarbF = 5.7 weight(kg) / TDD` (g/U). src: walsh-carb-factor
 const WALSH_CARB_FACTOR_G_PER_KG: f64 = 5.7;
 /// Grams per carb-ratio unit, "U per 10 g". src: walsh-carb-factor
@@ -144,20 +142,17 @@ impl VirtualSubject {
     /// 2011 eq 1-2 from the basal at the default target. W10's population
     /// 1.7 is a mean over subjects and overdoses the mean subject.
     pub fn walsh_icr(&self) -> f64 {
-        let tdd_u =
-            self.resting_basal_u_per_h(DEFAULT_TARGET_MMOL_L) * HOURS_PER_DAY / WALSH_BASAL_SHARE;
-        ICR_GRAMS * tdd_u / (WALSH_CARB_FACTOR_G_PER_KG * self.weight_kg)
+        ICR_GRAMS * self.walsh_tdd_u() / (WALSH_CARB_FACTOR_G_PER_KG * self.weight_kg)
+    }
+
+    /// The TDD (U) Walsh 2011 eq 1 gives for the basal at the default target.
+    pub fn walsh_tdd_u(&self) -> f64 {
+        walsh_tdd_u(self.resting_basal_u_per_h(DEFAULT_TARGET_MMOL_L))
     }
 
     /// The bolus (U) the Walsh ratio gives for `carbs_g`.
     pub fn meal_bolus_u(&self, carbs_g: f64) -> f64 {
         carbs_g / ICR_GRAMS * self.walsh_icr()
-    }
-
-    /// Steady-state plasma insulin (mU/L) under `bir_u_per_h`.
-    pub fn insulin_at_rate(&self, bir_u_per_h: f64) -> f64 {
-        bir_u_per_h / MIN_PER_HOUR * MU_PER_UNIT
-            / (self.vi_l_per_kg * self.weight_kg * self.ke_per_min)
     }
 
     /// The infusion (U/h) that holds plasma insulin at `i_mu_per_l`.
@@ -238,10 +233,9 @@ mod tests {
     }
 
     #[test]
-    fn rate_and_insulin_are_inverse() {
+    fn rate_for_insulin_is_the_clearance() {
         let s = VirtualSubject::nominal(50.0);
-        // 1 U/h = 16.67 mU/min over 0.12 * 50 * 0.14 L/min.
-        assert!((s.insulin_at_rate(1.0) - 1000.0 / 60.0 / 0.84).abs() < 1e-9);
+        // 10 mU/L x 0.12 L/kg x 50 kg x 0.14 /min, in U/h.
         assert!((s.rate_for_insulin(10.0) - 10.0 * 0.84 * 60.0 / 1000.0).abs() < 1e-12);
     }
 

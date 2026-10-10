@@ -6,12 +6,49 @@
 //! `a1`, `a2` in g, glucose masses in mmol/kg. Inputs: basal U/h, bolus U,
 //! meal g/min.
 
-use tir_tuner_common::euler::clamped_forward_euler;
+use tir_tuner_common::euler::{bisect_falling, clamped_forward_euler};
+use tir_tuner_common::settings::walsh_basal_u_per_h;
 use tir_tuner_common::units::{MIN_PER_HOUR, MMOL_PER_GRAM_CHO, MU_PER_UNIT};
 
 /// Halftime (min) at which `u_S` regresses to zero without a measurement,
 /// eq 57. The patent gives no value. src: own-us-halftime
 pub const U_S_HALFTIME_MIN: f64 = 15.0;
+
+/// Plasma glucose that basal insulin `BIC` holds (mmol/L), eq 12.
+/// src: us504-bic-rest
+pub const REST_MMOL_L: f64 = 5.5;
+
+/// src: h04-table1
+const H04_K12_PER_MIN: f64 = 0.066;
+/// src: h04-table1
+const H04_KA2_PER_MIN: f64 = 0.06;
+/// src: h04-table1
+const H04_KA3_PER_MIN: f64 = 0.03;
+/// src: h04-table1
+const H04_KE_PER_MIN: f64 = 0.138;
+/// src: h04-table1
+const H04_VI_L_PER_KG: f64 = 0.12;
+/// src: h04-table1
+const H04_VG_L_PER_KG: f64 = 0.16;
+/// src: h04-table1
+const H04_BIOAVAILABILITY: f64 = 0.8;
+/// src: h04-table1
+const H04_T_MAX_G_MIN: f64 = 40.0;
+/// src: h04-table2
+const H04_SIT_PER_MU_L: f64 = 51.2e-4;
+/// src: h04-table2
+const H04_SID_PER_MU_L: f64 = 8.2e-4;
+/// src: h04-table2
+const H04_SIE_PER_MU_L: f64 = 520e-4;
+/// src: h04-table2
+const H04_EGP0_MMOL_PER_KG_MIN: f64 = 0.0161;
+/// src: h04-table2
+const H04_F01_MMOL_PER_KG_MIN: f64 = 0.0097;
+/// Lispro; H04 has no Fiasp value. src: h04-table2
+const H04_T_MAX_I_MIN: f64 = 55.0;
+/// Plasma-interstitial transfer, W10's median; H04 samples plasma.
+/// src: w10-table2
+const W10_K31_PER_MIN: f64 = 0.0933;
 
 /// Basal plasma insulin `BIC` (mU/L), US8977504B2 eq 14.
 pub fn basal_insulin_conc(bir_u_per_h: f64, mcr_i: f64, weight_kg: f64) -> f64 {
@@ -69,6 +106,7 @@ impl HovorkaParams {
     }
 
     /// `s_id` solved so basal insulin holds plasma glucose at `g` mmol/L.
+    #[cfg(test)]
     pub fn resting_at(self, g: f64) -> Self {
         let surplus = self.egp_b - self.f_01;
         Self {
@@ -82,30 +120,66 @@ impl HovorkaParams {
         egp(r_e, self.basal_insulin_conc(), self.egp_b, self.i_half)
     }
 
-    /// Hovorka 2004 Tables 1 and 2 where they give a value, for tests and
-    /// proofs. `k31` is Wilinska 2010's median, `k21 = k12` and `i_half`
-    /// are ours, and EGP0 stands in for basal EGP.
-    #[cfg(any(test, kani, fuzzing))]
-    pub fn hovorka_2004(weight_kg: f64, bir: f64) -> Self {
+    /// The model from weight and TDD (manual p29, p70): H04 scaled to rest
+    /// at 5.5 mmol/L on `BIC`, linearized at `BIC`. src: own-tdd-sensitivity
+    pub fn from_weight_and_tdd(weight_kg: f64, tdd_u: f64) -> Self {
+        let bir = walsh_basal_u_per_h(tdd_u);
+        let mcr_i = H04_VI_L_PER_KG * H04_KE_PER_MIN;
+        let bic = basal_insulin_conc(bir, mcr_i, weight_kg);
+        let q1 = REST_MMOL_L * H04_VG_L_PER_KG;
+        let (sit, sid, sie) = h04_sensitivities(h04_sensitivity_scale(bic, q1));
+        let egp_b = H04_EGP0_MMOL_PER_KG_MIN * (1.0 - sie * bic);
+        // d/dI of H04's uptake x2 x1 Q1 / (x2 + k12), per unit of q1.
+        let d = sid * bic + H04_K12_PER_MIN;
+        let s_id = sit * sid * bic * (d + H04_K12_PER_MIN) / (d * d);
         Self {
-            t_max_i: 55.0,
-            t_max_g: 40.0,
-            mcr_i: 0.12 * 0.138,
+            t_max_i: H04_T_MAX_I_MIN,
+            t_max_g: H04_T_MAX_G_MIN,
+            mcr_i,
             weight_kg,
-            p2_d: 0.06,
-            p2_e: 0.03,
-            k12: 0.066,
-            k21: 0.066,
-            k31: 0.093,
-            v_g: 0.16,
-            f_01: 0.0097,
-            s_id: 8.2e-4,
-            egp_b: 0.0161,
-            i_half: 26.3,
-            bioavailability: 0.8,
+            p2_d: H04_KA2_PER_MIN,
+            p2_e: H04_KA3_PER_MIN,
+            k12: H04_K12_PER_MIN,
+            k21: sit * bic,
+            k31: W10_K31_PER_MIN,
+            v_g: H04_VG_L_PER_KG,
+            f_01: egp_b - s_id * bic * q1,
+            s_id,
+            egp_b,
+            i_half: std::f64::consts::LN_2 * (1.0 / sie - bic),
+            bioavailability: H04_BIOAVAILABILITY,
             bir,
         }
     }
+}
+
+/// H04's SIT, SID, SIE scaled by `s`.
+fn h04_sensitivities(s: f64) -> (f64, f64, f64) {
+    (
+        s * H04_SIT_PER_MU_L,
+        s * H04_SID_PER_MU_L,
+        s * H04_SIE_PER_MU_L,
+    )
+}
+
+/// H04's net glucose flux at rest (eq 1-4 at 5.5 mmol/L: F01c = F01, no
+/// renal loss) with sensitivities scaled by `s`.
+fn h04_rest_flux(s: f64, bic: f64, q1: f64) -> f64 {
+    let (sit, sid, sie) = h04_sensitivities(s);
+    let (x1, x2) = (sit * bic, sid * bic);
+    H04_EGP0_MMOL_PER_KG_MIN * (1.0 - sie * bic)
+        - H04_F01_MMOL_PER_KG_MIN
+        - x2 * x1 * q1 / (H04_K12_PER_MIN + x2)
+}
+
+/// The scale at which H04 rests at `q1 / VG` on `bic`; the flux falls with
+/// it and EGP is fully suppressed at the top of the bracket.
+fn h04_sensitivity_scale(bic: f64, q1: f64) -> f64 {
+    bisect_falling(
+        |s| h04_rest_flux(s, bic, q1),
+        0.0,
+        1.0 / (H04_SIE_PER_MU_L * bic),
+    )
 }
 
 /// Model state, patent eq 1-16.
@@ -259,7 +333,7 @@ mod tests {
 
     /// A basal other than 1 U/h, so scaling by it shows.
     fn params() -> HovorkaParams {
-        HovorkaParams::hovorka_2004(70.0, 0.8)
+        HovorkaParams::from_weight_and_tdd(70.0, 40.0)
     }
 
     /// Patent eq 8: u_A = 5.551 a2 / (W t_max,G).
@@ -274,12 +348,40 @@ mod tests {
         assert!((s.gut_absorption(&p) - expected).abs() < 1e-4);
     }
 
-    /// `resting_at` holds plasma glucose still on basal insulin.
+    /// Eq 12: basal insulin holds 5.5 mmol/L, in the patent's model and in
+    /// the scaled H04 model it came from.
     #[test]
-    fn resting_at_holds_glucose() {
-        let p = HovorkaParams::hovorka_2004(70.0, 0.8).resting_at(7.0);
-        let s = HovorkaState::basal(&p, 7.0);
+    fn us504_weight_and_tdd_model_rests_at_5_5() {
+        let p = HovorkaParams::from_weight_and_tdd(50.0, 36.0);
+        let s = HovorkaState::basal(&p, 5.5);
         assert!(s.derivative(&p, p.bir, 0.0).q1.abs() < 1e-15);
+        let bic = p.basal_insulin_conc();
+        let scale = h04_sensitivity_scale(bic, 5.5 * 0.16);
+        // 36 U/day at 50 kg: BIC 14.5 mU/L, H04's sensitivities at 39%.
+        assert!((bic - 14.4928).abs() < 1e-4, "{bic}");
+        assert!((scale - 0.38985).abs() < 1e-5, "{scale}");
+        // Values from an independent secant solve of H04's rest balance.
+        assert!((p.egp_b - 0.0113698).abs() < 1e-7, "{}", p.egp_b);
+        assert!((p.k21 - 0.0289282).abs() < 1e-7, "{}", p.k21);
+        assert!((p.i_half - 24.1462).abs() < 1e-4, "{}", p.i_half);
+        // Uptake slope matches H04's at BIC, by central difference.
+        let h04_uptake = |i: f64| {
+            let (x1, x2) = (scale * 51.2e-4 * i, scale * 8.2e-4 * i);
+            x2 * x1 * 5.5 * 0.16 / (x2 + 0.066)
+        };
+        let h = 1e-3;
+        let slope = (h04_uptake(bic + h) - h04_uptake(bic - h)) / (2.0 * h);
+        assert!(
+            (p.s_id * 5.5 * 0.16 - slope).abs() < 1e-10,
+            "{} vs {slope}",
+            p.s_id
+        );
+        // The manual's extreme (5 U/day at 300 kg): BIC below 1 mU/L, and the
+        // scale far above 1, still inside the bracket.
+        let p = HovorkaParams::from_weight_and_tdd(300.0, 5.0);
+        let scale = h04_sensitivity_scale(p.basal_insulin_conc(), 5.5 * 0.16);
+        assert!((scale - 16.8416).abs() < 1e-4, "{scale}");
+        assert!((p.i_half - 0.558939).abs() < 1e-6, "{}", p.i_half);
     }
 
     /// Eq 57: without measurements `u_S` halves every halftime.

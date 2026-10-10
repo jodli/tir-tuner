@@ -9,7 +9,7 @@ use std::fmt;
 
 use chrono::{NaiveDateTime, NaiveTime, Timelike};
 
-use crate::units::{GramsPerUnit, MgDl, MgDlPerUnit, MmolL, Units};
+use crate::units::{GramsPerUnit, HOURS_PER_DAY, MgDl, MgDlPerUnit, MmolL, Units};
 
 /// The app sets every time block in 30 min steps. src: man-30-min-blocks
 pub const STEP_MIN: u16 = 30;
@@ -36,6 +36,18 @@ pub const MAX_BOLUS_U: (f64, f64, f64) = (0.5, 30.0, 0.5);
 pub const WEIGHT_KG: (f64, f64, f64) = (10.0, 300.0, 1.0);
 /// src: man-tdd-range
 pub const TOTAL_DAILY_DOSE_U: (f64, f64, f64) = (5.0, 350.0, 1.0);
+/// Basal share of the total daily dose. src: walsh-basal-share
+const WALSH_BASAL_SHARE: f64 = 0.48;
+
+/// Basal (U/h) from the total daily dose, Walsh 2011 eq 1.
+pub fn walsh_basal_u_per_h(tdd_u: f64) -> f64 {
+    tdd_u * WALSH_BASAL_SHARE / HOURS_PER_DAY
+}
+
+/// Total daily dose (U) from the basal, Walsh 2011 eq 1.
+pub fn walsh_tdd_u(basal_u_per_h: f64) -> f64 {
+    basal_u_per_h * HOURS_PER_DAY / WALSH_BASAL_SHARE
+}
 
 /// A setting, named as in `settings.toml` and the store.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -252,6 +264,9 @@ impl AutoSettings {
     }
     pub fn weight_kg(&self) -> f64 {
         self.weight_kg
+    }
+    pub fn total_daily_dose_u(&self) -> f64 {
+        self.total_daily_dose_u
     }
 }
 

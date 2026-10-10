@@ -1,4 +1,4 @@
-//! Numerical integration primitives.
+//! Numerical primitives.
 
 /// Forward Euler update saturated at zero: `(prev + dt * rate).max(0.0)`.
 ///
@@ -14,6 +14,22 @@ pub fn clamped_forward_euler(prev: f64, rate: f64, dt: f64) -> f64 {
     (prev + dt * rate).max(0.0)
 }
 
+/// src: math-bisection
+const BISECTIONS: usize = 60;
+
+/// Root of `f` in `[lo, hi]` for `f` falling through zero there, by bisection.
+pub fn bisect_falling(f: impl Fn(f64) -> f64, mut lo: f64, mut hi: f64) -> f64 {
+    for _ in 0..BISECTIONS {
+        let mid = f64::midpoint(lo, hi);
+        if f(mid) > 0.0 {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    f64::midpoint(lo, hi)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -22,6 +38,11 @@ mod tests {
     fn saturates_at_zero() {
         assert_eq!(clamped_forward_euler(5.0, -10.0, 1.0), 0.0);
         assert_eq!(clamped_forward_euler(0.0, -1.0, 0.25), 0.0);
+    }
+
+    #[test]
+    fn bisection_finds_the_root() {
+        assert!((bisect_falling(|x| 2.0 - x, 0.0, 10.0) - 2.0).abs() < 1e-12);
     }
 
     #[test]
