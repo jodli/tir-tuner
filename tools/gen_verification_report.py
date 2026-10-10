@@ -1,38 +1,27 @@
 #!/usr/bin/env python3
-"""Generate docs/verification_report.html from the workspace crate sources.
+"""Generate docs/verification_report.html from the sources.
 
-The report documents what the verification suite checks and where each
-claim traces back to the literature and the patent. It is extracted
-from the Rust sources (harness doc comments, kani::assert messages,
-native test docs, constants) so it stays in sync with the suite. It is
-NOT a test-results report: nothing here runs the verifiers.
+Everything comes from files the gates also read: docs/sources.toml (claims
+and the medical file list), the `src:` tags in those files, the Kani
+harnesses, the tests, the fuzz targets and .cargo/mutants.toml. Nothing
+here runs a verifier.
 
-Usage: python3 tools/gen_verification_report.py
+Usage: uv run --python 3.12 tools/gen_verification_report.py
 """
 
 import html
 import re
+import tomllib
+from bisect import bisect_right
+from collections import Counter, defaultdict
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 OUT = REPO / "docs" / "verification_report.html"
-
-# Crate -> source files (relative to the crate root), display order.
-CRATE_FILES = {
-    "tir-tuner-aps": ["lib.rs", "hovorka.rs", "controller.rs", "imm.rs", "kalman.rs"],
-    "tir-tuner-common": ["lib.rs", "units.rs", "euler.rs", "metrics.rs", "random.rs"],
-    "tir-tuner-body": ["lib.rs", "subject.rs", "state.rs", "derivative.rs", "solver.rs"],
-    "tir-tuner-cgm": ["lib.rs", "device.rs"],
-}
-
-# Keys like "tir-tuner-aps/src/lib.rs", used everywhere as display and
-# source-link references.
-CANONICAL_ORDER = sorted(
-    f"{crate}/src/{f}" for crate, files in CRATE_FILES.items() for f in files
-)
-
-# The Kani suites, one verification module per crate.
-VERIFICATION_FILES = sorted(f"{crate}/src/verification.rs" for crate in CRATE_FILES)
+# Same syntax as tag_re() in tir-tuner-common/tests/sources.rs.
+TAG = re.compile(r"src: ([a-z0-9-]+)")
+CONST = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?const\s+([A-Z][A-Z0-9_]*)\s*:\s*[^=]+=\s*(.*)$")
+FN = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?fn\s+(\w+)")
 
 
 def esc(text: str) -> str:
@@ -40,609 +29,255 @@ def esc(text: str) -> str:
 
 
 def inline(text: str) -> str:
-    """Escape, then render `code` spans as <code>."""
-    return re.sub(r"`([^`]+)`", r"<code>\1</code>", esc(text))
+    """Escape, render `code`, and link `src:` tags to their claim."""
+    out = re.sub(r"`([^`]+)`", r"<code>\1</code>", esc(text))
+    return TAG.sub(r'<a href="#claim-\1">\1</a>', out)
 
 
-def parse_rust(path: Path) -> list[dict]:
-    """Return source items of interest in file order.
-
-    Items carry ({kind, name, docs, value, line}). Module docs (`//!`)
-    come back as kind='module'. The file's leading `//!` block is its
-    own module-level doc even without a `pub mod` declaration, so a
-    crate's lib.rs and a suite's verification.rs each yield one
-    regardless of their item layout. kani::assert messages and
-    kani::assume expressions are collected per harness by
-    harness_claims().
-    """
-    lines = path.read_text(encoding="utf-8").splitlines()
-    items: list[dict] = []
-    file_docs: list[str] = []
-    docs: list[str] = []
-    pending = None  # None | 'kani' | 'test'
-
-    def flush(kind, name, line, value=None, src=None):
-        items.append(
-            {
-                "kind": kind,
-                "name": name,
-                "docs": " ".join(src if src is not None else docs).strip(),
-                "value": value,
-                "line": line,
-            }
-        )
-
-    def flush_file_docs(line):
-        if file_docs:
-            flush("module", path.stem, line, src=file_docs)
-            file_docs.clear()
-
-    return_lines = lines
-    i = 0
-    while i < len(return_lines):
-        raw = return_lines[i]
-        s = raw.strip()
-
+def module_doc(lines: list[str]) -> str:
+    docs = []
+    for line in lines:
+        s = line.strip()
         if s.startswith("//!"):
-            file_docs.append(s[3:].strip())
-            i += 1
-            continue
+            docs.append(s[3:].strip())
+        elif s and not s.startswith("#!"):
+            break
+    return " ".join(docs)
 
-        # The `//!` block, if any, is flushed before any other line type
-        # so it does not get glued onto a following `///` item or const.
-        flush_file_docs(i + 1)
 
+def parse(rel: str) -> dict:
+    """Consts outside test code, tests, Kani harnesses and tag sites."""
+    lines = (REPO / rel).read_text(encoding="utf-8").splitlines()
+    out = {"doc": module_doc(lines), "consts": [], "tests": [], "harnesses": [], "tags": []}
+    docs, kind, in_test = [], None, False
+    i = 0
+    while i < len(lines):
+        s = lines[i].strip()
+        for m in TAG.finditer(s):
+            out["tags"].append((m.group(1), i + 1))
+        if s == "#[cfg(test)]" and not lines[i].startswith(" "):
+            in_test = True
         if s.startswith("///"):
             docs.append(s[3:].strip())
-            i += 1
-            continue
-
-        if s.startswith("#[kani::proof]"):
-            pending = "kani"
-            i += 1
-            continue
-        if s == "#[test]":
-            pending = "test"
-            i += 1
-            continue
-        if s.startswith("#[derive(") or s.startswith("#["):
-            # Attributes between the doc comment and the declaration keep
-            # the doc block pending.
-            i += 1
-            continue
-
-        mn = re.match(r"^pub\s+mod\s+([A-Za-z_]\w*)", s)
-        if mn:
-            if docs or pending:
-                flush("module", mn.group(1), i + 1)
-                pending = None
-                docs = []
-            i += 1
-            continue
-
-        cn = re.match(r"^(?:pub\s+)?const\s+([A-Za-z_]\w*)\s*:", s)
-        if cn:
-            value = raw.split("=", 1)[1].strip() if "=" in raw else ""
+        elif s == "#[test]":
+            kind = "tests"
+        elif s.startswith("#[kani::proof]"):
+            kind = "harnesses"
+        elif s.startswith("#["):
+            pass
+        elif (m := CONST.match(lines[i])) and not in_test:
+            value, start = m.group(2), i
             while not value.rstrip().endswith(";"):
                 i += 1
-                value = value + " " + return_lines[i].strip()
-            flush("const", cn.group(1), i + 1, value.rstrip(";").strip())
-            pending = None
+                value += " " + lines[i].strip()
+            out["consts"].append({"name": m.group(1), "value": value.rstrip(";").strip(),
+                                  "docs": " ".join(docs), "line": start + 1})
             docs = []
-            i += 1
-            continue
-
-        fn = re.match(r"^(?:pub\s+)?fn\s+([A-Za-z_]\w*)\s*\(", s)
-        if fn and pending:
-            flush("harness" if pending == "kani" else "native_test", fn.group(1), i + 1)
-            pending = None
+        elif (m := FN.match(lines[i])) and kind:
+            out[kind].append({"name": m.group(1), "docs": " ".join(docs), "line": i + 1})
+            docs, kind = [], None
+        else:
             docs = []
-            i += 1
-            continue
-
-        fns = re.match(r"^pub\s+fn\s+([A-Za-z_]\w*)\s*\(", s)
-        if fns:
-            if docs:
-                flush("pub_fn", fns.group(1), i + 1)
-            pending = None
-            docs = []
-            i += 1
-            continue
-
-        st = re.match(r"^pub\s+struct\s+([A-Za-z_]\w*)", s)
-        if st:
-            if docs:
-                flush("struct", st.group(1), i + 1)
-            pending = None
-            docs = []
-            i += 1
-            continue
-
-        en = re.match(r"^pub\s+enum\s+([A-Za-z_]\w*)", s)
-        if en:
-            if docs:
-                flush("enum", en.group(1), i + 1)
-            pending = None
-            docs = []
-            i += 1
-            continue
-
-        # Structural lines reset any stale doc block.
-        if re.match(r"^(use\s|impl\s|mod\s|\}|\)|else\s|#)", s) or s == "}":
-            docs = []
-            pending = None
         i += 1
+    return out
 
-    return items
 
+def kani_claims(rel: str, harnesses: list[str]) -> dict:
+    """Harness name -> (assumes, assert messages), in line order."""
+    text = (REPO / rel).read_text(encoding="utf-8")
+    fns = [(m.start(), m.group(1)) for m in re.finditer(r"^(?:pub )?fn (\w+)", text, re.MULTILINE)]
+    starts = [s for s, _ in fns]
+    claims = {h: ([], []) for h in harnesses}
 
-def harness_claims(path: Path) -> dict:
-    """Map harness name -> (asserts, assumes) extracted from its body.
+    def owner(pos: int):
+        i = bisect_right(starts, pos) - 1
+        return claims.get(fns[i][1]) if i >= 0 else None
 
-    Every kani::assert / kani::assume in the file is attributed to the
-    harness whose `pub fn` declaration precedes it. Claims are kept in
-    line order: entries are (line_no, expression, message).
-    """
-    text = path.read_text(encoding="utf-8")
-    decls = list(re.finditer(r"^pub fn (\w+)\(", text, re.MULTILINE))
-
-    def line_of(match) -> int:
-        return text[: match.start()].count("\n") + 1
-
-    def owner(line_no: int):
-        name = None
-        for d in decls:
-            if line_of(d) < line_no:
-                name = d.group(1)
-            else:
-                break
-        return name
-
-    claims: dict = {}
-    asserts = re.finditer(r'kani::assert\((.*?),\s*"([^"]*)"\s*,?\s*\)\s*;', text, re.DOTALL)
-    for m in asserts:
-        name = owner(line_of(m))
-        if name:
-            claims.setdefault(name, {"asserts": [], "assumes": []})["asserts"].append(
-                (line_of(m), m.group(1).strip().replace("\n", " "), m.group(2))
-            )
-    assumes = re.finditer(r"kani::assume\(([^)]*)\)\s*;", text)
-    for m in assumes:
-        name = owner(line_of(m))
-        if name:
-            claims.setdefault(name, {"asserts": [], "assumes": []})["assumes"].append(
-                (line_of(m), m.group(1).strip().replace("\n", " "), None)
-            )
+    for m in re.finditer(r"kani::assume\((.*?)\);", text, re.DOTALL):
+        if (c := owner(m.start())) is not None:
+            c[0].append(" ".join(m.group(1).split()))
+    for m in re.finditer(r'kani::assert\(.*?,\s*"([^"]*)"\s*,?\s*\)\s*;', text, re.DOTALL):
+        if (c := owner(m.start())) is not None:
+            c[1].append(m.group(1))
     return claims
 
 
-FUZZ_TARGETS = [
-    ("hovorka_step",
-     "Arbitrary bounded f64 inputs clamped to the physiological domain (NaN / infinite inputs are skipped); "
-     "after one forward-Euler step every compartment stays finite and non-negative.",
-     "fuzz/fuzz_targets/hovorka_step.rs"),
-    ("nmpc_sequence",
-     "The grid dose stays in [0, u_max]; every candidate roll-out cost is finite and non-negative; "
-     "the selected rate equals the min-cost candidate. The refined sequence stays in [0, u_max] and "
-     "its full-sequence cost is finite and non-negative.",
-     "fuzz/fuzz_targets/nmpc_sequence.rs"),
-]
+def src(rel: str, line: int = 0) -> str:
+    label = f"{rel}:{line}" if line else rel
+    return f'<span class="src">{esc(label)}</span>'
 
 
-def src_link(path: str, line: int = 0) -> str:
-    return f"{path}#L{line}" if line else path
+def section(anchor: str, title: str, body: str) -> str:
+    return f'<section id="{anchor}"><h2>{title}</h2>{body}</section>\n'
 
 
-def section(title: str, body: str) -> str:
-    return f'<section><h2>{title}</h2>{body}</section>\n'
-
-
-REFS = [
-    ("W04", "Hovorka, R., Canonico, V., Chassin, L., Haueter, U., Massi-Benedetti, M., Orsini Federici, M., Pieber, T., Schaller, H., Schaupp, L., Vering, T., Wilinska, M. E. Nonlinear model predictive control of glucose concentration in subjects with type 1 diabetes. Physiological Measurement 2004;25(4):905-920.",
-     "https://pubmed.ncbi.nlm.nih.gov/15382830/"),
-    ("W10", "Wilinska, M. E., Chassin, L. J., Acerini, C. L., Allen, J. M., Dunger, D. B., Hovorka, R. Simulation Environment to Evaluate Closed-Loop Insulin Delivery Systems in Type 1 Diabetes. Journal of Diabetes Science and Technology 2010;4(1):132-144. PMC2825634.",
-     "https://pmc.ncbi.nlm.nih.gov/articles/PMC2825634/"),
-    ("BQ13", "Bequette, B. W. Algorithms for a Closed-Loop Artificial Pancreas: The Case for Model Predictive Control. Journal of Diabetes Science and Technology 2013;7(6):1632-1643. PMC3876342.",
-     "https://pmc.ncbi.nlm.nih.gov/articles/PMC3876342/"),
-    ("W22", "Ware, J., Boughton, C. K., Allen, J. M., Wilinska, M. E., Tauschmann, M., Denvir, L., Thankamony, A., Campbell, F. M., Wadwa, R. P., Buckingham, B. A., Davis, N., et al. Cambridge hybrid closed-loop algorithm in children and adolescents with type 1 diabetes: a multicentre 6-month randomised controlled trial. The Lancet Digital Health 2022;4(4):e245-e255.",
-     "https://doi.org/10.1016/S2589-7500(22)00020-6"),
-    ("W22B", "Ware, J., Wilinska, M. E., Ruan, Y., Allen, J. M., Boughton, C. K., Hartnell, S., et al. Safety of user-initiated intensification of insulin delivery using Cambridge hybrid closed-loop algorithm. Journal of Diabetes Science and Technology 2024;18(4):882-888 (online 2022).",
-     "https://doi.org/10.1177/19322968221141924"),
-    ("B26", "Boughton, C. K., Hovorka, T., Wilinska, M. E., Hartnell, S., Hovorka, R. Real-world evidence on the CamAPS FX hybrid closed-loop system in people living with type 1 diabetes. Metabologia 2026;2.",
-     "https://doi.org/10.1007/s44357-025-00002-2"),
-    ("A23", "Alwan, H., et al. Real-World Evidence Analysis of a Hybrid Closed-Loop System. Journal of Diabetes Science and Technology 2025;19(2):385-389 (online 2023).",
-     "https://doi.org/10.1177/19322968231185348"),
-    ("B08", "Breton, M., Kovatchev, B. Analysis, Modeling, and Simulation of the Accuracy of Continuous Glucose Sensors. Journal of Diabetes Science and Technology 2008;2(5):853-862. PMC2740661.",
-     "https://pubmed.ncbi.nlm.nih.gov/19750186/"),
-    ("P09", "Patek, S. D., Bequette, B. W., Breton, M., Buckingham, B. A., Dassau, E., Doyle, F. J. III, Lum, J., Magni, L., Zisser, H. In Silico Preclinical Trials: Methodology and Engineering Guide to Closed-Loop Control in Type 1 Diabetes Mellitus. Journal of Diabetes Science and Technology 2009;3(2):269-282. PMC2771529.",
-     "https://pubmed.ncbi.nlm.nih.gov/20144358/"),
-    ("CA2345", "Hovorka, R. (inventor). Substance Monitoring and Control in Human or Animal Bodies. Canadian patent CA2702345C, granted 2018, assigned to Cambridge Enterprise Ltd. (US family: US8977504B2, same title.)",
-     "https://patents.google.com/patent/CA2702345C/en"),
-]
-
-DOCUMENTS = [
-    ("Verification blueprint", "docs/camaps_fx_kani_specification.md", "Controller model (section 2), NMPC and Auto mode rules (sections 4-5), verification (section 7) and open points (section 8)."),
-    ("Research report", "docs/Research_report_CamAPS_FX__Cambridge_Artificial_Pancreas_Alg.md", "Reading notes on the source papers and the patent, with corrections applied."),
-]
-
-# Constant name -> (reference keys, annotation). The extracted doc
-# comment is shown in the table; this adds the citation and the role.
-CONSTANT_NOTES = {
-    "CONTROL_PERIOD_MIN": (["W04"], "One reading, one rate."),
-    "HORIZON_MIN": (["W04"], "Prediction horizon N."),
-    "MAX_RATE_U_PER_H": (["W04"], "H04 rate bound; CamAPS sets it per person."),
-    "K_AGR": ([], "Own tuning; H04 publishes the rule, not the value."),
-    "ROLLOUT_STEP_MIN": ([], "Own: Euler step of the prediction."),
-    "HYPO_CUTOFF_MMOL_L": ([], "Own: no source has a suspend threshold."),
-    "EASE_OFF_SUSPEND_MMOL_L": (["W22", "W22B"], "Ease-off suspension."),
-    "BOOST_FACTOR": (["W22B"], "About 35% more, above target only."),
-    "MODE_PROCESS_SD": (["CA2345"], "sigma_w per IMM mode; the patent gives none. Ours."),
-    "U_S_HALFTIME_MIN": (["CA2345"], "Eq 57's u_S halftime; the patent gives none. Ours."),
-    "SENSOR_ERROR_SD_MG_DL": (["B08"], "The filter's CGM error SD, B08 p6."),
-    "SENSOR_ERROR_AR": (["B08"], "The filter's CGM error correlation, B08 eq 7."),
-    "GRID_STEPS": ([], "Own optimizer."),
-    "GRID_POINTS": ([], "GRID_STEPS + 1."),
-    "IMM_MODE_COUNT": (["CA2345"], "N; the patent gives no value."),
-    "IMM_MARKOV_TRANSITION": (["CA2345"], "Defined in the patent without values; ours."),
-    "MU_PER_UNIT": (["W04"], "mU per U."),
-}
-
-MODEL_PARAM_DEFAULTS = [
-    ("t_max, I", "55", "min", ["W04"], "H04 Table 2."),
-    ("t_max, G", "40", "min", ["W04"], "H04 Table 1."),
-    ("MCR_I", "0.12 x 0.138", "L/kg/min", ["W04"], "V_I k_e from H04 Table 1."),
-    ("p2_D, p2_E", "0.06, 0.03", "/min", ["W04"], "H04 deactivation rates ka2, ka3."),
-    ("k12", "0.066", "/min", ["W04"], "H04 Table 1; k21 = k12 is ours."),
-    ("k31", "0.093", "/min", ["W10"], "Wilinska 2010 median ka_int."),
-    ("V_G", "0.16", "L/kg", ["W04"], "H04 Table 1."),
-    ("F01", "0.0097", "mmol/kg/min", ["W04"], "H04 Table 2, constant as in the patent."),
-    ("S_ID", "8.2e-4", "/min per mU/L", ["W04"], "H04 Table 2."),
-    ("EGP_B", "0.0161", "mmol/kg/min", ["W04"], "H04's EGP0 standing in for basal EGP."),
-    ("I_1/2", "26.3", "mU/L", [], "Ours; the patent gives no value."),
-    ("F", "0.8", "", ["W04"], "H04 A_G."),
-]
-
-
-def ref_keys(keys) -> str:
-    if not keys:
-        return ""
-    labels = "".join(f'<a href="#ref-{k}">[{k}]</a>' for k in keys)
-    return f'<span class="refs">{labels}</span>'
-
-
-def build_harness_cards(ver_items, claims, ver_rel) -> list[str]:
-    cards = []
-    for h in ver_items:
-        if h["kind"] != "harness":
+def claims_section(toml: dict, used: dict) -> str:
+    sources = toml["sources"]
+    by_source = defaultdict(list)
+    for c in toml["claim"]:
+        by_source[c["source"]].append(c)
+    counts = Counter(c["status"] for c in toml["claim"])
+    summary = ", ".join(f"{n} {s}" for s, n in counts.most_common())
+    parts = [f"<p>{len(toml['claim'])} claims: {summary}. The statuses are defined at the top of "
+             f"<code>docs/sources.toml</code>.</p>"]
+    for key in sources:
+        if key not in by_source:
             continue
-        c = claims.get(h["name"], {"asserts": [], "assumes": []})
-        doc_html = f'<p>{inline(h["docs"])}</p>' if h["docs"] else ""
-        domain = "".join(
-            f'<li><code class="dom">{inline(expr)}</code></li>'
-            for _, expr, _ in sorted(c["assumes"])
-        )
-        assert_points = "".join(
-            f"<li>{inline(msg)}</li>" for _, _, msg in sorted(c["asserts"])
-        )
-        cards.append(
-            f"""<details id="harness-{h['name']}" open class="harness">
-  <summary><code>{h['name']}</code><span class="src">{src_link(ver_rel, h['line'])}</span></summary>
-  {doc_html}
-  <div class="cols">
-    <div><h4>Input domain</h4><ul>{domain}</ul></div>
-    <div><h4>Proved properties</h4><ul>{assert_points}</ul></div>
-  </div>
-</details>"""
-        )
-    return cards
+        rows = ""
+        for c in by_source[key]:
+            values = ", ".join(f"{v:g}" for v in c.get("values", []))
+            sites = "<br>".join(src(r, l) for r, l in used.get(c["id"], []))
+            rows += (f'<tr id="claim-{c["id"]}" class="st-{c["status"]}"><td><code>{c["id"]}</code></td>'
+                     f'<td>{c["status"]}</td><td>{esc(str(c.get("at", "")))}</td><td>{values}</td>'
+                     f'<td>{inline(c.get("note", ""))}</td><td>{sites}</td></tr>')
+        parts.append(f'<h3 id="src-{key}">{key}</h3><p class="moddoc">{inline(sources[key])}</p>'
+                     f"<table><tr><th>Claim</th><th>Status</th><th>Where</th><th>Values</th>"
+                     f"<th>Note</th><th>Used at</th></tr>{rows}</table>")
+    return "".join(parts)
 
 
-def build_native_groups(all_items) -> list[str]:
-    groups = []
-    for rel in CANONICAL_ORDER:
-        items = all_items[rel]
-        mod_doc = next((it for it in items if it["kind"] == "module"), None)
-        tests = [it for it in items if it["kind"] == "native_test"]
-        if not tests:
-            continue
-        rows = []
-        for t in sorted(tests, key=lambda x: x["line"]):
-            doc = render_doc_text(t["docs"]) if t["docs"] else ""
-            rows.append(
-                f'<li><div class="test-name"><code>{t["name"]}</code>'
-                f'<span class="src">{src_link(rel, t["line"])}</span></div>{doc}</li>'
-            )
-        mod_header = inline(mod_doc["docs"]) if mod_doc else ""
-        groups.append(
-            f'<div class="module"><h3>{rel}</h3>'
-            f'<div class="moddoc">{mod_header}</div><ul class="tests">{"".join(rows)}</ul></div>'
-        )
-    return groups
+def files_section(files: list[str], parsed: dict) -> str:
+    parts = []
+    for rel in files:
+        p = parsed[rel]
+        rows = "".join(
+            f'<tr><td><code>{c["name"]}</code></td><td><code>{esc(c["value"])}</code></td>'
+            f'<td>{inline(c["docs"])}</td><td>{src(rel, c["line"])}</td></tr>'
+            for c in p["consts"])
+        table = (f"<table><tr><th>Const</th><th>Value</th><th>Doc</th><th>At</th></tr>{rows}</table>"
+                 if rows else "")
+        tests = "".join(
+            f'<li><code>{t["name"]}</code> {src(rel, t["line"])}'
+            f'{"<br>" + inline(t["docs"]) if t["docs"] else ""}</li>' for t in p["tests"])
+        tests = f'<h4>Tests ({len(p["tests"])})</h4><ul class="tests">{tests}</ul>' if tests else ""
+        parts.append(f'<div class="module"><h3>{rel}</h3><p class="moddoc">{inline(p["doc"])}</p>'
+                     f"{table}{tests}</div>")
+    return "".join(parts)
 
 
-def render_doc_text(docs: str) -> str:
-    out = inline(docs)
-    return f"<p>{out}</p>" if out else ""
+def kani_section(crates: list[str]) -> tuple[str, int]:
+    parts, total = [], 0
+    for crate in crates:
+        rel = f"{crate}/src/verification.rs"
+        p = parse(rel)
+        claims = kani_claims(rel, [h["name"] for h in p["harnesses"]])
+        total += len(p["harnesses"])
+        cards = ""
+        for h in p["harnesses"]:
+            assumes, asserts = claims[h["name"]]
+            dom = "".join(f"<li><code>{esc(a)}</code></li>" for a in assumes)
+            props = "".join(f"<li>{inline(a)}</li>" for a in asserts)
+            cards += (f'<details class="harness" open><summary><code>{h["name"]}</code>{src(rel, h["line"])}'
+                      f'</summary><p>{inline(h["docs"])}</p><div class="cols">'
+                      f"<div><h4>Input domain</h4><ul>{dom}</ul></div>"
+                      f"<div><h4>Proved</h4><ul>{props}</ul></div></div></details>")
+        parts.append(f'<div class="module"><h3>{crate}</h3><p class="moddoc">{inline(p["doc"])}</p>'
+                     f'<p class="moddoc">{len(p["harnesses"])} harnesses, run with '
+                     f"<code>cargo kani -p {crate}</code>.</p>{cards}</div>")
+    return "".join(parts), total
 
 
-def build_const_rows(all_items) -> str:
+def mutants_section(files: list[str]) -> str:
+    text = (REPO / ".cargo" / "mutants.toml").read_text(encoding="utf-8")
+    block = text.split("exclude_re = [", 1)[1].split("]", 1)[0]
+    # A comment explains the patterns below it, up to the next comment.
+    reason, rows, after_pattern = "", "", False
+    for s in (line.strip() for line in block.splitlines()):
+        if s.startswith("#"):
+            reason = s.lstrip("# ") if after_pattern else f"{reason} {s.lstrip('# ')}".strip()
+            after_pattern = False
+        elif s.startswith('"'):
+            pattern = tomllib.loads(f"p = {s.rstrip(',')}")["p"]
+            rows += f"<tr><td><code>{esc(pattern)}</code></td><td>{esc(reason)}</td></tr>"
+            after_pattern = True
+    return (f"<p><code>cargo mutants</code> mutates the {len(files)} medical files (the same list as "
+            f"<code>lint.files</code>; the lint test fails if they differ). Every surviving mutant needs a test "
+            f"or the code goes. These mutants are excluded because they can't change a result:</p>"
+            f"<table><tr><th>Mutant</th><th>Why it can't change a result</th></tr>{rows}</table>")
+
+
+def fuzz_section() -> str:
     rows = ""
-    for rel in CANONICAL_ORDER:
-        for it in sorted(all_items[rel], key=lambda x: x["line"]):
-            if it["kind"] != "const":
-                continue
-            keys, note_text = [], ""
-            if it["name"] in CONSTANT_NOTES:
-                keys, note_text = CONSTANT_NOTES[it["name"]]
-            rows += (
-                f'<tr><td><code>{it["name"]}</code></td>'
-                f'<td><code>{esc(it["value"])}</code></td>'
-                f'<td>{inline(it["docs"])} {note_text} {ref_keys(keys)}</td>'
-                f'<td class="src">{src_link(rel, it["line"])}</td></tr>'
-            )
-    return rows
+    for f in sorted((REPO / "fuzz" / "fuzz_targets").glob("*.rs")):
+        rel = f.relative_to(REPO).as_posix()
+        doc = module_doc(f.read_text(encoding="utf-8").splitlines())
+        rows += f"<tr><td><code>{f.stem}</code></td><td>{inline(doc)}</td><td>{src(rel)}</td></tr>"
+    return ("<p>Coverage-guided soak over the real numerical code: <code>cargo +nightly fuzz run "
+            f"&lt;target&gt;</code>.</p><table><tr><th>Target</th><th>Asserts</th><th>File</th></tr>{rows}</table>")
 
 
-def render():
-    all_items = {}
-    for rel in CANONICAL_ORDER:
-        all_items[rel] = parse_rust(REPO / rel)
-
-    # Per-crate: verification suite items, harness claims, module docs.
-    crate_ver = {}
-    crate_lib = {}
-    for crate, files in CRATE_FILES.items():
-        lib_rel = f"{crate}/src/lib.rs"
-        ver_rel = f"{crate}/src/verification.rs"
-        ver_items = parse_rust(REPO / ver_rel)
-        claims = harness_claims(REPO / ver_rel)
-        crate_ver[crate] = {
-            "rel": ver_rel,
-            "cards": build_harness_cards(ver_items, claims, ver_rel),
-            "philosophy": inline(
-                next((it for it in ver_items if it["kind"] == "module"), {}).get("docs", "")
-            ),
-            "count": sum(1 for it in ver_items if it["kind"] == "harness"),
-        }
-        library_mod = next(
-            (it for it in all_items[lib_rel] if it["kind"] == "module"), None
-        )
-        crate_lib[crate] = inline(library_mod["docs"]) if library_mod else ""
-
-    native_groups = build_native_groups(all_items)
-    const_rows = build_const_rows(all_items)
-
-    model_rows = "".join(
-        f'<tr><td><code>{n}</code></td><td><code>{v}</code></td><td>{u}</td>'
-        f'<td>{note} {ref_keys(keys)}</td></tr>'
-        for n, v, u, keys, note in MODEL_PARAM_DEFAULTS
-    )
-
-    fuzz_rows = ""
-    for target, desc, rel in FUZZ_TARGETS:
-        fuzz_rows += (
-            f'<tr><td><code>{target}</code></td><td>{esc(desc)}</td>'
-            f'<td class="src">{src_link(rel)}</td></tr>'
-        )
-
-    ver_philosophy = "\n".join(
-        f'<div class="moddoc"><h4>{crate}</h4>{crate_ver[crate]["philosophy"]}</div>'
-        for crate in CRATE_FILES
-    )
-    library_docs = "\n".join(
-        f'<div class="moddoc"><h4>{crate}</h4>{crate_lib[crate]}</div>'
-        for crate in CRATE_FILES
-    )
-
-    crate_harnesses = "\n".join(
-        f'<div class="module"><h3>{crate}</h3><p class="moddoc">{crate_ver[crate]["count"]} '
-        f'harness(es) in {crate_ver[crate]["rel"]}.</p>{"".join(crate_ver[crate]["cards"])}</div>'
-        for crate in CRATE_FILES
-    )
-
-    references = "".join(
-        f'<li id="ref-{key}"><strong>[{key}]</strong> {esc(text)} '
-        f'<a href="{url}">{esc(url)}</a></li>'
-        for key, text, url in REFS
-    )
-    documents = "".join(
-        f'<li><strong>{name}</strong> ({inline(desc)}): '
-        f'<a href="{path}">{esc(path)}</a></li>'
-        for name, path, desc in DOCUMENTS
-    )
-
-    tool_cmds = "<pre><code>" + "\n".join([
-        "# Kani, per crate",
-        "cargo kani -p tir-tuner-aps",
-        "",
-        "# native properties incl. proptest (opt-in soak via TIR_TUNER_SOAK_ITERS)",
-        "cargo test",
-        "TIR_TUNER_SOAK_ITERS=50000 cargo test",
-        "",
-        "# coverage-guided soak",
-        "cargo +nightly fuzz run hovorka_step",
-        "cargo +nightly fuzz run nmpc_sequence",
-    ]) + "</code></pre>"
+def render() -> str:
+    toml = tomllib.loads((REPO / "docs" / "sources.toml").read_text(encoding="utf-8"))
+    files = toml["lint"]["files"]
+    parsed = {rel: parse(rel) for rel in files}
+    used = defaultdict(list)
+    for rel in files:
+        for tag, line in parsed[rel]["tags"]:
+            used[tag].append((rel, line))
+    crates = sorted(p.parent.parent.name for p in REPO.glob("tir-tuner-*/src/verification.rs"))
+    kani, harnesses = kani_section(crates)
+    tests = sum(len(p["tests"]) for p in parsed.values())
+    consts = sum(len(p["consts"]) for p in parsed.values())
+    specs = "".join(f'<li><a href="{Path(d).relative_to("docs")}">{d}</a></li>' for d in toml["lint"]["docs"])
 
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CamAPS FX controller core: verification suite catalog</title>
+<title>tir-tuner: verification report</title>
 <style>
 :root {{ color-scheme: light dark; --line: #8888; }}
 * {{ box-sizing: border-box; }}
-body {{ font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-       line-height: 1.55; margin: 0; color: #1a1a1a; background: #fff; }}
-main {{ max-width: 52rem; margin: 0 auto; padding: 2rem 1.5rem 4rem; }}
-h1 {{ font-size: 1.6rem; margin: 0 0 .2rem; }}
-h2 {{ font-size: 1.25rem; margin: 2.2rem 0 .6rem; border-bottom: 1px solid var(--line); padding-bottom: .3rem; }}
-h3 {{ font-size: 1.05rem; margin: 1.4rem 0 .4rem; }}
-h4 {{ font-size: .85rem; margin: .4rem 0; text-transform: uppercase; letter-spacing: .04em; }}
-p {{ margin: .5rem 0; }}
-code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-       font-size: .86em; background: #f1f1f1; padding: .1em .3em; border-radius: 3px; }}
-pre {{ background: #f6f6f6; padding: .8rem 1rem; overflow-x: auto; border-radius: 6px; }}
-pre code {{ background: none; padding: 0; }}
-table {{ border-collapse: collapse; width: 100%; margin: .8rem 0; font-size: .92rem; }}
-th, td {{ text-align: left; vertical-align: top; border: 1px solid var(--line);
-         padding: .45rem .6rem; }}
-th {{ background: #f4f4f4; }}
-blockquote {{ margin: .8rem 0; padding: .2rem 1rem; border-left: 3px solid var(--line); color: #444; }}
-a {{ color: #1a56db; text-decoration: none; }}
-a:hover {{ text-decoration: underline; }}
-.summary {{ font-size: .95rem; color: #444; }}
-.refs {{ white-space: nowrap; font-size: .85em; }}
-.src {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .78em; color: #666; }}
-.harness {{ border: 1px solid var(--line); border-radius: 6px; margin: .7rem 0; padding: .4rem .8rem; }}
-.harness summary {{ cursor: pointer; font-weight: 600; }}
-.harness summary .src {{ margin-left: .6em; font-weight: 400; }}
-.cols {{ display: flex; gap: 1.2rem; flex-wrap: wrap; }}
-.cols > div {{ flex: 1 1 46%; min-width: 15rem; }}
-ul.tests, ul {{ margin: .4rem 0 .8rem; padding-left: 1.2rem; }}
-.tests li {{ margin: .4rem 0; }}
-.test-name {{ font-weight: 600; }}
-.moddoc {{ font-size: .92rem; color: #333; }}
-.lint {{ background: #fdf3f3; border: 1px solid #ecc; border-radius: 6px; padding: .6rem 1rem; }}
-footer {{ margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: .82rem; color: #666; }}
-@media print {{ body {{ font-size: 11pt; }} a {{ color: inherit; }} }}
+body {{ font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; margin: 0; }}
+main {{ max-width: 64rem; margin: 0 auto; padding: 2rem 1.5rem 4rem; }}
+h2 {{ margin-top: 2.4rem; border-bottom: 1px solid var(--line); padding-bottom: .3rem; }}
+h4 {{ font-size: .85rem; margin: .6rem 0 .3rem; text-transform: uppercase; letter-spacing: .04em; }}
+code {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .86em; }}
+table {{ border-collapse: collapse; width: 100%; margin: .6rem 0; font-size: .88rem; }}
+th, td {{ text-align: left; vertical-align: top; border: 1px solid var(--line); padding: .35rem .5rem; }}
+a {{ color: #3b6fd8; text-decoration: none; }}
+.src {{ font-family: ui-monospace, Menlo, monospace; font-size: .76em; opacity: .7; margin-left: .4em; }}
+.moddoc {{ font-size: .92rem; }}
+.st-assumption td:nth-child(2), .st-open td:nth-child(2), .st-user td:nth-child(2) {{ font-weight: 600; color: #c26a00; }}
+.harness {{ border: 1px solid var(--line); border-radius: 6px; margin: .6rem 0; padding: .3rem .8rem; }}
+.harness summary {{ cursor: pointer; }}
+.cols {{ display: flex; gap: 1rem; flex-wrap: wrap; }}
+.cols > div {{ flex: 1 1 45%; min-width: 15rem; }}
+.tests li {{ margin: .3rem 0; }}
+footer {{ margin-top: 3rem; font-size: .82rem; opacity: .7; }}
 </style>
 </head>
 <body>
 <main>
-<h1>CamAPS FX controller core: verification suite catalog</h1>
-<p class="summary">What the formal verification suite checks and which tool checks it: Kani proofs, native
-property tests, and coverage-guided fuzzing, each tied to the source paper or the patent it implements.
-Generated from the Rust sources by <code>tools/gen_verification_report.py</code>. This document describes the
-current state of the suite, not a test run; it contains no pass/fail results.</p>
+<h1>tir-tuner: verification report</h1>
+<p>Every number on the medical path, where it comes from, and what checks it. Generated by
+<code>tools/gen_verification_report.py</code> from the sources the gates read; it lists the checks, it doesn't
+run them. For the plain-language version see <a href="patient/">the patient pages</a>.</p>
+<ul>
+<li><a href="#claims">{len(toml["claim"])} claims</a> in <code>docs/sources.toml</code>, each tied to a source.</li>
+<li><a href="#files">{len(files)} medical files</a> with {consts} consts and {tests} tests. The lint test
+<code>tir-tuner-common/tests/sources.rs</code> fails when a number in these files doesn't trace to a claim.</li>
+<li><a href="#mutants">Mutation gate</a> on the same files.</li>
+<li><a href="#kani">{harnesses} Kani proofs</a> in {len(crates)} crates.</li>
+<li><a href="#fuzz">Fuzz targets</a>.</li>
+</ul>
 
-{section("1. Scope and tool split", f"""
-<p>Three tools share the workload, chosen by what each is good at. <strong>Kani</strong> proves universal
-statements over bounded symbolic inputs whose operations are comparisons, clamps, additions and
-multiplications by constants. <strong>Native Rust tests</strong> (exhaustive lattice sweeps, <code>proptest</code>
-randomized cases) cover the rounding-level claims: sum-to-one identities, dense sweeps, the wired
-behaviour of the full model. <strong>Coverage-guided fuzzing</strong> soaks the actual numerical code paths.
-The split is documented in <a href="docs/camaps_fx_kani_specification.md">the blueprint</a> and repeated in the module docs the
-report is extracted from.</p>
-{library_docs}
-{ver_philosophy}
-""")}
+{section("claims", "Claims by source", claims_section(toml, used))}
+{section("files", "Medical files", files_section(files, parsed))}
+{section("mutants", "Mutation gate", mutants_section(files))}
+{section("kani", "Kani proofs", kani)}
+{section("fuzz", "Fuzz targets", fuzz_section())}
+{section("specs", "Specs", f"<p>Specs whose <code>[id]</code> citations the lint checks:</p><ul>{specs}</ul>")}
 
-{section("2. What the model is and where it comes from", f"""
-<p>The crate implements the published lineage of the Cambridge hybrid closed-loop algorithm (CamAPS FX
-itself isn't published): the glucoregulatory model of patent US8977504B2, subcutaneous insulin and gut absorption
-submodels, endogenous glucose production (EGP), the interstitial (CGM) compartment, an NMPC-style
-dose calculator with Ease-off / Boost modes, and interacting-multiple-model (IMM) mode-probability
-bookkeeping.</p>
-<table>
-<tr><th>Submodel</th><th>Contents</th><th>Source</th></tr>
-<tr><td>State</td><td>Two subcutaneous insulin depots (<code>i1</code>, <code>i2</code>),
-two remote insulin actions (<code>r_d</code>, <code>r_e</code>), two gut depots (<code>a1</code>,
-<code>a2</code>), glucose masses in the accessible, non-accessible and interstitial compartments
-(<code>q1</code>, <code>q2</code>, <code>q3</code>), and the process-noise state <code>u_s</code>.</td>
-<td>{ref_keys(['CA2345'])} US8977504B2 eq 17</td></tr>
-<tr><td>Insulin absorption</td><td>Two-depot subcutaneous chain with time-to-peak <code>t_max,I</code>
-and clearance <code>MCR_I &middot; W</code>; basal/bolus inputs converted to the mU mass convention.</td>
-<td>{ref_keys(['CA2345'])}{ref_keys(['W04'])}</td></tr>
-<tr><td>Glucose kinetics</td><td>Two-compartment transfer (<code>k12</code>, <code>k21</code>), constant
-non-insulin utilization <code>F01</code>, insulin disposal <code>S_ID &middot; r_d</code>, EGP, gut
-absorption, and interstitial kinetics driving the sensor value <code>g_IG</code>.</td>
-<td>{ref_keys(['CA2345'])}{ref_keys(['W04'])}</td></tr>
-<tr><td>EGP</td><td>Patent eq 12: basal EGP halving for every <code>I_1/2</code> of remote EGP action above
-<code>BIC</code>. The patent gives no value for <code>I_1/2</code>.</td>
-<td>{ref_keys(['CA2345'])}</td></tr>
-<tr><td>NMPC dose calculator</td><td>Hovorka 2004 eq. 9:
-<code>J = &Sigma;(g_P(t+i)-w(t+i))&sup2; + &Sigma;(u(t+i)-u(t+i-1))&sup2;/k_agr</code> over the moving target
-trajectory (&sect;3.3), predicted plasma glucose as in the patent (eq 83). A grid seed refined by coordinate
-descent replaces Marquardt; the first rate is applied.</td>
-<td>{ref_keys(['W04'])}{ref_keys(['CA2345'])}</td></tr>
-<tr><td>Auto mode variants</td><td>Applied to the NMPC rate: Boost &times;1.35 above target, Ease-off
-suspends below 7.0 mmol/L and raises the target (value ours), no insulin below the hypo cutoff (ours).</td>
-<td>{ref_keys(['W22'])}{ref_keys(['W22B'])}</td></tr>
-<tr><td>IMM filter</td><td>Three Kalman filters on [q1, q2, q3, u_S] plus a CGM error state, differing in
-&sigma;_w; mixing, likelihood and mode-probability update. &sigma;_w, the Markov matrix and the u_S halftime are ours,
-the error state's SD and correlation are B08's.</td>
-<td>{ref_keys(['CA2345'])}{ref_keys(['B08'])} US8977504B2 eq 53-82</td></tr>
-</table>
-
-<h3>Operating parameters and safety thresholds</h3>
-<p>The user-facing constants come from the Ware et al. 2022 cohort trial; the two TIR band bounds come
-from the real-world analyses. The extraction is from the workspace crate modules.</p>
-<table>
-<tr><th>Constant</th><th>Value</th><th>Meaning</th><th>Source</th></tr>
-{const_rows}
-</table>
-
-<h3>Model parameter defaults</h3>
-<p>Defaults of <code>HovorkaParams</code> (<code>HovorkaParams::default()</code>), the operating point
-both the Kani suite and the native tests run at.</p>
-<table>
-<tr><th>Parameter</th><th>Value</th><th>Unit</th><th>Notes</th></tr>
-{model_rows}
-</table>
-""")}
-
-{section("3. Kani formal proofs", f"""
-<p>The four crates each carry one verification module, compiled only under <code>cargo kani</code>. Each harness below
-shows its extracted doc comment, the symbolic input domain it is bounded to (<code>kani::assume</code>) and the
-assertions it discharges (<code>kani::assert</code>), pulled verbatim from the source.</p>
-{crate_harnesses}
-""")}
-
-{section("4. Native verification coverage", f"""
-<p>What Kani doesn't discharge: the IMM identities, long model walks and the full-horizon NMPC sequence.
-The native tests and <code>proptest</code> cases live in the <code>#[cfg(test)]</code> modules of the crate
-and are extracted here alongside their doc comments.</p>
-{ ''.join(native_groups) }
-
-<h3>Dose and Auto mode rules</h3>
-<p><code>Nmpc::dose</code> is a pure cost minimizer and doesn't see the hypo cutoff. The delivered rate goes
-through <code>Mode::rate</code>, which applies the cutoff, Ease-off and Boost; Kani proves its invariants in
-<code>verify_mode_rate_invariants</code>.</p>
-""")}
-
-{section("5. Coverage-guided fuzz targets", f"""
-<p>Soak targets in <code>fuzz/fuzz_targets/</code> over the actual numerical code, asserting the same
-safety invariants the native suite checks.</p>
-<table>
-<tr><th>Target</th><th>Properties asserted</th><th>Source</th></tr>
-{fuzz_rows}
-</table>
-""")}
-
-{section("6. Tooling", tool_cmds)}
-
-{section("7. Out of scope and future work", inline("""\
-The crate runs the patent's IMM filter with three modes and a CGM error state. Not implemented: the
-estimation of bioavailability and the Bayesian adaptation of the controller's parameters. Marquardt minimization is replaced by a
-grid seed plus coordinate descent. Every number in the controller is traced in `docs/sources.toml`, where
-our own choices have status `assumption`."""))}
-
-{section("References", f"""
-<ol>
-{references}
-</ol>
-<h3>Project documents</h3>
-<ul>{documents}</ul>
-""")}
-
-<footer>
-Generated from the four workspace crates' <code>src/</code> directories and <code>fuzz/fuzz_targets/</code>.
-Regenerate with <code>python3 tools/gen_verification_report.py</code>. This catalog reflects source
-structure, not verification results. For a plain-language companion see the pages under
-<code>docs/patient/</code>.
-</footer>
+<footer>Regenerate with <code>uv run --python 3.12 tools/gen_verification_report.py</code>. The papers stay
+local; only their citations are here.</footer>
 </main>
 </body>
-</html>"""
-
-
-def main():
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(render(), encoding="utf-8")
-    print(f"wrote {OUT}")
+</html>
+"""
 
 
 if __name__ == "__main__":
-    main()
+    OUT.write_text(render(), encoding="utf-8")
+    print(f"wrote {OUT}")

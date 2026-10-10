@@ -1,3 +1,5 @@
+//! One forward-Euler step of the controller model from bounded inputs: every
+//! compartment stays finite and non-negative.
 #![no_main]
 
 use arbitrary::Arbitrary;

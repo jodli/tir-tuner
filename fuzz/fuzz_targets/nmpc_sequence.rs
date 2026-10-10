@@ -1,3 +1,5 @@
+//! The NMPC seed cost is finite and non-negative, the refined sequence has
+//! `n` rates in `[0, u_max]`, and refining never costs more than the seed.
 #![no_main]
 
 use arbitrary::Arbitrary;
