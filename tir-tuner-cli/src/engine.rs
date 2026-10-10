@@ -19,10 +19,10 @@ use tir_tuner_aps::hovorka::{HovorkaParams, HovorkaState};
 use tir_tuner_body::pump::{DELIVERY_ERROR_CV, Pump};
 use tir_tuner_body::solver::{DT_MIN, rest_state, step};
 use tir_tuner_body::subject::{Oscillation, VirtualSubject, W10_WEIGHT_KG, meal_bio_factor};
-use tir_tuner_cgm::device::{CgmSensor, SensorParams};
+use tir_tuner_cgm::{CgmSensor, SAMPLE_INTERVAL_MIN, SensorModel};
 
 use tir_tuner_common::random::SeededRng;
-use tir_tuner_common::units::{MIN_PER_HOUR, MU_PER_UNIT, MgDl};
+use tir_tuner_common::units::{MIN_PER_HOUR, MU_PER_UNIT, MgDl, MmolL};
 
 /// Carbohydrates eaten at one moment.
 #[derive(Clone, Copy, Debug)]
@@ -69,7 +69,7 @@ pub struct SimConfig {
     pub use_controller: bool,
     /// W10's parameter oscillation and meal-to-meal bioavailability.
     pub variability: bool,
-    pub sensor: SensorParams,
+    pub sensor: SensorModel,
     pub sensor_seed: u64,
     pub pump_seed: u64,
     /// Seed for the oscillation phases and meal bioavailability.
@@ -92,7 +92,7 @@ impl Default for SimConfig {
             nmpc: Nmpc::default(),
             use_controller: true,
             variability: true,
-            sensor: SensorParams::default(),
+            sensor: SensorModel::Breton2008,
             sensor_seed: 1,
             pump_seed: 2,
             variability_seed: 3,
@@ -172,8 +172,17 @@ pub fn icr_boluses(subject: &VirtualSubject, meals: &[Meal], factor: f64) -> Vec
 }
 
 /// Run one scenario deterministically from the seeds.
+///
+/// # Panics
+///
+/// If the control period isn't the sensor's sample interval: B08's error
+/// correlation is per 15-min sample.
 pub fn simulate(cfg: &SimConfig) -> SimTrace {
     let period_min = cfg.nmpc.step_min;
+    assert_eq!(
+        period_min, SAMPLE_INTERVAL_MIN,
+        "sensor model needs 15-min samples"
+    );
     let total_min = cfg.duration_hours * MIN_PER_HOUR;
     let body_steps = (period_min / DT_MIN).round() as usize;
     let belief_steps = (period_min / ROLLOUT_STEP_MIN).round() as usize;
@@ -216,7 +225,7 @@ pub fn simulate(cfg: &SimConfig) -> SimTrace {
     // The rate of the previous period, `u(t)` in the eq 9 effort term.
     let mut last_rate_u_per_h = basal_u_per_h;
     while t < total_min {
-        let reading = sensor.read(state.c).glucose_mmol_per_l;
+        let reading = sensor.read(MmolL(state.c)).to_mmol_l().0;
         reanchor(&mut belief, &params, reading);
 
         let personal = cfg
@@ -324,15 +333,6 @@ mod tests {
         }
     }
 
-    /// The CGM's noise is about 17 mg/dL where Breton 2008 measured 11, and
-    /// the loop chases it (CGM slice). Meal tests run without it until then.
-    fn exact_sensor() -> SensorParams {
-        SensorParams {
-            noise_sd: 0.0,
-            ..SensorParams::default()
-        }
-    }
-
     /// Deterministic plant: no oscillation, no pump error.
     fn quiet() -> SimConfig {
         SimConfig {
@@ -378,7 +378,7 @@ mod tests {
         let trace = simulate(&SimConfig::default());
         let mean = mean_mmol(&trace.interstitial_mmol_per_l);
         assert!((4.4..=8.0).contains(&mean), "mean {mean}");
-        assert_eq!(tbr_pct(&trace.reading_mmol_per_l), 0.0);
+        assert_eq!(tbr_pct(&trace.interstitial_mmol_per_l), 0.0);
     }
 
     #[test]
@@ -389,8 +389,8 @@ mod tests {
             ..SimConfig::default()
         };
         let trace = simulate(&cfg);
-        let before = mean_mmol(&trace.reading_mmol_per_l[..4]);
-        let after = mean_mmol(&trace.reading_mmol_per_l[6..14]);
+        let before = mean_mmol(&trace.interstitial_mmol_per_l[..4]);
+        let after = mean_mmol(&trace.interstitial_mmol_per_l[6..14]);
         assert!(after > before + 1.0, "before {before:.2}, after {after:.2}");
     }
 
@@ -416,7 +416,7 @@ mod tests {
             ..SimConfig::default()
         };
         let trace = simulate(&cfg);
-        let end = mean_mmol(&trace.reading_mmol_per_l[trace.t_min.len() - 8..]);
+        let end = mean_mmol(&trace.interstitial_mmol_per_l[trace.t_min.len() - 8..]);
         assert!(end < 8.0, "still at {end:.2} after 10 h");
     }
 
@@ -442,24 +442,40 @@ mod tests {
         assert!((extra[1] - 5.0).abs() < 1e-12, "{extra:?}");
     }
 
-    #[test]
-    fn announced_meal_with_icr_bolus_stays_above_hypo() {
+    /// True glucose after a 60 g meal with its full ICR bolus.
+    /// The minimum falls 4.8-5.5 h in on all 16 seeds.
+    const HOURS_AFTER_MEAL: f64 = 8.0;
+
+    fn bolused_meal(sensor: SensorModel, sensor_seed: u64) -> Vec<f64> {
         let mut cfg = SimConfig {
-            duration_hours: 24.0,
+            duration_hours: HOURS_AFTER_MEAL,
             meals: vec![meal(60.0, 60.0, true)],
-            sensor: exact_sensor(),
+            sensor,
+            sensor_seed,
             ..SimConfig::default()
         };
         cfg.boluses = icr_boluses(&cfg.subject, &cfg.meals, 1.0);
-        let trace = simulate(&cfg);
-        let min = trace
-            .reading_mmol_per_l
-            .iter()
-            .copied()
-            .fold(f64::INFINITY, f64::min);
-        let max = trace.reading_mmol_per_l.iter().copied().fold(0.0, f64::max);
-        assert!(min >= 3.9, "announced meal crashed to {min:.2}");
+        simulate(&cfg).interstitial_mmol_per_l
+    }
+
+    #[test]
+    fn announced_meal_with_icr_bolus_stays_above_hypo() {
+        let ig = bolused_meal(SensorModel::Exact, 1);
+        assert_eq!(tbr_pct(&ig), 0.0, "noise-free meal went below 70 mg/dL");
+        let max = ig.iter().copied().fold(0.0, f64::max);
         assert!(max <= 14.0, "announced meal spiked to {max:.2}");
+        // B08 noise reaches the NMPC through reanchor, which has no noise
+        // model: 1 of 16 seeds dips to 3.86 (controller slice). Battelino's
+        // level 2 (54 mg/dL) must still hold.
+        for seed in 1..=4 {
+            let min = bolused_meal(SensorModel::Breton2008, seed)
+                .into_iter()
+                .fold(f64::INFINITY, f64::min);
+            assert!(
+                min >= 54.0 / 18.0156,
+                "seed {seed}: level 2 hypo at {min:.2}"
+            );
+        }
     }
 
     #[test]
@@ -468,9 +484,9 @@ mod tests {
             meals: vec![meal(300.0, 60.0, false), meal(700.0, 60.0, false)],
             ..SimConfig::default()
         };
-        let closed = tir_pct(&simulate(&cfg).reading_mmol_per_l);
+        let closed = tir_pct(&simulate(&cfg).interstitial_mmol_per_l);
         cfg.use_controller = false;
-        let open = tir_pct(&simulate(&cfg).reading_mmol_per_l);
+        let open = tir_pct(&simulate(&cfg).interstitial_mmol_per_l);
         assert!(closed > open, "closed {closed:.1}% vs open {open:.1}%");
     }
 
@@ -486,13 +502,12 @@ mod tests {
                 meal(840.0, 70.0, true),
                 meal(1140.0, 60.0, true),
             ],
-            sensor: exact_sensor(),
             ..SimConfig::default()
         };
         cfg.boluses = icr_boluses(&cfg.subject, &cfg.meals, 0.8);
         let trace = simulate(&cfg);
-        let tir = tir_pct(&trace.reading_mmol_per_l);
-        let low = tbr_pct(&trace.reading_mmol_per_l);
+        let tir = tir_pct(&trace.interstitial_mmol_per_l);
+        let low = tbr_pct(&trace.interstitial_mmol_per_l);
         assert!(tir >= 70.0, "TIR {tir:.1}%");
         assert!(low <= 4.0, "TBR {low:.1}%");
     }

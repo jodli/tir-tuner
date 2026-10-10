@@ -121,30 +121,50 @@ impl<'a> Visit<'a> for Scan {
     /// syn doesn't parse macro arguments, so walk their tokens.
     fn visit_macro(&mut self, m: &'a syn::Macro) {
         fn walk(s: &mut Scan, tokens: proc_macro2::TokenStream) {
+            let mut negate = false;
             for t in tokens {
                 match t {
-                    proc_macro2::TokenTree::Group(g) => walk(s, g.stream()),
-                    proc_macro2::TokenTree::Literal(l) => match syn::Lit::new(l) {
-                        syn::Lit::Int(i) => s.visit_lit_int(&i),
-                        syn::Lit::Float(f) => s.visit_lit_float(&f),
-                        _ => {}
-                    },
-                    _ => {}
+                    proc_macro2::TokenTree::Group(g) => {
+                        walk(s, g.stream());
+                        negate = false;
+                    }
+                    proc_macro2::TokenTree::Punct(p) if p.as_char() == '-' => negate = true,
+                    proc_macro2::TokenTree::Literal(l) => {
+                        let lit = syn::Lit::new(l);
+                        if let Some(v) = lit_value(&lit) {
+                            s.number(lit.span().start().line, if negate { -v } else { v });
+                        }
+                        negate = false;
+                    }
+                    _ => negate = false,
                 }
             }
         }
         walk(self, m.tokens.clone());
     }
 
-    fn visit_lit_int(&mut self, l: &'a syn::LitInt) {
-        self.number(
-            l.span().start().line,
-            l.base10_parse::<u64>().unwrap() as f64,
-        );
+    /// `-5.471` is one negative value, not minus a positive one.
+    fn visit_expr_unary(&mut self, u: &'a syn::ExprUnary) {
+        if let (syn::UnOp::Neg(_), syn::Expr::Lit(l)) = (&u.op, &*u.expr)
+            && let Some(v) = lit_value(&l.lit)
+        {
+            return self.number(l.lit.span().start().line, -v);
+        }
+        visit::visit_expr_unary(self, u);
     }
 
-    fn visit_lit_float(&mut self, l: &'a syn::LitFloat) {
-        self.number(l.span().start().line, l.base10_parse::<f64>().unwrap());
+    fn visit_lit(&mut self, l: &'a syn::Lit) {
+        if let Some(v) = lit_value(l) {
+            self.number(l.span().start().line, v);
+        }
+    }
+}
+
+fn lit_value(lit: &syn::Lit) -> Option<f64> {
+    match lit {
+        syn::Lit::Int(i) => Some(i.base10_parse::<u64>().unwrap() as f64),
+        syn::Lit::Float(f) => Some(f.base10_parse::<f64>().unwrap()),
+        _ => None,
     }
 }
 

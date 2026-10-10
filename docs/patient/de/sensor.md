@@ -20,18 +20,17 @@ Das Modell bildet genau das ab: Das Körpermodell hat ein Glukose-Kompartiment f
 
 ## Der Wert ist ungefähr
 
-Der Sensorwert setzt sich aus dem echten Gewebezucker und einer Abweichung zusammen. Das Fehlermodell ist bewusst realistisch und hat zwei Eigenschaften:
+Der Sensorwert setzt sich aus dem echten Gewebezucker und einer Abweichung zusammen. Das Fehlermodell stammt von Breton und Kovatchev (2008), die es an einem älteren Abbott-Sensor gemessen haben, dem FreeStyle Navigator. Für den Libre 3 gibt es noch kein veröffentlichtes Modell, das hier ist das nächstliegende. Es hat drei Eigenschaften:
 
-- **Rauschen.** Jeder Wert trägt einen Zufallsfehler mit einer Standardabweichung von 0,5 mmol/L (Standardwert).
-- **Klebrigkeit.** Weicht der Sensor jetzt ab, weicht er gleich im Anschluss weiter in dieselbe Richtung ab: Der nächste Fehler setzt sich zu 85 % aus dem aktuellen zusammen, dazu kommt ein frischer Zufallsimpuls.
+- **Größe.** Ein Wert weicht im Mittel um etwa 11 mg/dL ab (eine Standardabweichung). Die meisten Werte liegen also innerhalb von etwa 20 mg/dL um den echten Wert.
+- **Klebrigkeit.** Weicht der Sensor jetzt ab, weicht er 15 Minuten später meist in dieselbe Richtung ab. Breton hat gemessen, dass 70 % der Abweichung in den nächsten 15-Minuten-Wert mitgenommen werden. Nach einer halben Stunde ist noch etwa die Hälfte übrig.
+- **Schiefe.** Der Fehler ist keine symmetrische Glockenkurve. Große Abweichungen nach oben sind häufiger als nach unten, deshalb liegt der mittlere Fehler leicht im Plus (etwa 0,7 mg/dL).
 
-Fachlich heißt diese Klebrigkeit autoregressiv, kurz AR(1). Genau das spüren Sie, wenn der Sensor einen Nachmittag lang zu hoch oder zu niedrig liegt und nur langsam zurückfindet.
+Der simulierte Sensor liefert alle 15 Minuten einen Wert, das Intervall, das Breton gemessen hat. Ihr echter Libre 3 liefert jede Minute einen.
 
-Außerdem kalibriert sich der Sensor selbst: Eine langsame Selbstkorrektur hält den Wert in der Nähe des echten Niveaus.
+## Ganze Zahlen und die Nullgrenze
 
-## Die Nullgrenze
-
-Ein Wert wird auf Null geklemmt, bevor ihn irgendetwas anderes sieht. Der Steuerung wird nie ein Zuckerwert unter Null gemeldet, denn weder das Modell noch die Sicherheitslogik können damit umgehen. Drückt der Roherror einen Wert ins Negative, bekommt die Steuerung trotzdem Null oder mehr. Diese Klemme gehört zum beschriebenen Verhalten und zu den verifizierten Sicherheitsregeln.
+Werte kommen als ganze mg/dL heraus, so wie Ihr Libre 3 sie exportiert. Außerdem werden sie bei Null abgeschnitten: Der Steuerung wird nie ein Zucker unter Null gemeldet, auch wenn der Rohfehler dorthin zeigt. Die Quellen nennen weder den Messbereich des Libre 3 noch, wie er LO und HI anzeigt, deshalb bildet das Modell das nicht nach.
 
 ## Wo der Sensor im Regelkreis sitzt
 

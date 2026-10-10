@@ -42,9 +42,9 @@ When developing and reviewing code, the agent should refer to the following sour
 5. **Wilinska et al. (2010) ("Simulation Environment for In Silico Testing...")**:
    * *Role*: Parameter distributions for virtual T1D patient populations used in simulation scenarios.
 6. **Facchinetti et al. (2014) ("Modeling the glucose sensor error")**:
-   * *Role*: The CGM measurement error model: a lagged, autocorrelated first-order (AR(1)) additive error on the interstitial glucose, with the calibration gain applied in the CGM crate.
+   * *Role*: Not available locally; nothing in the code rests on it.
 7. **Breton & Kovatchev (2008) ("Analysis, modeling, and simulation of the accuracy of continuous glucose sensors")**:
-   * *Role*: Continuous-glucose-sensor error analysis and simulation; jointly with Facchinetti et al. (2014) the source of the CGM error structure.
+   * *Role*: The CGM error model: eq 7, an AR(1) driver (0.7 per 15 min) through a Johnson SU transform, in mg/dL.
 8. **Patek et al. (2009) ("In silico preclinical trials: methodology and engineering guide to closed-loop control in type 1 diabetes mellitus")**:
    * *Role*: The alignment-free outcome measures (time in range, mean glucose, coefficient of variation) used by the clinical reporting metrics.
 9. **Bequette (2013) ("Algorithms for a Closed-Loop Artificial Pancreas: The Case for Model Predictive Control")**:
@@ -61,7 +61,7 @@ Hovorka et al. (2004). "spec section 3.2A-F" and "spec section 5.1" point
 at *this* specification's headings. "Paragraphs [0102]-[0116]" are the
 paragraph numbers of patent CA2702345C. The verification-report reference
 keys `[W04]`, `[W10]`, `[BQ13]`, `[W22]`, `[W22B]`, `[B26]`, `[A23]`,
-`[F14]`, `[B08]`, `[P09]`, `[CA2345]` map to this section's numbered list.
+`[B08]`, `[P09]`, `[CA2345]` map to this section's numbered list.
 
 ---
 
@@ -293,7 +293,7 @@ For the Data Science team using this engine to improve the Time in Range (TIR) t
 2. **Stress Scenarios**:
    * **Unannounced Meals**: Test 40g, 70g, and 100g CHO meals without meal bolus to verify IMM adaptation speed.
    * **Exercise Events**: Simulate 45-minute bouts of aerobic exercise by doubling $S_{ID}$ and activating Ease-off mode ($7.0\text{ mmol/L}$ target).
-   * **Sensor Noise & Dropouts**: Inject Gaussian noise ($\sigma_Z = 0.5\text{ mmol/L}$) and 30-minute sensor loss periods.
+   * **Sensor Noise & Dropouts**: Use the B08 sensor error (SD about 11 mg/dL). Sensor loss has no published parameters for Libre 3.
 3. **Metric Targets**:
    * **Time in Range ($3.9\text{–}10.0\text{ mmol/L}$)**: Target $> 70\%$. The Boughton et al. (2026) real-world cohort (35,714 users, 19 countries) reaches a median TIR of $69.6\%$; the earlier Alwan et al. (2023) analysis (N = 1,805) reported a mean TIR of $72.6\%$.
    * **Time Below Range ($< 3.9\text{ mmol/L}$)**: Target $< 4\%$ (Battelino 2019).

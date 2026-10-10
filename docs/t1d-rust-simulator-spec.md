@@ -41,7 +41,7 @@ The simulator operates on a discrete-time simulation loop (typically $dt = 1.0\t
 |            |                                              |                       |
 |            |                                              v                       |
 |            |                          +----------------------------------------+  |
-|            +------------------------- | CGM Error Model (AR1 Noise + Bias)     |  |
+|            +------------------------- | CGM Error Model (B08 AR1 + Johnson)    |  |
 |                                       +----------------------------------------+  |
 +-----------------------------------------------------------------------------------+
 ```
@@ -128,13 +128,14 @@ $$k_{empt}(Q_{sto}) = k_{min} + \frac{k_{max} - k_{min}}{2} \left[ \tanh\left(\a
 #### 1. Interstitial Glucose Diffusion (1st Order Lag):
 $$\frac{dC(t)}{dt} = k_{a\_int} (G(t) - C(t)) \implies \tau = \frac{1}{k_{a\_int}} \quad (\sim 5\text{--}15 \text{ min})$$
 
-#### 2. Stochastic Measurement Noise & Calibration Model:
-$$CGM(t) = \text{Calib}(t) \cdot C(t - \tau) + \text{Drift}(t) + v(t)$$
-$$v(t) = \alpha_1 v(t-1) + e(t), \quad e(t) \sim \mathcal{N}(0, \sigma_e^2)$$
+#### 2. Measurement Error (Breton & Kovatchev 2008, eq 7):
+$$e_1 = v_1, \quad e_n = 0.7\,(e_{n-1} + v_n), \quad v_n \sim \mathcal{N}(0, 1)$$
+$$\varepsilon_n = \xi + \lambda \sinh\!\left(\frac{e_n - \gamma}{\delta}\right), \quad CGM_n = C(t_n) + \varepsilon_n$$
 
-*   $\alpha_1$: Autoregressive parameter ($\sim 0.7\text{--}0.9$).
-*   $\sigma_e$: Noise standard deviation ($\sim 2\text{--}5 \text{ mg/dL}$ or $0.11\text{--}0.28 \text{ mmol/L}$).
-*   $\text{Calib}(t)$: Time-varying calibration gain ($1.0 \pm 0.1$).
+*   One sample per 15 min, the interval B08 fitted on. $C$ already carries the lag, so there is no extra delay $\tau$.
+*   Johnson SU (B08 Table 1, mg/dL): $\lambda = 15.96$, $\xi = -5.471$, $\delta = 1.6898$, $\gamma = -0.5444$. B08 reports mean 0.76, SD 11 mg/dL; eq 7 gives about 0.7 and 11.7.
+*   Readings are whole mg/dL, floored at 0. No calibration gain or drift: B08 publishes no population values for either, and Libre 3 is factory calibrated (CamAPS manual p93).
+*   B08 is FreeStyle Navigator data. No source in `docs/papers` models Libre 3 error, its range or its LO/HI behaviour.
 
 ---
 
@@ -243,14 +244,8 @@ pub struct VirtualSubject {
     pub r_cl: f64,      // Renal clearance rate (1/min)
 }
 
-/// CGM Sensor Configuration & Noise Generator
-#[derive(Debug, Clone)]
-pub struct CgmSensor {
-    pub tau: f64,       // Delay constant (min)
-    pub alpha1: f64,    // AR(1) parameter (e.g. 0.85)
-    pub sigma_e: f64,   // Noise SD (mmol/L)
-    pub calib_gain: f64,// Calibration factor (1.0)
-}
+/// CGM sensor: B08 eq 7 error, or none
+pub enum SensorModel { Breton2008, Exact }
 ```
 
 ### 5.2 RK4 Numerical Integration Engine Snippet
@@ -361,7 +356,7 @@ impl HovorkaState {
 1.  **Mass Balance Test:** Verify that in the absence of glucose utilization ($F_{01}=0, x_1=x_2=0$) and renal clearance, ingested glucose $D$ is strictly conserved in plasma/tissue $Q_1 + Q_2$.
 2.  **Euglycemic Clamp Verification:** Input a constant baseline insulin infusion $u_b = \frac{EGP_0 \cdot BW}{S_{IE}}$ and confirm that blood glucose stabilizes to $100 \text{ mg/dL} \ (5.55 \text{ mmol/L})$.
 3.  **Meal Response Curve Check:** Inject an $80\text{g}$ carbohydrate meal over $15\text{ min}$ and verify postprandial glucose peak ($160\text{--}220 \text{ mg/dL}$) occurs between $60\text{--}90\text{ minutes}$.
-4.  **CGM Noise Autocorrelation Check:** Confirm the empirical autocorrelation function $\text{ACF}(k)$ of the simulated noise process $v(t)$ matches $\alpha_1^k \approx 0.85^k$.
+4.  **CGM Noise Autocorrelation Check:** Confirm the empirical autocorrelation function $\text{ACF}(k)$ of the simulated noise process $v(t)$ matches B08's $0.7^k$ per 15-min lag, with mean $\approx 0.76$ and SD $\approx 11$ mg/dL.
 
 ---
 *Specification Document Generated for Autonomous Agent Handover.*

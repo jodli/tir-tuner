@@ -2,7 +2,7 @@
 name = "tir-tuner-cgm"
 version.workspace = true
 edition.workspace = true
-description = "Sensor model turning interstitial glucose into a noise-corrupted CGM reading"
+description = "CGM sensor model: interstitial glucose to a reading with Breton 2008 error"
 license.workspace = true
 
 [lib]
@@ -11,8 +11,6 @@ name = "tir_tuner_cgm"
 [dependencies]
 tir-tuner-common = { path = "../tir-tuner-common" }
 
-[dev-dependencies]
-proptest = "1"
 
 [lints]
 workspace = true

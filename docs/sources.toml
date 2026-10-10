@@ -30,6 +30,7 @@ files = [
   "tir-tuner-body/src/solver.rs",
   "tir-tuner-body/src/state.rs",
   "tir-tuner-body/src/subject.rs",
+  "tir-tuner-cgm/src/device.rs",
 ]
 # Literals allowed anywhere. Everything else is a named, tagged const.
 allowed = [0, 1]
@@ -50,6 +51,7 @@ walsh2011 = "Walsh J, Roberts R, Bailey T. Guidelines for optimal bolus calculat
 ypsopump-ifu = "mylife YpsoPump Gebrauchsanweisung, German edition (ypsopump_ifu_de.pdf)"
 math = "Mathematics"
 wilinska2010 = "Wilinska ME et al. Simulation environment to evaluate closed-loop insulin delivery systems in type 1 diabetes. J Diabetes Sci Technol 2010;4(1):132-144. doi:10.1177/193229681000400117"
+breton2008 = "Breton M, Kovatchev B. Analysis, modeling, and simulation of the accuracy of continuous glucose sensors. J Diabetes Sci Technol 2008;2(5):853-862. doi:10.1177/193229680800200517"
 own = "Our own choice, no source"
 
 # Units
@@ -502,3 +504,35 @@ at = "p185"
 values = [6.6]
 status = "derived"
 note = "'Abgabegeschwindigkeit waehrend Abgabe: 0,11 U/Sekunde', x 60 s."
+
+# CGM sensor
+
+[[claim]]
+id = "b08-eq7"
+source = "breton2008"
+at = "p8, eq 7; p7, Fig 5B"
+values = [0.7]
+status = "source"
+note = "e_1 = v_1, e_n = 0.7 (e_(n-1) + v_n), v_n ~ N(0, 1). Fitted on the FreeStyle Navigator; no source here models Libre 3 error."
+
+[[claim]]
+id = "b08-interval"
+source = "breton2008"
+at = "p6"
+values = [15.0]
+status = "source"
+note = "'the reference glucose measures were equally spaced at 15 minutes': eq 7's 0.7 is per 15 min. Matches H04's 15-min control period. Libre 3 reads every minute (CamAPS manual p93); CamAPS decides every 8-12 min (Boughton 2026 p6)."
+
+[[claim]]
+id = "b08-johnson"
+source = "breton2008"
+at = "p7, Table 1; p8, eq 7"
+values = [15.96, -5.471, 1.6898, -0.5444]
+status = "source"
+note = "lambda, xi, delta, gamma of the unbounded Johnson system: error = xi + lambda sinh((e_n - gamma)/delta) mg/dL. B08 p6 reports mean 0.76, SD 11 mg/dL; eq 7 with these gives 0.7 and 11.7."
+
+[[claim]]
+id = "user-cgm-integers"
+source = "user"
+status = "derived"
+note = "All 61229 readings in the user's two Libre 3 exports are whole mg/dL, 49-383. Floor at 0 is ours: no source gives the Libre 3 range or LO/HI."

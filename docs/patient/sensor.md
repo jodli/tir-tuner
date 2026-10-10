@@ -20,18 +20,17 @@ The model captures this exactly. The body model has a glucose compartment that i
 
 ## The reading is approximate
 
-The sensor output is the true interstitial sugar plus an error. The error model is deliberately realistic, and it has two properties:
+The sensor output is the true interstitial sugar plus an error. The error model comes from Breton and Kovatchev (2008), who measured it on an older Abbott sensor, the FreeStyle Navigator. No published model covers the Libre 3 yet, so this is the closest one available. It has three properties:
 
-- **It is noise**: each reading carries a random error with standard deviation 0.5 mmol/L by default.
-- **It is sticky**: if the sensor is off now, it tends to be off in the same direction for several minutes. The next error keeps 85% of the current one, plus a fresh random kick.
+- **Size**: on average a reading is off by about 11 mg/dL (one standard deviation), so most readings are within about 20 mg/dL of the truth.
+- **Stickiness**: if the sensor is off now, it tends to be off in the same direction 15 minutes later. Breton measured that 70% of the error carries over to the next 15-minute reading. After half an hour about half of it is still there.
+- **Skew**: the error is not a symmetric bell curve. Big positive errors are more common than big negative ones, which is why the average error is slightly positive (about 0.7 mg/dL).
 
-The code name for this stickiness is autoregressive, written AR(1). It is exactly what you feel when a sensor runs high or low for an afternoon and only wanders back slowly.
+The simulated sensor gives one reading every 15 minutes, the interval Breton measured. Your real Libre 3 gives one every minute.
 
-The sensor also calibrates itself: a slow self-correction keeps the reading near the true level.
+## Whole numbers and the zero floor
 
-## The zero floor
-
-A reading is clamped at zero before anything else sees it. The controller must never be told the sugar is below zero, because the model and the safety logic cannot interpret it. Even if the raw error pushes a reading negative, the value that reaches the controller is zero or above. This clamp is part of the measured behavior and part of the verified safety rules.
+Readings come out as whole mg/dL, the way your Libre 3 exports them. They are also clamped at zero: the controller is never told the sugar is below zero, even if the raw error points there. The published sources don't give the Libre 3 measuring range or how it shows LO and HI, so the model doesn't imitate those.
 
 ## Where the sensor sits in the loop
 
