@@ -1,302 +1,138 @@
-# Technical Specification & Formal Verification Blueprint: Cambridge Artificial Pancreas Algorithm (CamAPS FX) & Kani Verification Suite
+# Controller spec: the Cambridge algorithm lineage and its verification
 
----
+`tir-tuner-aps` re-implements what Cambridge published about its closed-loop algorithm: the glucoregulatory model of patent US8977504B2, the NMPC of Hovorka 2004 (H04), and Boost and Ease-off as Ware 2022/2022b describe them. CamAPS FX itself isn't published. This is the published lineage, not the product, and every place where the product's behaviour is unknown is marked as our assumption.
 
-## 1. Executive Summary & Architecture Overview
-
-This document specifies the technical, mathematical, and verification requirements for re-implementing the **Cambridge Hybrid Closed-Loop Algorithm (CamAPS FX)** in Rust and verifying it using the **Kani Rust Verifier**. 
-
-The goal of this implementation is to provide a deterministic, mathematically verified core engine for:
-1. **In-Silico Simulation & Data Science Experiments**: Running closed-loop scenarios against virtual patient populations to optimize Time in Range (TIR) tuning algorithms.
-2. **Formal Safety Verification**: Proving via model checking (Kani) that the controller satisfies critical physiological non-negativity constraints, hard hypoglycemia cutoffs, probability bounds, and numerical stability (panic-freedom).
+Every number below is a claim in `docs/sources.toml`, named in brackets, e.g. [h04-period]. Page numbers are PDF pages of the papers in `docs/papers/` (local only). The virtual patient, pump and CGM are in `t1d-rust-simulator-spec.md`.
 
 ```
- +------------------+      CGM Reading (z_k)      +-----------------------------------------+
- | Continuous       | --------------------------> | Interacting Multiple Model (IMM)        |
- | Glucose Monitor  |                             | State Estimator & Bayesian Adaptation   |
- +------------------+                             +-----------------------------------------+
-                                                                     |
-                                                          State Estimate (x_k) &
-                                                          Covariances / Probabilities
-                                                                     v
- +------------------+   Infusion Rate Command u(t) +-----------------------------------------+
- | Insulin Pump     | <-------------------------- | Nonlinear Model Predictive Control      |
- | (mylife Ypsopump)|                             | (NMPC) Dosing Calculator & Safety Layer|
- +------------------+                             +-----------------------------------------+
+ CGM reading ──> belief update (section 3)
+                     │ belief state
+                     v
+                 NMPC (H04 eq 9) ──> Auto mode rules (Boost, Ease-off, hypo cutoff) ──> pump rate
 ```
 
 ---
 
-## 2. Grounding Sources & Reference Mapping
+## 1. Sources
 
-When developing and reviewing code, the agent should refer to the following sources in the notebook:
-
-1. **Patent CA2702345C ("Substance monitoring and control in human or animal bodies", Hovorka & Wilinska)**:
-   * *Role*: Primary reference for discrete-time state transitions, the 10-dimensional extended state vector, the IMM mixing equations [102–108], and the explicit matrices of the NMPC cost function [109–116].
-2. **Hovorka et al. (2004) ("Nonlinear model predictive control of glucose concentration in subjects with type 1 diabetes")**:
-   * *Role*: Mathematical definition of the 9-compartment physiological glucoregulatory model, subcutaneous Lispro/Aspart kinetics, gut absorption, and EGP suppression.
-3. **Ware et al. (2022) ("Cambridge hybrid closed-loop algorithm in children and adolescents with type 1 diabetes")**:
-   * *Role*: Clinical target ranges and operational parameters of CamAPS FX: nominal target $5.8\text{ mmol/L}$, user-adjustable range $4.4\text{–}11.0\text{ mmol/L}$, Ease-off mode target $7.0\text{ mmol/L}$, and Boost mode (+35% delivery).
-4. **Boughton et al. (2026) ("Real-world evidence on the CamAPS FX hybrid closed-loop system in people living with type 1 diabetes")**:
-   * *Role*: Real-world data distributions (>35,000 users across 19 countries) for validating baseline basal/bolus ratios and age-dependent glucose targets.
-5. **Wilinska et al. (2010) ("Simulation Environment for In Silico Testing...")**:
-   * *Role*: Parameter distributions for virtual T1D patient populations used in simulation scenarios.
-6. **Facchinetti et al. (2014) ("Modeling the glucose sensor error")**:
-   * *Role*: Not available locally; nothing in the code rests on it.
-7. **Breton & Kovatchev (2008) ("Analysis, modeling, and simulation of the accuracy of continuous glucose sensors")**:
-   * *Role*: The CGM error model: eq 7, an AR(1) driver (0.7 per 15 min) through a Johnson SU transform, in mg/dL.
-8. **Patek et al. (2009) ("In silico preclinical trials: methodology and engineering guide to closed-loop control in type 1 diabetes mellitus")**:
-   * *Role*: The alignment-free outcome measures (time in range, mean glucose, coefficient of variation) used by the clinical reporting metrics.
-9. **Bequette (2013) ("Algorithms for a Closed-Loop Artificial Pancreas: The Case for Model Predictive Control")**:
-   * *Role*: Justification of the NMPC dose-calculator formulation (spec section 5.1).
-10. **Ware et al. (2022b) ("Safety of user-initiated intensification of insulin delivery using Cambridge hybrid closed-loop algorithm")**:
-    * *Role*: Safety evidence behind the Boost-mode intensification factor.
-11. **Alwan et al. (2023) ("Real-World Evidence Analysis of a Hybrid Closed-Loop System")**:
-    * *Role*: Real-world TIR distributions; one of the sources of the `3.9`-`10.0` mmol/L TIR band.
-
-**Section-numbering conventions.** Section references in this document
-follow the target source's own numbering. "eq. 9" and "section 3.3" (the
-NMPC objective and the moving target trajectory) are numbered as inside
-Hovorka et al. (2004). "spec section 3.2A-F" and "spec section 5.1" point
-at *this* specification's headings. "Paragraphs [0102]-[0116]" are the
-paragraph numbers of patent CA2702345C. The verification-report reference
-keys `[W04]`, `[W10]`, `[BQ13]`, `[W22]`, `[W22B]`, `[B26]`, `[A23]`,
-`[B08]`, `[P09]`, `[CA2345]` map to this section's numbered list.
-
----
-
-## 3. Mathematical & Physiological Submodels
-
-### 3.1 Extended 10-Dimensional State Vector
-The glucoregulatory state at time $k$ is defined by the extended vector:
-$$x_{e,k} = \begin{bmatrix} i_{1,k} & i_{2,k} & r_{D,k} & r_{E,k} & a_{1,k} & a_{2,k} & q_{1,k} & q_{2,k} & q_{3,k} & u_{S,k} \end{bmatrix}^T$$
-
-| State Component | Description | Unit |
+| Key | Source | Used for |
 |---|---|---|
-| $i_1, i_2$ | Subcutaneous insulin masses in depot 1 and depot 2 | mU |
-| $r_D$ | Remote insulin action on peripheral glucose disposal | $\text{mU/L}$ |
-| $r_E$ | Remote insulin action on hepatic endogenous glucose production (EGP) | $\text{mU/L}$ |
-| $a_1, a_2$ | Carbohydrate masses in gut absorption depot 1 and depot 2 | Grams (g) |
-| $q_1$ | Accessible glucose mass in plasma compartment | $\text{mmol/kg}$ |
-| $q_2$ | Non-accessible glucose mass in peripheral tissue compartment | $\text{mmol/kg}$ |
-| $q_3$ | Interstitial fluid glucose mass (measured by CGM) | $\text{mmol/kg}$ |
-| $u_S$ | Unexplained stochastic glucose influx (process noise state) | $\text{mmol/kg/min}$ |
+| us504 | US8977504B2, Hovorka R., "Substance monitoring and control in human or animal bodies". US member of the CA2702345C family (PCT/GB2008/050932, WO2009/047569) | The model, the initial state, the IMM and the control law, cited by equation number. CA2702345C as granted has no paragraph numbers, and Hovorka is its only inventor |
+| h04 | Hovorka et al. 2004, Physiol Meas 25(4):905-920 | The NMPC objective, trajectory, period, horizon and rate bound; parameter values for the test fixture. Its own model has no interstitial compartment and a linear EGP, so section 2 follows the patent |
+| ware2022 | Ware et al. 2022, Lancet Digit Health 4(4):e245-e255 | Default and personal targets, Ease-off |
+| ware2022b | Ware et al., J Diabetes Sci Technol 2024;18(4):882-888 | Boost; the default target in mg/dL |
+| wilinska2010 | Wilinska et al. 2010, J Diabetes Sci Technol 4(1):132-144 | The virtual patient; k31 in the test fixture |
+| camaps-manual | mylife CamAPS FX user manual | Mode descriptions; TDD and weight as inputs |
+
+US9402953B2 (Wilinska et al., with Abbott) and US9089305B2 are different families, not members of CA2702345C.
 
 ---
 
-### 3.2 Continuous-Time Differential Equations
+## 2. Model (US8977504B2 eq 1-16)
 
-#### A. Subcutaneous Insulin Absorption Submodel
-$$\frac{di_1(t)}{dt} = -\frac{1}{t_{max,I}} i_1(t) + \frac{u(t)}{60} + v(t)$$
-$$\frac{di_2(t)}{dt} = \frac{1}{t_{max,I}} \left(i_1(t) - i_2(t)\right)$$
-$$i(t) = \frac{i_2(t)}{t_{max,I} \cdot MCR_I \cdot W}$$
-*Where $u(t)$ is basal insulin infusion rate ($\text{U/h}$), $v(t)$ is manual insulin bolus ($\text{U}$), $t_{max,I}$ is time-to-peak absorption ($\text{min}$), $MCR_I$ is metabolic clearance rate ($\text{L/kg/min}$), and $W$ is body weight ($\text{kg}$). The depot masses $i_1, i_2$ are carried in millie-units (mU) per Hovorka et al. 2004; the dosing inputs are converted internally ($\times 1000$), so the basal depot equilibrium under $u(t) = BIR$ sits exactly at the basal insulin concentration $BIC$ (mU/L) defined in submodel D. This unit convention is pinned by the `basal_steady_state_matches_target` native test (EGP returns to $EGP_B$ and fasting glucose $\approx 5.8\text{ mmol/L}$ at the default parameters), which the symbolic saturation proofs cannot observe.*
+State: insulin depots `i1`, `i2` (mU), remote actions `r_D`, `r_E` (mU/L), gut carbs `a1`, `a2` (g), glucose masses `q1`, `q2`, `q3` (mmol/kg) and the unexplained influx `u_S` (mmol/kg/min). Inputs: insulin rate `u` (U/h; a bolus is a rate over its delivery time) and meal rate `v_G` (g/min). `W` is body weight (kg).
 
-#### B. Insulin Action Submodel
-$$\frac{dr_D(t)}{dt} = p_{2D} \left(i(t) - r_D(t)\right)$$
-$$\frac{dr_E(t)}{dt} = p_{2E} \left(i(t) - r_E(t)\right)$$
-*Where $p_{2D}$ and $p_{2E}$ are fractional disappearance rates ($/\text{min}$) for remote insulin action.*
+$$\frac{di_1}{dt} = \frac{1000\,u}{60} - \frac{i_1}{t_{max,I}}, \qquad \frac{di_2}{dt} = \frac{i_1 - i_2}{t_{max,I}}, \qquad i = \frac{i_2}{t_{max,I}\,MCR_I\,W} \quad \text{(eq 1-3)}$$
 
-#### C. Gut Carbohydrate Absorption Submodel
-$$\frac{da_1(t)}{dt} = -\frac{1}{t_{max,G}} a_1(t) + v_G(t)$$
-$$\frac{da_2(t)}{dt} = \frac{1}{t_{max,G}} \left(a_1(t) - a_2(t)\right)$$
-$$u_A(t) = \frac{a_2(t)}{t_{max,G} \cdot W \cdot 5.551} \quad (\text{mmol/kg/min})$$
-*Where $v_G(t)$ is meal ingestion rate ($\text{g/min}$) and $t_{max,G}$ is gut absorption time-to-peak ($\text{min}$). The implementation accepts $v_G$ as the `meal_g_per_min` argument of `HovorkaState::step`/`derivative`, so unannounced-meal scenarios (section 7.2) can be driven through the gut submodel.*
+$$\frac{dr_D}{dt} = p_{2D}(i - r_D), \qquad \frac{dr_E}{dt} = p_{2E}(i - r_E)$$
 
-#### D. Blood Glucose Kinetics Submodel
-$$\frac{dq_1(t)}{dt} = -\left(S_{ID} r_D(t) + k_{21}\right) q_1(t) + k_{12} q_2(t) - F_{01}^c\left(g_P(t)\right) + EGP(t) + u_A(t) + u_S(t)$$
-$$\frac{dq_2(t)}{dt} = k_{21} q_1(t) - k_{12} q_2(t)$$
-$$g_P(t) = \frac{q_1(t)}{V_G}$$
-*Where $S_{ID}$ is peripheral insulin sensitivity ($/\text{min per mU/L}$), $k_{12}, k_{21}$ are inter-compartmental transfer rates ($/\text{min}$), $F_{01}^c$ is the glucose-dependent non-insulin dependent glucose utilization ($\text{mmol/kg/min}$), $V_G$ is distribution volume ($\text{L/kg}$), and $g_P(t)$ is plasma glucose concentration ($\text{mmol/L}$).*
+$$\frac{da_1}{dt} = v_G - \frac{a_1}{t_{max,G}}, \qquad \frac{da_2}{dt} = \frac{a_1 - a_2}{t_{max,G}}, \qquad u_A = \frac{5.551\,a_2}{t_{max,G}\,W} \quad \text{(eq 8)}$$
 
-**Non-insulin dependent glucose utilization**: carried as the published constant $F_{01}$ of Hovorka et al. 2004 and applied through the glucose-dependent Michaelis-Menten form
-$$F_{01}^c(g_P) = \frac{F_{01}}{0.85} \cdot \frac{g_P}{g_P + 1}$$
-the same form the virtual patient body uses (Wilinska Table 1). At $g_P = 5.67\text{ mmol/L}$ the applied uptake equals the published $F_{01}$; as glucose approaches zero the uptake vanishes, so the model keeps a hepatic floor instead of predicting a collapse under modest above-basal insulin over the four-hour prediction horizon. `s_id` is calibrated so the basal equilibrium of the default configuration rests on the nominal target $5.8\text{ mmol/L}$:
-$$q_1 = \frac{EGP_B - F_{01}^c(g_P)}{S_{ID} \cdot BIC} \qquad \text{at } g_P = 5.8\text{ mmol/L}$$
+$$\frac{dq_1}{dt} = -(S_{ID} r_D + k_{21}) q_1 + k_{12} q_2 - F_{01} + EGP(r_E) + F\,u_A + u_S, \qquad \frac{dq_2}{dt} = k_{21} q_1 - k_{12} q_2 \quad \text{(eq 9-10)}$$
 
-**Endogenous Glucose Production (EGP)**:
-$$EGP(t) = EGP_B \cdot \exp\left(-\frac{S_{EGP}\left(r_E(t) - BIC\right)}{0.5} \cdot \ln 2\right)$$
-$$BIC = \frac{1000 \cdot BIR}{60 \cdot MCR_I \cdot W}$$
-*Where $EGP_B$ is basal EGP ($\text{mmol/kg/min}$), $BIR$ is basal insulin requirement ($\text{U/h}$), and $S_{EGP}$ is the EGP suppression gain of the remote insulin action (action units per $\text{mU/L}$). The suppression mirrors the virtual patient body's model: the EGP action $x_3 = S_{EGP} \cdot r_E$ halves basal EGP every $0.5$ action units above its resting value $S_{EGP} \cdot BIC$ and grows as the remote action drops below it; the low-insulin branch is capped at $3 \cdot EGP_B$ (`EGP_MAX_FOLD_OVER_BASAL` in `src/hovorka.rs`; the cap preserves the basal identity $EGP(BIC) = EGP_B$). With the population gain $S_{EGP} = 0.019$ per $\text{mU/L}$, 50% higher insulin cuts EGP to about 80% of basal, a physiological suppression consistent with the 2004 publication's linear form $EGP_0[1 - x_3]$ ("insulin sensitivity of EGP $520 \times 10^{-4}$ per $\text{mU L}^{-1}$", Table 1). The earlier 0.5 $\text{mU/L}$ per halving scale collapsed EGP to near zero under any sustained above-basal delivery, which froze the four-hour NMPC prediction in closed-loop simulation; it is not the model here.*
+$$\frac{dq_3}{dt} = k_{31}(q_1 - q_3), \qquad g_P = \frac{q_1}{V_G}, \qquad g_{IG} = \frac{q_3}{V_G} \quad \text{(eq 11, 16)}$$
 
-#### E. Interstitial Glucose Kinetics Submodel
-$$\frac{dq_3(t)}{dt} = k_{31} \left(q_1(t) - q_3(t)\right)$$
-$$g_{IG}(t) = \frac{q_3(t)}{V_G}$$
-*Where $k_{31}$ is interstitial transfer rate ($/\text{min}$) and $g_{IG}(t)$ is sensor-measured interstitial glucose concentration ($\text{mmol/L}$).*
+* **Gut units:** `u_A` multiplies grams by 5.551 mmol/g (eq 8).
+* **F01** is constant and **F** is the carb bioavailability, as in eq 9.
+* **EGP** (eq 12) [us504-egp]: $EGP = EGP_B \exp\!\left(-\frac{(r_E - BIC)\ln 2}{I_{1/2}}\right)$, with $BIC = \frac{1000\,BIR}{60\,MCR_I\,W}$ (eq 14). The patent gives no values for `EGP_B` or `I_1/2`. There is no cap.
+* **u_S** (eq 13) is held at zero. Nothing estimates it yet.
+* **Initial state:** insulin at its basal steady state, glucose split as eq 63.
+* **Numerics:** forward Euler, every compartment clamped at zero, 1 min steps [own-rollout-step]. The patent discretizes exactly (eq 18-45); 1 min keeps `k31 dt` well below 1.
 
-#### F. Process Noise Dynamics
-$$d u_S(t) = d w(t)$$
-*Where $w(t)$ is a 1-dimensional Wiener process representing unexplained glucose influx variations.*
+### 2.1 Parameters
+
+The patent names the parameters without values. Two sets exist in the code:
+
+* **Simulation belief** (`controller_model` in `tir-tuner-cli/src/engine.rs`): mapped from the virtual patient's own parameters, an oracle. CamAPS starts from weight and TDD and learns (ware2022 p4, manual p70), and nothing published says how. The mapping linearizes the body at its rest: `I_1/2` and `S_ID` match the slopes of the body's EGP and insulin-dependent uptake at basal insulin, and `F01` keeps the belief at rest on the subject's basal. `t_max,I = 1/ka`, `MCR_I = V_I ke`, `p2D = kb2`, `p2E = kb3`, `k21 = k12`, `k31 = ka_int`. The weight is the one entered in the app.
+* **Test fixture** (`HovorkaParams::hovorka_2004`): H04 Tables 1-2 where they give a value. `k31` is Wilinska 2010's median, `k21 = k12` and `I_1/2` are ours, and H04's EGP0 stands in for basal EGP.
 
 ---
 
-## 4. State Estimator: Interacting Multiple Model (IMM) & Bayesian Filtering
+## 3. Belief update
 
-To handle unpredictable physiological variations (e.g., meals, stress, circadian shifts), the algorithm runs $N$ parallel extended Kalman filters (modes $j = 1 \dots N$), each defined with a different process noise variance $\sigma_{w,j}^2$.
+The patent estimates the state with an interacting multiple model (IMM) bank of Kalman filters (eq 65-82). That isn't implemented. Each period the belief instead takes half of the interstitial error [own-reanchor]:
 
-### 4.1 IMM Cycle Execution Steps
+$$\Delta g = 0.5\,(z - g_{IG}), \qquad q_1 \mathrel{+}= \Delta g\,V_G, \quad q_2 \mathrel{+}= \Delta g\,V_G \tfrac{k_{21}}{k_{12}}, \quad q_3 \mathrel{+}= \Delta g\,V_G$$
 
-1. **Model Interaction Step**:
-   Given mode probabilities $\mu_{i,k-1}$ and Markov transition matrix $p_{ji}$:
-   $$\mu_{i|j, k-1} = \frac{p_{ji} \mu_{i,k-1}}{c_j}, \quad c_j = \sum_{i=1}^N p_{ji} \mu_{i,k-1}$$
-   Mixed state estimate for mode $j$:
-   $$x_{0j, k-1|k-1} = \sum_{i=1}^N \mu_{i|j, k-1} x_{i, k-1|k-1}$$
-   Mixed covariance $P_{0j, k-1|k-1}$:
-   $$P_{0j, k-1|k-1} = \sum_{i=1}^N \mu_{i|j, k-1} \left[ P_{i,k-1|k-1} + (x_{i,k-1|k-1} - x_{0j,k-1|k-1})(x_{i,k-1|k-1} - x_{0j,k-1|k-1})^T \right]$$
+All three masses shift by the same amount, so the belief keeps its plasma-interstitial gradient. The update has no model of sensor noise, so the NMPC partly follows CGM noise.
 
-   *The equations above follow patent CA2702345C [102-108]. The concrete
-   Markov probabilities used by the implementation
-   (`IMM_MARKOV_TRANSITION` in `src/imm.rs`) are illustrative tuning
-   values with the correct structural property (column-stochastic,
-   diagonal-dominant); they are not published algorithm internals and the
-   verification only relies on the stochastic structure, not on the
-   specific entries.*
-
-2. **Predict Step**:
-   $$x_{j, k|k-1} = f(x_{0j, k-1|k-1}, u_k, 0)$$
-   $$P_{j, k|k-1} = F_k P_{0j, k-1|k-1} F_k^T + Q_{j,k}$$
-
-3. **Update Step** (upon receiving CGM measurement $z_k = g_{IG,k} + v_k$):
-   $$\nu_{j,k} = z_k - H x_{j,k|k-1}$$
-   $$S_{j,k} = H P_{j,k|k-1} H^T + R_k$$
-   $$K_{j,k} = P_{j,k|k-1} H^T S_{j,k}^{-1}$$
-   $$x_{j,k|k} = x_{j,k|k-1} + K_{j,k} \nu_{j,k}$$
-   $$P_{j,k|k} = (I - K_{j,k} H) P_{j,k|k-1}$$
-
-4. **Likelihood & Mode Probability Update**:
-   $$\Lambda_{j,k} = \frac{1}{\sqrt{2\pi |S_{j,k}|}} \exp\left( -\frac{1}{2} \nu_{j,k}^T S_{j,k}^{-1} \nu_{j,k} \right)$$
-   $$\mu_{j,k} = \frac{c_j \Lambda_{j,k}}{\sum_{m=1}^N c_m \Lambda_{m,k}}$$
-
-5. **Combination Step**:
-   $$x_{k|k} = \sum_{j=1}^N \mu_{j,k} x_{j,k|k}$$
-   $$P_{k|k} = \sum_{j=1}^N \mu_{j,k} \left[ P_{j,k|k} + (x_{j,k|k} - x_{k|k})(x_{j,k|k} - x_{k|k})^T \right]$$
+`tir-tuner-aps/src/imm.rs` implements the IMM's probability arithmetic only: prognostic weights (eq 67), mixing probabilities (eq 66), mode probability update (eq 80) and scalar mixture mean and variance (eq 81-82). The per-mode filters, the likelihood (eq 79) and the estimation of `u_S` and `F` are missing, and nothing in the simulation calls the module. The mode count (3) and the Markov matrix are ours; the patent defines both without values [own-imm].
 
 ---
 
-## 5. NMPC Dosing Calculator & Safety Control Rules
+## 4. NMPC (H04 eq 9)
 
-### 5.1 NMPC Cost Function
-The dose calculator optimizes the future insulin infusion sequence over prediction horizon $N_2$ by minimizing the Hovorka et al. 2004 eq. 9 objective with a moving target trajectory:
-$$J(u) = \sum_{j=1}^{N_2} \left( g_{IG}(t+j) - w(t+j) \right)^2 + \frac{1}{k_{agr}} \sum_{j=1}^{N_2} \left( \frac{u(t+j) - u(t+j-1)}{K_u} \right)^2$$
-*Where $w(t)$ is the moving target trajectory (section 3.3: linear decline at $2\text{ mmol/L/h}$ while more than $2\text{ mmol/L}$ above target, $1\text{ mmol/L/h}$ between that and the target, exponential rise with 15-minute halftime below it, seeded at the measured sensor glucose), $u(t+j-1)$ with $u(t-1) = u_{prev}$ is the rate delivered in the previous control period, and $1/k_{agr}$ weights the effort of changing the rate ($k_{agr}$ is the aggressiveness constant: larger values price rate changes less). The glucose term uses the interstitial/sensor glucose $g_{IG}$ (section 3.2E), not the plasma value.*
+Every 15 min [h04-period] the controller predicts plasma glucose over 240 min [h04-horizon] for candidate rate sequences `u` and minimizes
 
-*The effort term is normalized by $K_u = 0.5\text{ U/h}$ (`NMPC_EFFORT_UNIT_U_PER_H`), the delivery step that moves this subject's glucose by roughly $1\text{ mmol/L}$ over the 4h horizon. With $K_u = 1$ the objective is eq. 9 as published; the constant is a realization detail that puts the two sums on the same magnitude so $k_{agr}$ truly balances adherence against rate variation. The paper folds the same scaling into the numeric value of $k_{agr}$.*
+$$J(u) = \sum_{j=1}^{N} \big(g_P(t + j) - w(t + j)\big)^2 + \frac{1}{k_{agr}} \sum_{j=1}^{N} \big(u(t + j) - u(t + j - 1)\big)^2, \qquad 0 \le u \le 4\ \text{U/h}$$
 
-The implemented solver (`nmpc_sequence` in `src/controller.rs`) rolls the state forward over the horizon at `step_min` resolution under each candidate sequence, sums the two terms sample-by-sample, and selects the first rate $u(t+1)$ of the best sequence (receding horizon). It is seeded by a constant-rate grid search over $k=0..N_2$ candidates $k/N \, u_{max}$ and refined by bounded coordinate descent over the quantized sequence with step $u_{max}/(6 \cdot 5)$ (`NMPC_REFINE_SUBSTEPS`), at most `NMPC_REFINEMENT_PASSES` passes, monotone non-increasing in cost; this stands in for the paper's Marquardt minimization. The engine drives it at `CONTROL_PERIOD_MIN = 15` minute decisions over `CONTROL_HORIZON_MIN = 240` minutes: the horizon long enough for the prediction to see the effect of a candidate rate (insulin action acts over tens of minutes, and a single-sample horizon collapses the grid to the previous rate). The hypoglycemia guard (`is_hypoglycemic`) zeroes delivery outright and resets `u_prev`.
+* The prediction tracks plasma glucose, as H04 eq 9 and the patent's eq 83 do. Sample `j` is compared with the target at the same time `t + j`.
+* `u(t)` in the effort term is the rate delivered in the previous period.
+* **Rate bound:** 4 U/h, H04's value for 2004 pumps [h04-max-rate]. CamAPS sets it per person (manual p70) and doesn't publish the rule.
+* **k_agr = 5** [own-kagr]. H04 gives the tuning rule (fewer than 5% of 36 runs below 3.3 mmol/L, fasting near 6), not the value.
+* **Trajectory** `w` (H04 section 3.3, Fig 4) [h04-trajectory]: starts at the belief's plasma glucose, falls 2 mmol/L/h while more than 2 mmol/L above target, 1 mmol/L/h between that and the target, and rises toward the target with a 15 min halftime below it. H04 states the bands for a target of 6 as 8 and 6 mmol/L; here they are relative to the personal target.
+* **Solver** [own-optimizer]: a constant-rate grid of 7 rates `k u_max / 6` seeds a coordinate descent in steps of `u_max / 30`, at most 50 passes (H04 capped Marquardt at 50 iterations), never increasing the cost. H04 uses Marquardt; the patent has a closed form (eq 99). Only the first rate is applied (H04 p7).
 
-### 5.2 Operating Modes & Safety Boundaries
+---
 
-| Parameter / Feature | Value / Specification | Reference |
+## 5. Auto mode rules
+
+Applied to the NMPC rate, in `Mode::rate`:
+
+| Rule | Value | Source |
 |---|---|---|
-| **Default Target Glucose** | $5.8\text{ mmol/L}$ ($104.5\text{ mg/dL}$) | Ware et al. 2022; 104.5 mg/dL from Ware et al. 2022b |
-| **User Target Range** | $4.4\text{ to } 11.0\text{ mmol/L}$ (the mg/dL edges the app shows are not in the sources) | Ware et al. 2022 |
-| **Ease-off Mode (Exercise)** | Target = $7.0\text{ mmol/L}$; suspend if $g_{IG} < 7.0\text{ mmol/L}$ | Ware et al. 2022 |
-| **Boost Mode** | Temporary insulin intensification by $+35\%$ | Ware et al. 2022 |
-| **Hard Hypo Cutoff** | Mandatory zero delivery ($u(t) = 0$) if $g_{IG} < 4.4\text{ mmol/L}$ | Our assumption: no source gives a suspend threshold; 4.4 is only the lower end of the target range |
-| **Max Insulin Limit ($u_{max}$)** | Capped at user-defined maximum hourly rate | Safety Invariant |
-
-### 5.3 Closed-Loop Simulation Wiring (`tir-tuner-cli/src/engine.rs`)
-
-The engine is the integration testbed that wires the verified pieces
-together; its knobs are not part of the published algorithm.
-
-* The virtual patient is the `population_mean` subject recalibrated to a
-  euglycemic resting glucose of $5.8\text{ mmol/L}$
-  (`with_basal_glucose`, the Cambridge-simulator convention). The belief
-  (`controller_model`) reuses the subject's EGP, volumes, kinetics and
-  suppression gain and recalibrates only `s_id` so its basal equilibrium
-  sits on the same target, so belief and body share one resting point
-  instead of fighting each other.
-* Control runs at a 15-minute period over a 240-minute horizon with
-  `controller_kagr = 20.0` (the aggressiveness value that keeps below-range
-  readings under 5% and holds realistic scenarios in range on both the
-  hermetic four-meal day and the real-data day; it carries the tuned
-  `k_agr = 5.0` of the un-normalized formulation across the
-  `K_u = 0.5` renormalization, since the effort weight
-  $1 / (K_u^2 k_{agr})$ is unchanged at $0.2$), a 0.5 mixing gain on
-  sensor readings, and `last_rate_u_per_h` feeding the eq. 9 effort term.
-* Announced meals deliver 80% of the full ICR bolus
-  (`meal_bolus_factor`, default 0.8); the closed loop covers the rest.
-  The full 100% bolus stacks with the loop's own correction and pushes
-  the reading below the range floor. Unannounced meals get the 100%
-  loop correction.
+| Default target | 5.8 mmol/L (104.5 mg/dL) | ware2022 p4; 104.5 mg/dL ware2022b p3 |
+| Personal target range | 4.4-11.0 mmol/L, 30 min blocks | [ware2022-target-range]; the mg/dL edges the app shows aren't in the sources |
+| Boost | rate × 1.35 while the reading is above target | [ware2022b-boost]: "approximately 35%", glucose-responsive, off at target |
+| Ease-off | no algorithm insulin below 7.0 mmol/L | [ware2022-ease-off] |
+| Ease-off target | at least 7.0 mmol/L | [own-ease-off-target]: the raised target isn't published (manual p47 "slightly higher") |
+| Hypo cutoff | no algorithm insulin below 4.4 mmol/L | [own-hypo-cutoff]: no source gives a suspend threshold. 4.4 is the lowest personal target; the manual (p70) only says insulin may be reduced further when glucose is low or falling |
 
 ---
 
-## 6. Verification Suite Specification
+## 6. Simulation wiring (`tir-tuner-cli/src/engine.rs`)
 
-The suite is split by what each tool is good at. Kani verifies universal
-statements over bounded symbolic inputs whose operations are comparisons,
-clamps, additions and constant multiplications. The floating-point-level
-claims (rounding identities, dense sweeps, wired model behaviour) live in
-the native `proptest` / exhaustive suite plus the `fuzz/` targets.
-
-### 6.1 Budget and tooling
-
-* Kani harnesses live in `#[cfg(kani)] mod verification` (`src/verification.rs`).
-* The whole Kani suite finishes in about two minutes sequential; the
-  cost harness dominates at about 72 seconds and the remaining eight
-  proofs finish well under 30 seconds each.
-* CI command: `cargo kani -Z unstable-options --harness-timeout 30s -j --output-format terse`.
-* Rustdoc includes the Kani-only modules when the same `cfg` flag is passed: `RUSTDOCFLAGS='--cfg kani' cargo doc --no-deps`.
-* Native properties run under plain `cargo test` (default budget about 10 seconds); `CAMAPS_SOAK_ITERS=<n>` raises the `proptest` case count for an opt-in soak run.
-* Coverage-guided soak: `cargo +nightly fuzz run <target>` over the `fuzz/` crate.
-
-### 6.2 What Kani proves (all bounded symbolic)
-
-| Harness | Property |
-|---|---|
-| `verify_physiological_non_negativity` | `clamped_forward_euler` is non-negative over a bounded finite range |
-| `verify_step_compartment_non_negativity` | `HovorkaState::step` routes every compartment through the saturation primitive |
-| `verify_hypo_cutoff_and_dosing_bounds` | dose in `[0, u_max]`, mandatory zero below the hard hypo cutoff |
-| `verify_mode_specific_dosing_invariants` | Ease-off suspension, Boost `>=` Standard, `[0, u_max]` per mode |
-| `verify_no_floating_point_panics` | EGP submodel is NaN/infinity free and non-negative |
-| `verify_nmpc_candidate_rates_in_bounds` | every grid candidate lies in `[0, u_max]` |
-| `verify_nmpc_cost_finite_nonneg` | a two-step roll-out slice of the sequence cost is finite and non-negative |
-| `verify_nmpc_selection_minimal_cost` | the selected index attains the minimal cost |
-| `verify_moving_target_trajectory_decline_bounded` | the trajectory above target declines within the linear band |
-| `verify_imm_probability_normalization` | normalized mode probabilities stay non-negative |
-
-### 6.3 What is deliberately not in Kani
-
-CBMC bit-blasts full-`f64` multiply/divide chains with symbolic mantissas
-into circuits no current backend discharges in reasonable time; the
-historical attempt to quantify the full `f64` domain pushed the suite
-past 30 minutes. These claims are covered natively instead:
-
-* IMM sum-to-one, mixing and Bayesian-update distributions: exhaustive divisor-16 lattice plus `proptest` (`src/imm.rs`).
-* Full-state wired non-negativity / finiteness of the model: exhaustive compartment slices plus a `proptest` random walk (`src/hovorka.rs`).
-* `nmpc_grid_dose` realized-cost composition: `proptest` (`src/controller.rs`).
-* The full 240-minute roll-out instance the simulation drives (the Kani cost harness covers a short slice only, because CBMC bit-blasts the symbolic `f64` trajectory into an intractable circuit): `proptest` (`src/controller.rs`).
-
-`nmpc_grid_dose` is deliberately a pure cost minimizer and does not see
-the CGM reading: the delivered pump rate must pass through the
-hypoglycemia guard (`is_hypoglycemic` / `compute_nmpc_dose_mode`). That
-composition is covered natively by the `grid_dose_composed_with_hypo_cutoff_is_safe`
-`proptest` (bounds + mandatory zero below the cutoff for arbitrary grid
-outcomes); it is not a single Kani harness because the two layers are
-proved separately there.
-
-### 6.4 Out of scope
-
-* Full 10-state IMM extended Kalman filter (state/covariance mixing, predict, update, likelihood): not implemented; the crate covers mode-probability bookkeeping only. The simulation re-anchors the belief on the sensor reading instead (the state-estimation layer of the loop).
-* The process-noise state `u_S` of section 3.2F is reserved; the deterministic core carries it through unchanged and the stochastic increment is injected externally.
+* Each period: CGM reading, belief update (section 3), NMPC, Auto mode rules, pump.
+* The belief hears of announced meals and of every bolus, applied in the first minute of the period. Unannounced meals reach it only through the CGM.
+* With `use_controller` off the pump delivers the subject's resting basal, still suspended below the hypo cutoff. That is the open-loop comparison arm.
 
 ---
 
-## 7. Data Science Scenarios & Simulation Tuning Roadmap
+## 7. Verification
 
-For the Data Science team using this engine to improve the Time in Range (TIR) tuner:
+Kani proves bounded symbolic statements; long `f64` chains, the full horizon and the IMM identities are covered by native tests, proptests and fuzz targets.
 
-1. **In-Silico Population Benchmarking**:
-   * Implement virtual patient cohorts using Wilinska 2010 parameters (varying body weight, $S_{ID}$, $t_{max,I}$, and $EGP_B$).
-2. **Stress Scenarios**:
-   * **Unannounced Meals**: Test 40g, 70g, and 100g CHO meals without meal bolus to verify IMM adaptation speed.
-   * **Exercise Events**: Simulate 45-minute bouts of aerobic exercise by doubling $S_{ID}$ and activating Ease-off mode ($7.0\text{ mmol/L}$ target).
-   * **Sensor Noise & Dropouts**: Use the B08 sensor error (SD about 11 mg/dL). Sensor loss has no published parameters for Libre 3.
-3. **Metric Targets**:
-   * **Time in Range ($3.9\text{–}10.0\text{ mmol/L}$)**: Target $> 70\%$. The Boughton et al. (2026) real-world cohort (35,714 users, 19 countries) reaches a median TIR of $69.6\%$; the earlier Alwan et al. (2023) analysis (N = 1,805) reported a mean TIR of $72.6\%$.
-   * **Time Below Range ($< 3.9\text{ mmol/L}$)**: Target $< 4\%$ (Battelino 2019).
-   * **Severe Hypo ($< 3.0\text{ mmol/L}$)**: Target $< 1\%$ below 54 mg/dL (Battelino 2019).
+### 7.1 Kani
+
+`cargo kani -p tir-tuner-aps` and `-p tir-tuner-common`. `docs/verification_report.html` lists every harness with its doc comment and assertions, generated from the code by `tools/gen_verification_report.py`.
+
+### 7.2 Native tests and fuzzing
+
+* The patent's eq 3, 8, 12, 14 and 16 are checked term by term, the H04 trajectory bands on worked numbers, and the eq 9 cost against a hand-computed rollout with prediction and target at the same time.
+* The coordinate descent reaches a local minimum on its lattice within its pass cap.
+* Proptests cover non-negativity and finiteness of long model walks and the full-horizon NMPC sequence.
+* `fuzz/fuzz_targets/hovorka_step.rs` and `nmpc_sequence.rs` soak the same invariants with `cargo +nightly fuzz run <target>`.
+
+### 7.3 Source and mutation gates
+
+* `tir-tuner-common/tests/sources.rs` fails when a literal in a gated file isn't a tagged const, when a tag names no claim, or when a claim's values differ from the code.
+* `cargo mutants` over the same files, with zero survivors.
 
 ---
+
+## 8. Open
+
+The assumptions are marked where they apply: the oracle belief (2.1), the re-anchor (3), `k_agr` and the solver (4), the hypo cutoff and the Ease-off target (5). Not covered there:
+
+1. **Control cadence:** CamAPS FX adjusts every 8-12 min (ware2022 p4); the code uses H04's 15 min, which the sensor model also needs.
+2. **No adaptive learning.** CamAPS learns daily insulin needs, diurnal variations and meal patterns (ware2022 p4); none of it is published in detail.

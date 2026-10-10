@@ -1,362 +1,145 @@
-# Technical Handover Specification: In Silico T1D Digital Body & Sensor Simulator in Rust
+# Simulator spec: virtual patient, pump and CGM
 
-**Target Audience:** Autonomous AI Coding Agent / Rust Systems Engineer  
-**Project Objective:** Implement a verified, high-performance Type 1 Diabetes (T1D) physiological body model (Hovorka Glucose-Insulin Simulator) and Continuous Glucose Monitor (CGM) sensor error model in Rust. The simulator will serve as an in silico testbed against a real-time Artificial Pancreas (AP) closed-loop controller.
+The in-silico testbed the controller runs against: the Wilinska 2010 (W10) virtual patient in `tir-tuner-body`, the pump model in `tir-tuner-body/src/pump.rs`, and the Breton & Kovatchev 2008 (B08) sensor in `tir-tuner-cgm`. The loop is wired in `tir-tuner-cli/src/engine.rs`.
+
+This document describes what the code does. Every number in it is a claim in `docs/sources.toml`, named in brackets, e.g. [w10-table1]. Page numbers are PDF pages of the papers in `docs/papers/` (local only). Where no source exists, the claim is marked `assumption` there and says so here.
 
 ---
 
-## 1. Executive Summary & Architecture Overview
-
-### 1.1 System Architecture
-The simulator operates on a discrete-time simulation loop (typically $dt = 1.0\text{ min}$) while interfacing with the AP Controller on a $5\text{--}15\text{ minute}$ control epoch.
+## 1. Loop
 
 ```
-+-----------------------------------------------------------------------------------+
-|                               SIMULATION ENGINE (Rust)                            |
-|                                                                                   |
-|  +--------------------+    Insulin    +----------------------------------------+  |
-|  |   AP Controller    | ------------> | Subcutaneous Insulin PK (S1, S2, I)    |  |
-|  |  (Verified Loop)   |               +----------------------------------------+  |
-|  +--------------------+                                   |                       |
-|            ^                                              v                       |
-|            |                          +----------------------------------------+  |
-|            |                          | Remote Insulin Actions (x1, x2, x3)    |  |
-|            |                          +----------------------------------------+  |
-|            |                                              |                       |
-|            |                                              v                       |
-|      Sensor Reading                   +----------------------------------------+  |
-|     (CGM Sampled)                     | Glucose Kinetics ODEs (Q1, Q2, EGP)    |  |
-|            |                          +----------------------------------------+  |
-|            |                                     ^                 ^              |
-|            |                                     | (UG)            | (FR)         |
-|            |                    +------------------+     +--------------------+   |
-|            |                    | Gut Meal Depot   |     | Renal Clearance    |   |
-|            |                    | (D1, D2 / Qgut)  |     | (High BG Guard)    |   |
-|            |                    +------------------+     +--------------------+   |
-|            |                                     |                                |
-|            |                                     v                                |
-|            |                          +----------------------------------------+  |
-|            |                          | Interstitial Glucose Kinetics (C)      |  |
-|            |                          +----------------------------------------+  |
-|            |                                              |                       |
-|            |                                              v                       |
-|            |                          +----------------------------------------+  |
-|            +------------------------- | CGM Error Model (B08 AR1 + Johnson)    |  |
-|                                       +----------------------------------------+  |
-+-----------------------------------------------------------------------------------+
+ pump (W10 error, YpsoPump bolus speed)
+   |  insulin influx (mU/min)
+   v
+ body: W10 model, clamped Euler, dt 0.25 min
+   |  interstitial glucose C every 15 min
+   v
+ CGM: B08 eq 7 error, whole mg/dL
+   |  reading
+   v
+ controller (tir-tuner-aps, see camaps_fx_kani_specification.md)
 ```
 
----
-
-## 2. Physiological Mathematical Formulation
-
-### 2.1 Subcutaneous Insulin Absorption & PK Subsystem
-Insulin injected into subcutaneous tissue flows through two depot compartments ($S_1, S_2$) into plasma insulin concentration ($I(t)$):
-
-$$\frac{dS_1(t)}{dt} = u(t) - k_a S_1(t)$$
-$$\frac{dS_2(t)}{dt} = k_a S_1(t) - k_a S_2(t)$$
-$$\frac{dI(t)}{dt} = \frac{k_a S_2(t)}{V_I \cdot BW} - k_e I(t)$$
-
-*   $u(t)$: Insulin delivery rate ($\text{U/min}$ or $\text{pmol/min}$) combining basal infusion and boluses.
-*   $S_1(t), S_2(t)$: Subcutaneous insulin masses ($\text{U}$ or $\text{pmol}$).
-*   $I(t)$: Plasma insulin concentration ($\text{mU/L}$ or $\text{pmol/L}$).
-*   $k_a$: Subcutaneous absorption rate constant ($\text{min}^{-1}$).
-*   $k_e$: Elimination rate constant ($\text{min}^{-1}$).
-*   $V_I$: Distribution volume of insulin ($\text{L/kg}$).
-*   $BW$: Body weight ($\text{kg}$).
+* The body steps with clamped forward Euler every 0.25 min [own-body-step]: every compartment is floored at 0 after each step. W10 doesn't give its solver; the fastest rate, ke = 0.14 /min, times 0.25 min is 0.035.
+* The controller and the sensor work on one 15-min period [h04-period, b08-interval]. The engine panics if the two periods differ, because B08's error correlation is per 15-min sample.
+* The subject starts at rest at the admit glucose, on the basal that holds it there, as in W10 p7. That basal comes from bisecting the steady-state glucose balance on [0, 1/S_IE], 60 halvings [math-bisection].
+* Meals and boluses act at their own minute, not at period boundaries.
 
 ---
 
-### 2.2 Remote Insulin Action Subsystem
-Insulin in plasma mediates three distinct physiological actions via delay compartments ($x_1, x_2, x_3$):
+## 2. Model equations (W10 Appendix, p12-13)
 
-$$\frac{dx_1(t)}{dt} = -k_{b1} x_1(t) + k_{a1} I(t) \equiv k_{b1} \left( S_{IT} I(t) - x_1(t) \right)$$
-$$\frac{dx_2(t)}{dt} = -k_{b2} x_2(t) + k_{a2} I(t) \equiv k_{b2} \left( S_{ID} I(t) - x_2(t) \right)$$
-$$\frac{dx_3(t)}{dt} = -k_{b3} x_3(t) + k_{a3} I(t) \equiv k_{b3} \left( S_{IE} I(t) - x_3(t) \right)$$
+Units: insulin masses S1, S2 in mU, plasma insulin I in mU/L, glucose masses Q1, Q2 in mmol/kg, gut masses G1, G2 in mmol, concentrations in mmol/L, rates per minute. `w` is body weight (kg).
 
-*   $x_1(t)$: Effect on glucose transport/distribution ($\text{min}^{-1}$).
-*   $x_2(t)$: Effect on glucose disposal ($\text{min}^{-1}$).
-*   $x_3(t)$: Effect on suppression of endogenous glucose production (unitless).
-*   $S_{IT}, S_{ID}, S_{IE}$: Insulin sensitivities ($\text{min}^{-1}/(\text{mU/L})$, $\text{min}^{-1}/(\text{mU/L})$, $(\text{mU/L})^{-1}$).
-*   $k_{b1}, k_{b2}, k_{b3}$: Activation/deactivation rate constants ($\text{min}^{-1}$).
+### 2.1 Insulin
 
----
+$$\frac{dS_1}{dt} = u(t) - k_a S_1, \qquad \frac{dS_2}{dt} = k_a (S_1 - S_2), \qquad \frac{dI}{dt} = \frac{k_a S_2}{V_I\,w} - k_e I$$
 
-### 2.3 Glucose Kinetics & Endogenous Production Subsystem
-The accessible (plasma, $Q_1$) and non-accessible (peripheral tissue, $Q_2$) glucose mass kinetics:
+One rate `ka` for both depots and for basal and bolus, as in W10. `u(t)` is the pump's insulin influx (mU/min).
 
-$$\frac{dQ_1(t)}{dt} = -F_{01}^c(t) - x_1(t) Q_1(t) + k_{12} Q_2(t) + EGP(t) + U_G(t) - F_R(t)$$
-$$\frac{dQ_2(t)}{dt} = x_1(t) Q_1(t) - k_{12} Q_2(t) - x_2(t) Q_2(t)$$
+### 2.2 Insulin action
 
-#### Key Terms & Fluxes:
-1.  **Plasma Glucose Concentration:**
-    $$G(t) = \frac{Q_1(t)}{V_G \cdot BW} \quad (\text{mmol/L})$$
-2.  **Non-Insulin-Dependent Glucose Flux ($F_{01}^c$):**
-    $$F_{01}^c(t) = \begin{cases} F_{01} & \text{if } G(t) \ge 4.5 \text{ mmol/L} \\ F_{01} \frac{G(t)}{4.5} & \text{if } G(t) < 4.5 \text{ mmol/L} \end{cases}$$
-3.  **Endogenous Glucose Production ($EGP$):**
-    $$EGP(t) = \max\left(0, EGP_0 \left(1 - x_3(t)\right)\right)$$
-4.  **Renal Glucose Clearance ($F_R$):**
-    $$F_R(t) = \begin{cases} R_{cl} \cdot (G(t) - R_{thr}) \cdot V_G \cdot BW & \text{if } G(t) > R_{thr} \\ 0 & \text{otherwise} \end{cases}$$
-    *   $R_{thr} \approx 9.0 \text{ mmol/L} \ (\sim 180 \text{ mg/dL})$.
-    *   $R_{cl} \approx 0.01 \text{ min}^{-1}$.
+$$\frac{dx_1}{dt} = k_{b1}(S_{IT} I - x_1), \qquad \frac{dx_2}{dt} = k_{b2}(S_{ID} I - x_2), \qquad \frac{dx_3}{dt} = k_{b3}(S_{IE} I - x_3)$$
 
----
+x1 and x2 are in /min, x3 is dimensionless. This is W10's `-k_a x + S k_b I` with `k_a = k_b` written as a relaxation.
 
-### 2.4 Gut Meal Absorption Subsystem ($U_G$)
+### 2.3 Glucose
 
-#### Phase 1: Hovorka Linear Two-Depot Model
-$$\frac{dD_1(t)}{dt} = d(t) - \frac{D_1(t)}{t_{max,G}}$$
-$$\frac{dD_2(t)}{dt} = \frac{D_1(t)}{t_{max,G}} - \frac{D_2(t)}{t_{max,G}}$$
-$$U_G(t) = \frac{Bio \cdot D_2(t)}{t_{max,G}}$$
+$$\frac{dQ_1}{dt} = EGP + U_G - F_{01}^c - x_1 Q_1 + k_{12} Q_2 - F_R, \qquad \frac{dQ_2}{dt} = x_1 Q_1 - (k_{12} + x_2) Q_2, \qquad G = \frac{Q_1}{V_G}$$
 
-*   $d(t)$: Ingested carbohydrate rate ($\text{mmol/min}$).
-*   $D_1, D_2$: Carbohydrate masses in gut compartments ($\text{mmol}$).
-*   $t_{max,G}$: Time-to-peak gut absorption ($\text{min}$).
-*   $Bio$: Bioavailability fraction ($\sim 0.70\text{--}1.20$).
+* **EGP:** $EGP = \max(0,\ EGP_0 (1 - x_3))$ [h04-egp]. H04 eq 1 and H02 eq 7 have the sign `1 - x3`; W10 prints `1 + x3`, which is a typo. The floor at 0 is W10's. There is no cap.
+* **Non-insulin-dependent uptake:** $F_{01}^c = \frac{F_{01}}{0.85}\,\frac{G}{G + 1}$ [w10-f01c]. H04 eq 2 has a piecewise form with a 4.5 mmol/L threshold instead; we follow W10 because the parameters are W10's.
+* **Renal excretion:** $F_R = \max(0,\ R_{cl}(G - R_{thr}) V_G)$ (W10 p12), per kg, no body weight factor.
 
-#### Phase 2: Dalla Man Non-Linear Gastric Emptying Subsystem
-$$\frac{dQ_{sto1}(t)}{dt} = -k_{gri} Q_{sto1}(t) + d(t)$$
-$$\frac{dQ_{sto2}(t)}{dt} = k_{gri} Q_{sto1}(t) - k_{empt}(Q_{sto}) Q_{sto2}(t)$$
-$$\frac{dQ_{gut}(t)}{dt} = k_{empt}(Q_{sto}) Q_{sto2}(t) - k_{abs} Q_{gut}(t)$$
-$$U_G(t) = \frac{f \cdot k_{abs} \cdot Q_{gut}(t)}{BW}$$
-$$k_{empt}(Q_{sto}) = k_{min} + \frac{k_{max} - k_{min}}{2} \left[ \tanh\left(\alpha (Q_{sto} - b \cdot D)\right) - \tanh\left(\beta (Q_{sto} - c \cdot D)\right) + 2 \right]$$
+### 2.4 Gut
+
+$$\frac{dG_1}{dt} = -\frac{G_1}{t_{max}}, \qquad \frac{dG_2}{dt} = \frac{G_1 - G_2}{t_{max}}, \qquad U_G = \min\left(\frac{G_2}{t_{max,G}\,w},\ UG_{ceil}\right)$$
+
+* A meal adds `Bio · carbs · 5.551` mmol to G1 at once. W10 puts Bio on the input, `Bio D(t)` [w10-bio].
+* Above the flux ceiling, W10 stretches `t_max = max(t_max,G, G2 / (UG_ceil w))` for the whole chain, so absorption slows and no carbs are lost [w10-ug-ceil].
+
+### 2.5 Interstitial glucose and CGM
+
+$$\frac{dC}{dt} = k_{a,int}(G - C)$$
+
+C already carries the lag, so the sensor adds no extra delay.
+
+Measurement error, B08 eq 7 (p8) [b08-eq7, b08-johnson]:
+
+$$e_1 = v_1, \qquad e_n = 0.7\,(e_{n-1} + v_n), \qquad v_n \sim \mathcal{N}(0, 1)$$
+$$\varepsilon_n = \xi + \lambda \sinh\!\left(\frac{e_n - \gamma}{\delta}\right), \qquad CGM_n = C(t_n) + \varepsilon_n \ \text{(mg/dL)}$$
+
+* Johnson SU parameters (B08 Table 1, mg/dL): λ = 15.96, ξ = -5.471, δ = 1.6898, γ = -0.5444.
+* B08 reports mean 0.76 and SD 11 mg/dL. Eq 7 with these parameters gives about 0.7 and 11.7, because the driver's variance is 0.96, not 1.
+* Readings are whole mg/dL, floored at 0 [user-cgm-integers]. No calibration gain and no drift: B08 publishes no population values for either, and Libre 3 is factory calibrated (CamAPS manual p93).
 
 ---
 
-### 2.5 Interstitial Glucose Kinetics & CGM Sensor Model
+## 3. Parameters
 
-#### 1. Interstitial Glucose Diffusion (1st Order Lag):
-$$\frac{dC(t)}{dt} = k_{a\_int} (G(t) - C(t)) \implies \tau = \frac{1}{k_{a\_int}} \quad (\sim 5\text{--}15 \text{ min})$$
+There is one nominal subject, scaled to a body weight (`VirtualSubject::nominal`). W10 publishes means and priors, not its 18 parameter sets, so they can't be rebuilt.
 
-#### 2. Measurement Error (Breton & Kovatchev 2008, eq 7):
-$$e_1 = v_1, \quad e_n = 0.7\,(e_{n-1} + v_n), \quad v_n \sim \mathcal{N}(0, 1)$$
-$$\varepsilon_n = \xi + \lambda \sinh\!\left(\frac{e_n - \gamma}{\delta}\right), \quad CGM_n = C(t_n) + \varepsilon_n$$
+| Symbol | Value | Source | Notes |
+|---|---|---|---|
+| w | 74.9 kg default; the user's weight in the replay | [w10-population] | W10 gives 74.9 ± 14.4 kg over its 18 subjects, no sampling distribution |
+| F01 | 11.1 µmol/kg/min | [w10-table1] | oscillatory |
+| EGP0 | 16.9 µmol/kg/min | [w10-table1] | EGP at zero insulin; oscillatory |
+| k12 | 0.060 /min | [w10-table1] | oscillatory |
+| S_IT | 18.41e-4 /min per mU/L | [w10-table1] | oscillatory |
+| S_ID | 5.05e-4 /min per mU/L | [w10-table1] | oscillatory |
+| S_IE | 0.019 per mU/L | [w10-table1] | oscillatory |
+| kb1, kb2, kb3 | 0.0034, 0.056, 0.024 /min | [w10-table1] | oscillatory |
+| V_G | 0.15 L/kg | [w10-table2] | |
+| V_I | 0.12 L/kg | [w10-table2] | |
+| ke | 0.14 /min | [w10-table2] | oscillatory |
+| ka | 0.0207 /min | [heise-fiasp-ka] | Fiasp, fitted to Heise 2017 CSII Table 1; W10's lispro value is 0.018. Oscillatory |
+| t_max,G | 40 min | [w10-table2] | |
+| UG_ceil | 0.0275 mmol/kg/min | [w10-ug-ceil] | mean of W10's U(0.02, 0.035) |
+| Bio | 0.95 | [w10-bio] | mean of W10's U(70%, 120%) |
+| R_thr | 9.0 mmol/L | [w10-table2] | |
+| R_cl | 0.01 /min | [w10-table2] | |
+| k_a,int | 0.0933 /min | [w10-table2] | median of W10's lognormal prior, exp(-2.372), so τ ≈ 10.7 min; oscillatory |
 
-*   One sample per 15 min, the interval B08 fitted on. $C$ already carries the lag, so there is no extra delay $\tau$.
-*   Johnson SU (B08 Table 1, mg/dL): $\lambda = 15.96$, $\xi = -5.471$, $\delta = 1.6898$, $\gamma = -0.5444$. B08 reports mean 0.76, SD 11 mg/dL; eq 7 gives about 0.7 and 11.7.
-*   Readings are whole mg/dL, floored at 0. No calibration gain or drift: B08 publishes no population values for either, and Libre 3 is factory calibrated (CamAPS manual p93).
-*   B08 is FreeStyle Navigator data. No source in `docs/papers` models Libre 3 error, its range or its LO/HI behaviour.
+### 3.1 Variability
 
----
+* **Intra-subject oscillation:** the 12 parameters marked oscillatory above swing sinusoidally with 5% amplitude and a 3 h period, each with a random phase in [0, 3 h] [w10-oscillation].
+* **Meal-to-meal bioavailability:** each meal's Bio is multiplied by a draw with CV 20% [w10-bio-interoccasion]. W10 states "an additional 20% interoccasion variability" without a distribution; the normal draw floored at 0 is ours.
+* Both are switched off together by `SimConfig::variability`.
 
-## 3. Parameter Distributions & 18 Synthetic Virtual Subjects
+### 3.2 Meal boluses in scenarios
 
-### 3.1 Mean & Standard Deviation Population Statistics (Wilinska 2010)
-
-| Symbol | Parameter Description | Mean Value | Distribution Type | Variability / Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| **$BW$** | Body weight | $74.9 \text{ kg}$ | Normal ($\text{SD}=14.4$) | Stationary per subject |
-| **$V_G$** | Accessible glucose volume | $0.15 \text{ L/kg}$ | Lognormal ($\text{SD}=0.23$) | Stationary |
-| **$F_{01}$** | Non-insulin glucose flux | $11.1 \ \mu\text{mol/kg/min}$ | Lognormal | Oscillatory (5% amplitude, 3h period) |
-| **$EGP_0$** | Basal EGP at zero insulin | $16.9 \ \mu\text{mol/kg/min}$ | Lognormal | Oscillatory |
-| **$k_{12}$** | Inter-compartmental rate | $0.060 \text{ min}^{-1}$ | Lognormal | Oscillatory |
-| **$S_{IT}$** | Insulin sensitivity (transport) | $18.41 \times 10^{-4} \text{ min}^{-1}/(\text{mU/L})$ | Lognormal | Oscillatory |
-| **$S_{ID}$** | Insulin sensitivity (disposal) | $5.05 \times 10^{-4} \text{ min}^{-1}/(\text{mU/L})$ | Lognormal | Oscillatory |
-| **$S_{IE}$** | Sensitivity (EGP suppression) | $0.019 \ (\text{mU/L})^{-1}$ | Lognormal | Oscillatory |
-| **$k_{b1}$** | Activation rate (transport) | $0.0034 \text{ min}^{-1}$ | Lognormal | Oscillatory |
-| **$k_{b2}$** | Activation rate (disposal) | $0.056 \text{ min}^{-1}$ | Lognormal | Oscillatory |
-| **$k_{b3}$** | Activation rate (EGP) | $0.024 \text{ min}^{-1}$ | Lognormal | Oscillatory |
-| **$V_I$** | Insulin distribution volume | $0.12 \text{ L/kg}$ | Normal ($\text{SD}=0.012$) | Stationary |
-| **$k_a$** | Insulin absorption rate | $0.018 \text{ min}^{-1}$ | Normal ($\text{SD}=0.0045$) | Stationary |
-| **$k_e$** | Insulin elimination rate | $0.14 \text{ min}^{-1}$ | Normal ($\text{SD}=0.035$) | Oscillatory |
-| **$t_{max,G}$** | Peak gut absorption time | $40.0 \text{ min}$ | Lognormal ($\text{SD}=0.25$) | Stationary |
-| **$Bio$** | Carbohydrate bioavailability | $0.90 \ (90\%)$ | Uniform ($0.70\text{--}1.20$) | Inter-occasion variability |
-| **$\tau$** | Interstitial delay constant | $10.0 \text{ min}$ | Lognormal | Oscillatory |
+Scenario meal boluses use Walsh 2011: basal = 0.48 TDD (eq 1) and carb factor = 5.7 w / TDD g/U (eq 2), from the subject's own resting basal at the default target [walsh-basal-share, walsh-carb-factor]. W10's population mean ratio of 1.7 U/10 g takes the mean subject to 2.8 mmol/L after 60 g, so it doesn't fit the nominal subject. Replays of a Glooko export use the user's real boluses instead.
 
 ---
 
-## 4. Implementation Roadmap (Phase 1 vs. Phase 2)
+## 4. Pump
 
-```
-                    +------------------------------------------+
-                    |           PHASE 1 (MVP SIMULATOR)        |
-                    +------------------------------------------+
-                    | 1. Hovorka 2004/2010 Core ODE Engine     |
-                    | 2. Hovorka Linear 2-Depot Meal Subsystem |
-                    | 3. High BG Renal Clearance Threshold     |
-                    | 4. Interstitial Lag + AR(1) CGM Noise    |
-                    | 5. Deterministic 18-Subject Instantiation|
-                    | 6. RK4 Fixed-Step Solver (dt = 1.0 min)  |
-                    +------------------------------------------+
-                                         |
-                                         v
-                    +------------------------------------------+
-                    |          PHASE 2 (EXTENDED SUITE)        |
-                    +------------------------------------------+
-                    | 1. Dalla Man Non-Linear Stomach Emptying |
-                    | 2. Non-Gaussian Johnson Noise Transformation|
-                    | 3. Sleep Compression Lows & Dropouts     |
-                    | 4. Intra-Subject Diurnal Variations      |
-                    | 5. 300 UVA/Padova Virtual Cohort Support |
-                    +------------------------------------------+
-```
+* **Delivery error:** every programmed rate and every bolus is multiplied by a draw with CV 5%, zero mean, uncorrelated [w10-pump-error]. The YpsoPump IFU (p185) states ±5% for basal and 6 U boluses.
+* **Bolus speed:** 0.11 U/s, so 6.6 U/min [ypsopump-bolus-speed]. A bolus runs over the next body steps at that speed.
 
 ---
 
-## 5. Rust Architecture & Code Specifications
+## 5. Not modelled
 
-### 5.1 Core Data Structures
+No source in `docs/papers/` covers these, so they are left out rather than guessed:
 
-```rust
-/// Units and Conversion Constants
-pub const MMOL_TO_MG_DL: f64 = 18.0156; // 180.156 g/mol / 10
-pub const PMOL_TO_MU: f64 = 1.0 / 6.0; // Insulin unit conversion
-
-/// State vector for Hovorka 2004/2010 Simulator
-#[derive(Debug, Clone, Copy)]
-pub struct HovorkaState {
-    pub s1: f64,      // Subcutaneous insulin depot 1 (U)
-    pub s2: f64,      // Subcutaneous insulin depot 2 (U)
-    pub i: f64,       // Plasma insulin concentration (mU/L)
-    pub x1: f64,      // Remote insulin action on transport (1/min)
-    pub x2: f64,      // Remote insulin action on disposal (1/min)
-    pub x3: f64,      // Remote insulin action on EGP (dimensionless)
-    pub q1: f64,      // Glucose mass in accessible compartment (mmol)
-    pub q2: f64,      // Glucose mass in non-accessible compartment (mmol)
-    pub d1: f64,      // Meal compartment 1 (mmol)
-    pub d2: f64,      // Meal compartment 2 (mmol)
-    pub c_int: f64,   // Interstitial glucose concentration (mmol/L)
-    pub noise_ar: f64,// Autoregressive noise state (mmol/L)
-}
-
-/// Subject-specific physiological parameters
-#[derive(Debug, Clone)]
-pub struct VirtualSubject {
-    pub id: usize,
-    pub bw: f64,        // Body weight (kg)
-    pub v_g: f64,       // Glucose distribution volume (L/kg)
-    pub f01: f64,       // Non-insulin dependent glucose flux (mmol/kg/min)
-    pub egp0: f64,      // Basal EGP (mmol/kg/min)
-    pub k12: f64,       // Transfer rate Q2 -> Q1 (1/min)
-    pub s_it: f64,      // Transport sensitivity (1/min per mU/L)
-    pub s_id: f64,      // Disposal sensitivity (1/min per mU/L)
-    pub s_ie: f64,      // EGP suppression sensitivity (1/mU/L)
-    pub kb1: f64,       // Activation rate 1 (1/min)
-    pub kb2: f64,       // Activation rate 2 (1/min)
-    pub kb3: f64,       // Activation rate 3 (1/min)
-    pub v_i: f64,       // Insulin distribution volume (L/kg)
-    pub ka: f64,        // Subcutaneous absorption rate (1/min)
-    pub ke: f64,        // Insulin elimination rate (1/min)
-    pub t_max_g: f64,   // Peak gut absorption time (min)
-    pub bio: f64,       // Carbohydrate bioavailability
-    pub k_a_int: f64,   // Interstitial glucose transfer rate (1/min)
-    pub r_thr: f64,     // Renal clearance threshold (mmol/L)
-    pub r_cl: f64,      // Renal clearance rate (1/min)
-}
-
-/// CGM sensor: B08 eq 7 error, or none
-pub enum SensorModel { Breton2008, Exact }
-```
-
-### 5.2 RK4 Numerical Integration Engine Snippet
-
-```rust
-impl HovorkaState {
-    /// Compute derivatives dx/dt given parameters, insulin rate, and meal input
-    pub fn derivatives(&self, sub: &VirtualSubject, u_insulin: f64, d_meal: f64) -> HovorkaState {
-        // Plasma glucose concentration
-        let g_conc = self.q1 / (sub.v_g * sub.bw);
-
-        // 1. Subcutaneous Insulin PK
-        let ds1 = u_insulin - sub.ka * self.s1;
-        let ds2 = sub.ka * self.s1 - sub.ka * self.s2;
-        let di = (sub.ka * self.s2) / (sub.v_i * sub.bw) - sub.ke * self.i;
-
-        // 2. Remote Insulin Actions
-        let dx1 = -sub.kb1 * self.x1 + sub.kb1 * sub.s_it * self.i;
-        let dx2 = -sub.kb2 * self.x2 + sub.kb2 * sub.s_id * self.i;
-        let dx3 = -sub.kb3 * self.x3 + sub.kb3 * sub.s_ie * self.i;
-
-        // 3. Gut Absorption Subsystem
-        let dd1 = d_meal - self.d1 / sub.t_max_g;
-        let dd2 = (self.d1 - self.d2) / sub.t_max_g;
-        let u_g = (sub.bio * self.d2) / sub.t_max_g; // mmol/min
-
-        // 4. Fluxes (F01, EGP, Renal)
-        let f01_c = if g_conc >= 4.5 {
-            sub.f01 * sub.bw
-        } else {
-            sub.f01 * sub.bw * (g_conc / 4.5)
-        };
-
-        let egp = (sub.egp0 * sub.bw * (1.0 - self.x3)).max(0.0);
-
-        let f_r = if g_conc > sub.r_thr {
-            sub.r_cl * (g_conc - sub.r_thr) * sub.v_g * sub.bw
-        } else {
-            0.0
-        };
-
-        // 5. Glucose Kinetics ODEs
-        let dq1 = -f01_c - self.x1 * self.q1 + sub.k12 * self.q2 + egp + u_g - f_r;
-        let dq2 = self.x1 * self.q1 - sub.k12 * self.q2 - self.x2 * self.q2;
-
-        // 6. Interstitial Glucose Diffusion
-        let dc_int = sub.k_a_int * (g_conc - self.c_int);
-
-        HovorkaState {
-            s1: ds1, s2: ds2, i: di,
-            x1: dx1, x2: dx2, x3: dx3,
-            q1: dq1, q2: dq2,
-            d1: dd1, d2: dd2,
-            c_int: dc_int,
-            noise_ar: 0.0, // Updated stochastically
-        }
-    }
-
-    /// Execute 4th-Order Runge-Kutta step
-    pub fn rk4_step(&mut self, sub: &VirtualSubject, u_insulin: f64, d_meal: f64, dt: f64) {
-        let k1 = self.derivatives(sub, u_insulin, d_meal);
-        
-        let mut s_k2 = *self;
-        s_k2.add_scaled(&k1, dt * 0.5);
-        let k2 = s_k2.derivatives(sub, u_insulin, d_meal);
-
-        let mut s_k3 = *self;
-        s_k3.add_scaled(&k2, dt * 0.5);
-        let k3 = s_k3.derivatives(sub, u_insulin, d_meal);
-
-        let mut s_k4 = *self;
-        s_k4.add_scaled(&k3, dt);
-        let k4 = s_k4.derivatives(sub, u_insulin, d_meal);
-
-        self.s1 += (dt / 6.0) * (k1.s1 + 2.0*k2.s1 + 2.0*k3.s1 + k4.s1);
-        self.s2 += (dt / 6.0) * (k1.s2 + 2.0*k2.s2 + 2.0*k3.s2 + k4.s2);
-        self.i  += (dt / 6.0) * (k1.i  + 2.0*k2.i  + 2.0*k3.i  + k4.i);
-        self.x1 += (dt / 6.0) * (k1.x1 + 2.0*k2.x1 + 2.0*k3.x1 + k4.x1);
-        self.x2 += (dt / 6.0) * (k1.x2 + 2.0*k2.x2 + 2.0*k3.x2 + k4.x2);
-        self.x3 += (dt / 6.0) * (k1.x3 + 2.0*k2.x3 + 2.0*k3.x3 + k4.x3);
-        self.q1 += (dt / 6.0) * (k1.q1 + 2.0*k2.q1 + 2.0*k3.q1 + k4.q1);
-        self.q2 += (dt / 6.0) * (k1.q2 + 2.0*k2.q2 + 2.0*k3.q2 + k4.q2);
-        self.d1 += (dt / 6.0) * (k1.d1 + 2.0*k2.d1 + 2.0*k3.d1 + k4.d1);
-        self.d2 += (dt / 6.0) * (k1.d2 + 2.0*k2.d2 + 2.0*k3.d2 + k4.d2);
-        self.c_int += (dt / 6.0) * (k1.c_int + 2.0*k2.c_int + 2.0*k3.c_int + k4.c_int);
-    }
-
-    fn add_scaled(&mut self, rhs: &HovorkaState, factor: f64) {
-        self.s1 += rhs.s1 * factor;
-        self.s2 += rhs.s2 * factor;
-        self.i  += rhs.i  * factor;
-        self.x1 += rhs.x1 * factor;
-        self.x2 += rhs.x2 * factor;
-        self.x3 += rhs.x3 * factor;
-        self.q1 += rhs.q1 * factor;
-        self.q2 += rhs.q2 * factor;
-        self.d1 += rhs.d1 * factor;
-        self.d2 += rhs.d2 * factor;
-        self.c_int += rhs.c_int * factor;
-    }
-}
-```
+1. Libre 3 error, measuring range and LO/HI behaviour. B08 and W10 are FreeStyle Navigator data. The Abbott Libre 3 manual would give the range.
+2. Sensor dropouts and compression lows. W10 mentions dropouts without parameters.
+3. Facchinetti 2014 drift and AR model. The paper isn't available locally.
+4. Dalla Man nonlinear gastric emptying. No Dalla Man paper is in the folder.
+5. Between-subject variability. W10 gives no SDs for Table 1, and its 18 subjects aren't published.
+6. Exercise and stress.
 
 ---
 
-## 6. Verification & Test Suite Requirements
+## 6. Checks
 
-1.  **Mass Balance Test:** Verify that in the absence of glucose utilization ($F_{01}=0, x_1=x_2=0$) and renal clearance, ingested glucose $D$ is strictly conserved in plasma/tissue $Q_1 + Q_2$.
-2.  **Euglycemic Clamp Verification:** Input a constant baseline insulin infusion $u_b = \frac{EGP_0 \cdot BW}{S_{IE}}$ and confirm that blood glucose stabilizes to $100 \text{ mg/dL} \ (5.55 \text{ mmol/L})$.
-3.  **Meal Response Curve Check:** Inject an $80\text{g}$ carbohydrate meal over $15\text{ min}$ and verify postprandial glucose peak ($160\text{--}220 \text{ mg/dL}$) occurs between $60\text{--}90\text{ minutes}$.
-4.  **CGM Noise Autocorrelation Check:** Confirm the empirical autocorrelation function $\text{ACF}(k)$ of the simulated noise process $v(t)$ matches B08's $0.7^k$ per 15-min lag, with mean $\approx 0.76$ and SD $\approx 11$ mg/dL.
+Native tests and Kani proofs pin the model against the sources:
 
----
-*Specification Document Generated for Autonomous Agent Handover.*
+1. **Equations:** each right-hand side is checked term by term against W10 p12-13 and H04 eq 1 (`tir-tuner-body/src/derivative.rs` tests).
+2. **Rest:** `rest_state` is a fixed point of the model, and the open-loop resting basal holds the admit glucose.
+3. **Gut mass balance:** an 87 g meal at 74.9 kg arrives to more than 99% within 8 h, so the ceiling only delays carbs.
+4. **CGM:** over 100,000 samples the error has B08's mean, SD and lag-1 autocorrelation of 0.7.
+5. **Kani:** `cargo kani -p tir-tuner-body` and `-p tir-tuner-cgm`; `docs/verification_report.html` lists the harnesses.
+6. **Mutation gate:** `cargo mutants` over the files in `[lint]` of `docs/sources.toml`, with zero survivors.

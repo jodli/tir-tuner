@@ -246,11 +246,11 @@ REFS = [
      "https://pmc.ncbi.nlm.nih.gov/articles/PMC3876342/"),
     ("W22", "Ware, J., Boughton, C. K., Allen, J. M., Wilinska, M. E., Tauschmann, M., Denvir, L., Thankamony, A., Campbell, F. M., Wadwa, R. P., Buckingham, B. A., Davis, N., et al. Cambridge hybrid closed-loop algorithm in children and adolescents with type 1 diabetes: a multicentre 6-month randomised controlled trial. The Lancet Digital Health 2022;4(4):e245-e255.",
      "https://doi.org/10.1016/S2589-7500(22)00020-6"),
-    ("W22B", "Ware, J., Wilinska, M. E., Ruan, Y., Allen, J. M., Boughton, C. K., Hartnell, S., et al. Safety of user-initiated intensification of insulin delivery using Cambridge hybrid closed-loop algorithm. Journal of Diabetes Science and Technology 2022;16(6):1435-1440.",
+    ("W22B", "Ware, J., Wilinska, M. E., Ruan, Y., Allen, J. M., Boughton, C. K., Hartnell, S., et al. Safety of user-initiated intensification of insulin delivery using Cambridge hybrid closed-loop algorithm. Journal of Diabetes Science and Technology 2024;18(4):882-888 (online 2022).",
      "https://doi.org/10.1177/19322968221141924"),
-    ("B26", "Boughton, C. K., Tong, M., Wilinska, M. E., Hartnell, S., Hovorka, R., et al. Real-world evidence on the CamAPS FX hybrid closed-loop system in people living with type 1 diabetes. Metabologia 2026;2.",
+    ("B26", "Boughton, C. K., Hovorka, T., Wilinska, M. E., Hartnell, S., Hovorka, R. Real-world evidence on the CamAPS FX hybrid closed-loop system in people living with type 1 diabetes. Metabologia 2026;2.",
      "https://doi.org/10.1007/s44357-025-00002-2"),
-    ("A23", "Alwan, H., et al. Real-World Evidence Analysis of a Hybrid Closed-Loop System. Journal of Diabetes Science and Technology 2023.",
+    ("A23", "Alwan, H., et al. Real-World Evidence Analysis of a Hybrid Closed-Loop System. Journal of Diabetes Science and Technology 2025;19(2):385-389 (online 2023).",
      "https://doi.org/10.1177/19322968231185348"),
     ("B08", "Breton, M., Kovatchev, B. Analysis, Modeling, and Simulation of the Accuracy of Continuous Glucose Sensors. Journal of Diabetes Science and Technology 2008;2(5):853-862. PMC2740661.",
      "https://pubmed.ncbi.nlm.nih.gov/19750186/"),
@@ -261,7 +261,7 @@ REFS = [
 ]
 
 DOCUMENTS = [
-    ("Verification blueprint", "docs/camaps_fx_kani_specification.md", "Model specification (section 3), verification suite blueprint (section 6) and data-science roadmap (section 7)."),
+    ("Verification blueprint", "docs/camaps_fx_kani_specification.md", "Controller model (section 2), NMPC and Auto mode rules (sections 4-5), verification (section 7) and open points (section 8)."),
     ("Research report", "docs/Research_report_CamAPS_FX__Cambridge_Artificial_Pancreas_Alg.md", "Reading notes on the source papers and the patent, with corrections applied."),
 ]
 
@@ -449,8 +449,8 @@ def render():
     )
 
     tool_cmds = "<pre><code>" + "\n".join([
-        "# whole Kani suite (budget: 90s wall, 30s per harness)",
-        "cargo kani -Z unstable-options --harness-timeout 30s -j --output-format terse",
+        "# Kani, per crate",
+        "cargo kani -p tir-tuner-aps",
         "",
         "# native properties incl. proptest (opt-in soak via TIR_TUNER_SOAK_ITERS)",
         "cargo test",
@@ -527,18 +527,18 @@ report is extracted from.</p>
 """)}
 
 {section("2. What the model is and where it comes from", f"""
-<p>The crate implements a deterministic core of the Cambridge hybrid closed-loop algorithm: the
-10-dimensional extended Hovorka glucoregulatory state, subcutaneous insulin and gut absorption
+<p>The crate implements the published lineage of the Cambridge hybrid closed-loop algorithm (CamAPS FX
+itself isn't published): the glucoregulatory model of patent US8977504B2, subcutaneous insulin and gut absorption
 submodels, endogenous glucose production (EGP), the interstitial (CGM) compartment, an NMPC-style
 dose calculator with Ease-off / Boost modes, and interacting-multiple-model (IMM) mode-probability
 bookkeeping.</p>
 <table>
 <tr><th>Submodel</th><th>Contents</th><th>Source</th></tr>
-<tr><td>10-dimensional state</td><td>Two subcutaneous insulin depots (<code>i1</code>, <code>i2</code>),
+<tr><td>State</td><td>Two subcutaneous insulin depots (<code>i1</code>, <code>i2</code>),
 two remote insulin actions (<code>r_d</code>, <code>r_e</code>), two gut depots (<code>a1</code>,
 <code>a2</code>), glucose masses in the accessible, non-accessible and interstitial compartments
 (<code>q1</code>, <code>q2</code>, <code>q3</code>), and the process-noise state <code>u_s</code>.</td>
-<td>{ref_keys(['CA2345'])} claim 33; {ref_keys(['W04'])}</td></tr>
+<td>{ref_keys(['CA2345'])} US8977504B2 eq 17</td></tr>
 <tr><td>Insulin absorption</td><td>Two-depot subcutaneous chain with time-to-peak <code>t_max,I</code>
 and clearance <code>MCR_I &middot; W</code>; basal/bolus inputs converted to the mU mass convention.</td>
 <td>{ref_keys(['CA2345'])}{ref_keys(['W04'])}</td></tr>
@@ -558,8 +558,8 @@ descent replaces Marquardt; the first rate is applied.</td>
 suspends below 7.0 mmol/L and raises the target (value ours), no insulin below the hypo cutoff (ours).</td>
 <td>{ref_keys(['W22'])}{ref_keys(['W22B'])}</td></tr>
 <tr><td>IMM bookkeeping</td><td>Bayesian mode-probability update, mixing of per-mode estimates, Markov
-transition matrix (column-stochastic, diagonal-dominant).</td>
-<td>{ref_keys(['CA2345'])} &sect;4.1</td></tr>
+transition matrix (values ours).</td>
+<td>{ref_keys(['CA2345'])} US8977504B2 eq 65-82</td></tr>
 </table>
 
 <h3>Operating parameters and safety thresholds</h3>
@@ -587,11 +587,9 @@ assertions it discharges (<code>kani::assert</code>), pulled verbatim from the s
 """)}
 
 {section("4. Native verification coverage", f"""
-<p>Items the Kani suite deliberately does not discharge, per section 6.3 of the blueprint: the
-rounding-dependent IMM sum-to-one and mixing/update identities, the full-state wired non-negativity and
-finiteness of the model, and the NMPC realized-cost composition with the hypoglycemia guard. The
-exhaustive lattice sweeps and the <code>proptest</code> cases live in the <code>#[cfg(test)]</code> modules
-of the crate and are extracted here alongside their doc comments.</p>
+<p>What Kani doesn't discharge: the IMM identities, long model walks and the full-horizon NMPC sequence.
+The native tests and <code>proptest</code> cases live in the <code>#[cfg(test)]</code> modules of the crate
+and are extracted here alongside their doc comments.</p>
 { ''.join(native_groups) }
 
 <h3>Dose and Auto mode rules</h3>
@@ -609,12 +607,7 @@ safety invariants the native suite checks.</p>
 </table>
 """)}
 
-{section("6. Budget and tooling", tool_cmds + """
-<p>Reference points from spec section 6.1: the Kani suite finishes in about two minutes sequential,
-dominated by the sequence-cost harness at about 72 seconds; the remaining eight proofs stay well under
-30 seconds each. Native properties run under plain <code>cargo test</code> (default
-budget about 10 seconds).</p>
-""")}
+{section("6. Tooling", tool_cmds)}
 
 {section("7. Out of scope and future work", inline("""\
 Not implemented: the patent's per-mode Kalman filters (state and covariance mixing, prediction, update,

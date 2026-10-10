@@ -264,5 +264,19 @@ fn medical_numbers_trace_to_sources() {
             ));
         }
     }
+    // Specs cite claims as `[id]` or `[id, id]`; ids always have a hyphen.
+    let cite = regex::Regex::new(
+        r"\[([A-Za-z0-9]+(?:-[A-Za-z0-9]+)+(?:, [A-Za-z0-9]+(?:-[A-Za-z0-9]+)+)*)\]",
+    )
+    .unwrap();
+    for f in &strings(&toml["lint"]["docs"]) {
+        for (n, line) in read(&root, f).lines().enumerate() {
+            for c in cite.captures_iter(line) {
+                for id in c[1].split(", ").filter(|id| !claims.contains_key(*id)) {
+                    errors.push(format!("{f}:{}: [{id}] is not in docs/sources.toml", n + 1));
+                }
+            }
+        }
+    }
     assert!(errors.is_empty(), "\n{}", errors.join("\n"));
 }

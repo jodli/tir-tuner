@@ -6,7 +6,7 @@
    - **Authors:** Roman Hovorka, Valentina Canonico, Ludovic J. Chassin, Ulrich Haueter, et al.
    - **Publication:** Physiological Measurement, 2004 (Vol. 25, No. 4, pp. 905–920)
    - **URL:** https://pubmed.ncbi.nlm.nih.gov/15382830/
-   - **Summary:** Das fundamentale Paper von Roman Hovorka zum Cambridge-Regelalgorithmus. Es beschreibt das physiologische 9-Kompartiment-Modell (Glukose-Kinetik, Insulin-Absorption von Lispro/Aspart, Darm-Absorption) sowie die mathematische Formulierung der nichtlinearen Modellprädiktiven Regelung (NMPC) mit bayesscher Parameterschätzung zur Echtzeit-Adaption der Insulinempfindlichkeit.
+   - **Summary:** Das fundamentale Paper von Roman Hovorka zum Cambridge-Regelalgorithmus. Es beschreibt das physiologische Kompartiment-Modell (Glukose-Kinetik, Insulin-Absorption von Lispro, Darm-Absorption) sowie die mathematische Formulierung der nichtlinearen Modellprädiktiven Regelung (NMPC) mit bayesscher Parameterschätzung zur Echtzeit-Adaption der Insulinempfindlichkeit.
 
 2. **Simulation Environment to Evaluate Closed-Loop Insulin Delivery Systems in Type 1 Diabetes**
    - **Authors:** Malgorzata E. Wilinska, Ludovic J. Chassin, Carlo L. Acerini, Janet M. Allen, David B. Dunger, Roman Hovorka, et al.
@@ -18,9 +18,10 @@
    - **Authors:** B. Wayne Bequette
    - **Publication:** Journal of Diabetes Science and Technology, 2013 (Vol. 7, No. 6, pp. 1632–1643)
    - **URL:** https://pmc.ncbi.nlm.nih.gov/articles/PMC3876342/
+   - **Status:** nicht in `docs/papers`, nicht gegen den Volltext geprüft.
    - **Summary:** Analyse der relativen Vorzüge von Model Predictive Control (MPC) gegenüber Proportional-Integral-Derivative (PID) für den künstlichen Pankreas. Betont, dass beide Ansätze keine Einzelalgorithmen sind, sondern Strategien, und dass MPC explizite Insulin-Begrenzungen (Constraints), Meals und andere Störungen über einen allgemeinen Rahmen einbeziehen kann.
 
-4. **Substance Monitoring and Control in Human or Animal Bodies** (the Cambridge multi-model algorithm; the US family member is titled *Glucose Monitoring and Control Using Multi-Model Approach*)
+4. **Substance Monitoring and Control in Human or Animal Bodies** (the Cambridge multi-model algorithm)
    - **Authors:** Roman Hovorka (inventor), assigned to Cambridge Enterprise Ltd
    - **Patent:** CA2702345C / US8977504B2
    - **URL:** https://patents.google.com/patent/CA2702345C/en
@@ -31,7 +32,7 @@
 5. **Cambridge Hybrid Closed-Loop Algorithm in Children and Adolescents with Type 1 Diabetes**
    - **Authors:** Julia Ware, Charlotte K. Boughton, Janet M. Allen, Malgorzata E. Wilinska, Roman Hovorka, et al.
    - **Publication:** The Lancet Digital Health, 2022 (Vol. 4, No. 4, pp. e245–e255)
-   - **URL:** https://www.camdiabtraining.com/content-documents/60/Hybrid-closed-loop-in-children-and-adolescents-with-type-1-Dan05-Ware-2022.pdf
+   - **URL:** https://doi.org/10.1016/S2589-7500(22)00020-6
    - **Summary:** Pivotal-Studie zur Validierung des CamAPS FX Algorithmus auf der Ypsopump (mylife CamAPS FX) und Dana RS Pump mit Dexcom G6 CGM. Liefert detaillierte klinische Metriken (TIR, Basal- vs. Bolus-Verhältnis, Anpassungen der Zielwerte).
 
 6. **Real-World Evidence on the CamAPS FX Hybrid Closed-Loop System in People Living with Type 1 Diabetes**
@@ -44,11 +45,14 @@
    - **Authors:** Julia Ware, Janet M. Allen, Charlotte K. Boughton, Roman Hovorka, et al.
    - **Publication:** New England Journal of Medicine (NEJM), 2022 (Vol. 386, No. 3, pp. 209–219)
    - **URL:** https://www.cam.ac.uk/stories/KidsArtificialPancreas
+   - **Status:** nicht in `docs/papers`, nicht gegen den Volltext geprüft.
    - **Summary:** Studie zum Einsatz von CamAPS FX bei Kleinkindern (1–7 Jahre). Beschreibt die Herausforderungen der hohen Glukose-Variabilität und wie die adaptive Kompartiment-Modellierung niedrige Gesamttagesdosen präzise regelt.
 
 ## 🔧 Technical Overview: Key Components of the Cambridge (CamAPS FX) Algorithm
 
-- **Model Predictive Control (MPC):** Verwendet ein physiologisches Glukose-Insulin-Kompartimentmodell mit 9 festen Parametern und 6 dynamischen Parametern.
-- **Bayesian Real-Time Adaptation:** Die 6 dynamischen Parameter (u. a. Insulinempfindlichkeit, Insulingewebeverteilung) werden kontinuierlich über Bayessche Verfahren anhand der historischen CGM- und Insulindaten aktualisiert.
-- **Multi-Model Strategy:** Nutzt mehrere Sub-Modelle parallel, um plötzliche Empfindlichkeitsänderungen (z. B. Sport, Nacht, Mahlzeiten) abzufangen.
-- **Adjustable Target Range / Ease-off Mode:** Standard-Zielwert liegt bei 5,8 mmol/l (104 mg/dl), kann aber dynamisch angepasst oder über den "Ease-off"-Modus (erhöhter Zielwert bei Aktivität) modifiziert werden.
+Nur was die Quellen in `docs/papers` belegen. CamAPS FX selbst ist nicht veröffentlicht.
+
+- **Model Predictive Control (MPC):** Hovorka 2004 eq 9, 15-min Zyklus, 4 h Horizont. CamAPS FX passt die Insulinabgabe alle 8–12 min an (Ware 2022).
+- **Bayessche Parameterschätzung:** Hovorka 2004 schätzt zeitvariable Modellparameter bayessch. Welche Parameter CamAPS FX lernt und wie viele, ist nicht veröffentlicht; Ware 2022 nennt Tagesinsulinbedarf, Tagesverlauf und Mahlzeitenmuster.
+- **Multi-Model Strategy:** Das Patent (US8977504B2 eq 65–82) beschreibt ein Interacting-Multiple-Model-Verfahren mit mehreren Kalman-Filtern. Anzahl der Modelle und Übergangswahrscheinlichkeiten nennt es nicht.
+- **Zielwert / Ease-off / Boost:** Standard-Zielwert 5,8 mmol/l (104,5 mg/dl, Ware 2022b), persönlicher Zielwert 4,4–11,0 mmol/l (Ware 2022). Ease-off stoppt die Algorithmus-Insulinabgabe unter 7,0 mmol/l; der angehobene Zielwert ist nicht veröffentlicht. Boost gibt etwa 35 % mehr Insulin, bis der Zielwert erreicht ist (Ware 2022b).

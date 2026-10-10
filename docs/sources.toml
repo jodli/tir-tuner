@@ -32,6 +32,8 @@ files = [
   "tir-tuner-body/src/subject.rs",
   "tir-tuner-cgm/src/device.rs",
 ]
+# Specs whose `[id]` citations must name a claim.
+docs = ["docs/t1d-rust-simulator-spec.md", "docs/camaps_fx_kani_specification.md"]
 # Literals allowed anywhere. Everything else is a named, tagged const.
 allowed = [0, 1]
 
