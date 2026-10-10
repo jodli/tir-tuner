@@ -35,6 +35,7 @@ fn export(cgm: Vec<GlucoseReading>, basal: Vec<BasalSegment>) -> Export {
             units: 2.7,
         }],
         basal,
+        alarms: vec![],
     }
 }
 
@@ -69,9 +70,9 @@ fn overlapping_exports_only_add_new_rows() {
         first,
         Inserted {
             cgm: 2,
-            bg: 0,
             boluses: 1,
-            basal: 2
+            basal: 2,
+            ..Default::default()
         }
     );
     assert_eq!(
@@ -170,10 +171,16 @@ fn failed_migration_leaves_db_and_backup() {
         Runner::new(&migrations),
     );
     assert!(broken.is_err());
-    assert!(backup_path(&path, 1).exists());
+    let latest = migrations::runner()
+        .get_migrations()
+        .iter()
+        .map(|m| m.version())
+        .max()
+        .unwrap();
+    assert!(backup_path(&path, latest).exists());
 
     let store = Store::open(&path).unwrap();
-    assert_eq!(schema_version(&store.conn).unwrap(), 1);
+    assert_eq!(schema_version(&store.conn).unwrap(), latest);
     let altered: bool = store
         .conn
         .query_row(
@@ -186,4 +193,54 @@ fn failed_migration_leaves_db_and_backup() {
     assert_eq!(store.range(a.start, a.end).unwrap().cgm, a.cgm);
     drop(store);
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+fn profile(breakfast_cr: f64) -> Profile {
+    let all_day = |v| vec![Block::all_day(v)];
+    Profile::new(ProfileInput {
+        carb_ratio: vec![
+            Block {
+                start_min: 0,
+                end_min: 360,
+                value: 17.0,
+            },
+            Block {
+                start_min: 360,
+                end_min: 1440,
+                value: breakfast_cr,
+            },
+        ],
+        correction_factor: all_day(100.0),
+        bolus_target: all_day(110.0),
+        auto_target: None,
+        insulin_action_hours: 2.5,
+        max_bolus_u: 30.0,
+        min_glucose_mg_dl: 70.0,
+        weight_kg: 50.0,
+        total_daily_dose_u: 36.0,
+    })
+    .unwrap()
+}
+
+#[test]
+fn settings_history_round_trips_and_reports_changes() {
+    let (t1, t2) = (at("2026-09-09 00:00"), at("2026-10-01 00:00"));
+    let history = |e| ProfileHistory::new(e).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    let two = history(vec![(t1, profile(12.0)), (t2, profile(11.0))]);
+    let changes = store.set_profiles(&two).unwrap();
+    assert_eq!(changes.added, vec![t1, t2]);
+    assert_eq!(store.profiles().unwrap(), two);
+
+    let changes = store
+        .set_profiles(&history(vec![(t1, profile(13.0))]))
+        .unwrap();
+    assert_eq!(
+        changes,
+        ProfileChanges {
+            changed: vec![t1],
+            removed: vec![t2],
+            ..Default::default()
+        }
+    );
 }

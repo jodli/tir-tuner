@@ -86,6 +86,9 @@ fn parse(source: &Path, files: &Files) -> Result<Export, Error> {
             .then(a.rate_u_h.total_cmp(&b.rate_u_h))
     });
     rows.basal.dedup();
+    rows.alarms
+        .sort_by(|a, b| (a.at, &a.kind).cmp(&(b.at, &b.kind)));
+    rows.alarms.dedup();
     Ok(Export {
         start,
         end,
@@ -93,6 +96,7 @@ fn parse(source: &Path, files: &Files) -> Result<Export, Error> {
         bg: rows.bg,
         boluses: rows.boluses,
         basal: rows.basal,
+        alarms: rows.alarms,
     })
 }
 

@@ -42,4 +42,12 @@ pub struct Export {
     pub bg: Vec<GlucoseReading>,
     pub boluses: Vec<Bolus>,
     pub basal: Vec<BasalSegment>,
+    pub alarms: Vec<Alarm>,
+}
+
+/// A pump alarm or event. Kinds Glooko names in German are mapped to English.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Alarm {
+    pub at: NaiveDateTime,
+    pub kind: String,
 }

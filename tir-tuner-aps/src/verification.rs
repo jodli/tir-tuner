@@ -93,9 +93,7 @@ use crate::controller::{
 };
 use crate::hovorka::{EGP_MAX_FOLD_OVER_BASAL, HovorkaParams, HovorkaState, egp};
 use crate::imm::normalize_imm_probabilities;
-use crate::{
-    EASE_OFF_TARGET_MMOL_L, HARD_HYPO_CUTOFF_MMOL_L, TARGET_GLUCOSE_MMOL_L, TARGET_RANGE_MAX_MMOL_L,
-};
+use crate::{EASE_OFF_TARGET_MMOL_L, HARD_HYPO_CUTOFF_MMOL_L, TARGET_GLUCOSE_MMOL_L};
 
 /// Bounds used by `verify_nmpc_cost_finite_nonneg` for the symbolic
 /// glucose-state slice, matching the specification.
@@ -110,6 +108,9 @@ const REFERENCE_BIC_MU_PER_L: f64 = 1000.0 / (60.0 * 0.021 * 70.0);
 const REFERENCE_EGP_B_MMOL_PER_KG_MIN: f64 = 0.0161;
 const REFERENCE_S_EGP_PER_MU_L: f64 = 0.019;
 
+/// Above any CGM reading (Libre 3 reads up to 400 mg/dl, 22.2 mmol/L).
+const READING_MAX_MMOL_L: f64 = 25.0;
+
 /// Proof 2: the NMPC dose calculator never prescribes a negative rate or
 /// a rate above the user-defined maximum, and it enforces the mandatory
 /// zero delivery when the CGM reads below the hard hypo cutoff.
@@ -118,7 +119,7 @@ pub fn verify_hypo_cutoff_and_dosing_bounds() {
     let ig_reading: f64 = kani::any();
     let max_delivery_rate: f64 = 10.0; // U/h limit
 
-    kani::assume(ig_reading >= 1.0 && ig_reading <= TARGET_RANGE_MAX_MMOL_L + 14.0);
+    kani::assume(ig_reading >= 1.0 && ig_reading <= READING_MAX_MMOL_L);
 
     let calculated_dose = compute_nmpc_dose(ig_reading, max_delivery_rate);
 

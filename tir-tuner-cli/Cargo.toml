@@ -6,6 +6,7 @@ description = "Time-in-range tuner CLI: replay Glooko data through the verified 
 license.workspace = true
 
 [dependencies]
+chrono.workspace = true
 thiserror.workspace = true
 tir-tuner-aps = { path = "../tir-tuner-aps" }
 tir-tuner-body = { path = "../tir-tuner-body" }
@@ -16,6 +17,8 @@ tir-tuner-store = { path = "../tir-tuner-store" }
 tir-tuner-analysis = { path = "../tir-tuner-analysis" }
 tir-tuner-advisor = { path = "../tir-tuner-advisor" }
 clap = { version = "4.6.7", features = ["derive"] }
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "1.1.8"
 
 [lints]
 workspace = true

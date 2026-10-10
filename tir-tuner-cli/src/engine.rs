@@ -36,9 +36,10 @@
 //! off the loop degenerates to the delivered basal requirement, which is
 //! the open-loop control arm for comparisons.
 
-use tir_tuner_aps::TARGET_GLUCOSE_MMOL_L;
+use chrono::{NaiveTime, TimeDelta};
 use tir_tuner_aps::controller::{NMPC_EFFORT_UNIT_U_PER_H, is_hypoglycemic, nmpc_sequence_dose};
-use tir_tuner_aps::hovorka::{HovorkaParams, HovorkaState};
+use tir_tuner_aps::hovorka::{HovorkaParams, HovorkaState, basal_insulin_conc};
+use tir_tuner_aps::{AutoMode, TARGET_GLUCOSE_MMOL_L};
 use tir_tuner_body::derivative::BodyInputs;
 use tir_tuner_body::solver::{DT_MIN, admit_state, step, with_basal_glucose};
 use tir_tuner_body::subject::VirtualSubject;
@@ -113,6 +114,11 @@ pub struct Meal {
 pub struct SimConfig {
     /// The virtual patient the scenario runs on.
     pub subject: VirtualSubject,
+    /// The user's Auto mode settings: personal target and the weight the
+    /// controller's model assumes.
+    pub auto: AutoMode,
+    /// Time of day at t=0, for the personal target.
+    pub start_time: NaiveTime,
     /// Presenting plasma glucose at t=0, mg/dL.
     pub admit_glucose_mg_per_dl: f64,
     /// Total simulated time in hours.
@@ -145,6 +151,8 @@ impl Default for SimConfig {
     fn default() -> Self {
         Self {
             subject: with_basal_glucose(&VirtualSubject::population_mean(), TARGET_GLUCOSE_MMOL_L),
+            auto: AutoMode::default(),
+            start_time: NaiveTime::MIN,
             admit_glucose_mg_per_dl: 100.0,
             duration_hours: 12.0,
             meals: Vec::new(),
@@ -191,9 +199,11 @@ pub struct SimTrace {
 ///   `TARGET_GLUCOSE_MMOL_L` at the subject's own basal insulin
 ///   concentration, accounting for the glucose-dependent Michaelis-
 ///   Menten uptake `f01c`.
-pub fn controller_model(subject: &VirtualSubject) -> HovorkaParams {
+/// * `weight_kg` is the weight entered in the app, which may differ from
+///   the subject's.
+pub fn controller_model(subject: &VirtualSubject, weight_kg: f64) -> HovorkaParams {
     let mcr_i = subject.vi_l_per_kg * subject.ke_per_min;
-    let bic = subject.basal_insulin_concentration();
+    let bic = basal_insulin_conc(subject.bir_u_per_h, mcr_i, weight_kg);
     // The belief's basal resting glucose is q1/v_g = (egp_b - f01c)/
     // (s_id * BIC) / v_g; solve for the s_id that rests on the target.
     // The population subject has egp0 > f01; guard any pathological
@@ -206,7 +216,7 @@ pub fn controller_model(subject: &VirtualSubject) -> HovorkaParams {
         t_max_i: 1.0 / subject.ka_per_min,
         t_max_g: subject.t_max_g_min,
         mcr_i,
-        weight_kg: subject.weight_kg,
+        weight_kg,
         p2_d: subject.kb2_per_min,
         p2_e: subject.kb3_per_min,
         k12: subject.k12_per_min,
@@ -231,7 +241,7 @@ pub fn belief_at_glucose(
 ) -> HovorkaState {
     let influx_mu_per_min = MU_PER_UNIT * subject.bir_u_per_h / 60.0;
     let i_ss = influx_mu_per_min * params.t_max_i;
-    let bic = subject.basal_insulin_concentration();
+    let bic = params.basal_insulin_conc();
     let q = plasma_mmol_per_l * params.v_g;
     HovorkaState {
         i1: i_ss,
@@ -291,7 +301,7 @@ pub fn simulate(cfg: &SimConfig) -> SimTrace {
     let mut pump_rng = SeededRng::new(cfg.pump_seed);
 
     let basal_u_per_h = cfg.subject.bir_u_per_h;
-    let params = controller_model(&cfg.subject);
+    let params = controller_model(&cfg.subject, cfg.auto.weight_kg());
     let admit_mmol_per_l = mg_per_dl_to_mmol_per_l(cfg.admit_glucose_mg_per_dl);
     let mut belief = belief_at_glucose(&params, &cfg.subject, admit_mmol_per_l);
 
@@ -355,7 +365,8 @@ pub fn simulate(cfg: &SimConfig) -> SimTrace {
                     &params,
                     belief,
                     reading.glucose_mmol_per_l,
-                    TARGET_GLUCOSE_MMOL_L,
+                    cfg.auto
+                        .target_mmol_l(cfg.start_time + TimeDelta::minutes(t as i64)),
                     cfg.controller_kagr,
                     cfg.max_delivery_u_per_h,
                     last_rate_u_per_h,
@@ -428,14 +439,14 @@ mod tests {
     #[test]
     fn belief_params_match_subject_basal_insulin() {
         let subject = VirtualSubject::population_mean();
-        let params = controller_model(&subject);
+        let params = controller_model(&subject, subject.weight_kg);
         assert!((params.basal_insulin_conc() - subject.basal_insulin_concentration()).abs() < 1e-9);
     }
 
     #[test]
     fn belief_rests_on_target() {
         let subject = VirtualSubject::population_mean();
-        let params = controller_model(&subject);
+        let params = controller_model(&subject, subject.weight_kg);
         let belief = belief_at_glucose(&params, &subject, TARGET_GLUCOSE_MMOL_L);
         assert!((belief.interstitial_glucose(&params) - TARGET_GLUCOSE_MMOL_L).abs() < 1e-6);
     }

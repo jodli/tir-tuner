@@ -3,7 +3,7 @@
 
 use chrono::{NaiveDate, NaiveDateTime};
 use csv::StringRecord;
-use tir_tuner_common::data::{BasalSegment, Bolus, GlucoseReading};
+use tir_tuner_common::data::{Alarm, BasalSegment, Bolus, GlucoseReading};
 
 // Header names, English then German.
 const TIME: &[&str] = &["Timestamp", "Zeitstempel"];
@@ -13,6 +13,12 @@ const CARBS: &[&str] = &["Carbs Input (g)", "Kohlenhydrataufnahme (g)"];
 const DELIVERED: &[&str] = &["Insulin Delivered (U)", "Abgegebenes Insulin (E)"];
 const DURATION: &[&str] = &["Duration (minutes)", "Dauer (Minuten)"];
 const RATE: &[&str] = &["Rate"];
+const ALARM: &[&str] = &["Alarm/Event", "Alarm/Ereignis"];
+// German alarm names as English ones; unknown names are kept as they are.
+const ALARM_NAMES: &[(&str, &str)] = &[
+    ("Okklusion", "Occlusion"),
+    ("Batterie schwach", "Low Battery"),
+];
 
 /// Daily totals are derivable and the manual tables are empty, so they're skipped.
 #[derive(Clone, Copy)]
@@ -21,6 +27,7 @@ pub(crate) enum Table {
     Bg,
     Bolus,
     Basal,
+    Alarm,
 }
 
 impl Table {
@@ -33,6 +40,7 @@ impl Table {
             "bg" => Some(Self::Bg),
             "bolus" => Some(Self::Bolus),
             "basal" => Some(Self::Basal),
+            "alarms" => Some(Self::Alarm),
             _ => None,
         }
     }
@@ -44,6 +52,7 @@ pub(crate) struct Rows {
     pub bg: Vec<GlucoseReading>,
     pub boluses: Vec<Bolus>,
     pub basal: Vec<BasalSegment>,
+    pub alarms: Vec<Alarm>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -64,6 +73,7 @@ enum Cols {
     Glucose(usize),
     Bolus { carbs: usize, units: usize },
     Basal { minutes: usize, rate: usize },
+    Alarm(usize),
 }
 
 /// Appends one file's rows and returns its banner date range.
@@ -101,6 +111,7 @@ pub(crate) fn parse(
             minutes: col(DURATION)?,
             rate: col(RATE)?,
         },
+        Table::Alarm => Cols::Alarm(col(ALARM)?),
     };
 
     while let Some(r) = record(records.next())? {
@@ -132,6 +143,17 @@ pub(crate) fn parse(
                 minutes: need(minutes)? as u32,
                 rate_u_h: need(rate)?,
             }),
+            Cols::Alarm(kind) => {
+                let name = field(kind);
+                let kind = ALARM_NAMES
+                    .iter()
+                    .find(|(de, _)| *de == name)
+                    .map_or(name, |(_, en)| en);
+                rows.alarms.push(Alarm {
+                    at,
+                    kind: kind.to_string(),
+                });
+            }
         }
     }
     Ok(range)

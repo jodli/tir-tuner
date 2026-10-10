@@ -1,0 +1,23 @@
+# Made-up history for tests: the second entry is not a real change.
+[[profile]]
+from = 2026-09-09T00:00:00
+insulin_action_hours = 2.5
+max_bolus_u = 30
+min_glucose_mg_dl = 70
+weight_kg = 50
+total_daily_dose_u = 36
+carb_ratio = { "00-06" = 17, "06-11" = 12, "11-17" = 13, "17-24" = 11 }
+correction_factor = { "06-22" = 100, "22-06" = 80 }
+bolus_target = { "06-22" = 110, "22-06" = 120 }
+
+[[profile]]
+from = 2026-10-01T07:30:00
+insulin_action_hours = 3
+max_bolus_u = 30
+min_glucose_mg_dl = 70
+weight_kg = 50
+total_daily_dose_u = 38
+carb_ratio = { "00-06" = 17, "06-11" = 11, "11-17" = 12.5, "17-24" = 11 }
+correction_factor = { "06:30-22" = 95, "22-06:30" = 80 }
+bolus_target = { "06-22" = 110, "22-06" = 120 }
+auto_target = { "06-22" = 110 }

@@ -3,9 +3,12 @@ use tir_tuner_cli::engine::{Meal, SimConfig, simulate};
 use tir_tuner_common::metrics::{coefficient_of_variation, mean_glucose, time_in_range_pct};
 use tir_tuner_common::units::mg_per_dl_to_mmol_per_l;
 
+use chrono::NaiveDateTime;
 use clap::{Parser, Subcommand};
 use std::path::{Path, PathBuf};
-use tir_tuner_store::Store;
+use tir_tuner_aps::{AutoMode, TARGET_GLUCOSE_MMOL_L};
+use tir_tuner_cli::settings_file;
+use tir_tuner_store::{ProfileChanges, Store};
 
 #[derive(Parser)]
 #[command(about = "Tunes carb ratio and correction factor from Glooko exports")]
@@ -36,14 +39,36 @@ enum Command {
         #[arg(long, default_value_t = 3)]
         recent: u32,
     },
-    /// Manage the configured CR/CF schedule
-    Settings,
+    /// The bolus calculator and Auto mode settings history
+    #[command(subcommand)]
+    Settings(SettingsCommand),
     /// Replay one Glooko export through the closed-loop simulation
     Simulate {
         dir: PathBuf,
         #[arg(long, default_value_t = tir_tuner_cli::engine::CONTROLLER_KAGR_DEFAULT)]
         kagr: f64,
     },
+}
+
+#[derive(Subcommand)]
+enum SettingsCommand {
+    /// Replace the stored history with the entries of a settings file
+    Apply {
+        #[arg(default_value = "settings.toml")]
+        file: PathBuf,
+    },
+    /// Print the entry in force at a time (default: now), in file notation
+    Show {
+        /// e.g. 2026-10-05T23:00
+        #[arg(long, value_parser = parse_datetime)]
+        at: Option<NaiveDateTime>,
+    },
+}
+
+fn parse_datetime(s: &str) -> Result<NaiveDateTime, String> {
+    NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M")
+        .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S"))
+        .map_err(|_| format!("{s:?} is not like 2026-10-05T23:00"))
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -56,6 +81,12 @@ enum Error {
     NotImplemented(&'static str),
     #[error("{0}: no CGM data")]
     NoCgm(PathBuf),
+    #[error("{0}")]
+    Io(PathBuf, #[source] std::io::Error),
+    #[error("{0}")]
+    SettingsFile(PathBuf, #[source] settings_file::Error),
+    #[error("no settings stored for {0}")]
+    NoSettings(NaiveDateTime),
 }
 
 fn main() {
@@ -73,12 +104,56 @@ fn main() {
 
 fn run(cli: Cli) -> Result<(), Error> {
     match cli.command {
-        Command::Simulate { dir, kagr } => simulate_export(&dir, kagr),
+        Command::Simulate { dir, kagr } => simulate_export(&dir, kagr, &cli.db),
         Command::Ingest { source, archive } => ingest(&source, &archive, &cli.db),
         Command::Report { .. } => Err(Error::NotImplemented("report")),
         Command::Recommend { .. } => Err(Error::NotImplemented("recommend")),
-        Command::Settings => Err(Error::NotImplemented("settings")),
+        Command::Settings(SettingsCommand::Apply { file }) => apply_settings(&file, &cli.db),
+        Command::Settings(SettingsCommand::Show { at }) => show_settings(at, &cli.db),
     }
+}
+
+/// Attaches the database path to a store error.
+fn in_db(db: &Path) -> impl Fn(tir_tuner_store::Error) -> Error + '_ {
+    move |e| Error::Store(db.into(), e)
+}
+
+fn apply_settings(file: &Path, db: &Path) -> Result<(), Error> {
+    let text = std::fs::read_to_string(file).map_err(|e| Error::Io(file.into(), e))?;
+    let history = settings_file::parse(&text).map_err(|e| Error::SettingsFile(file.into(), e))?;
+    let changes = Store::open(db)
+        .and_then(|mut store| store.set_profiles(&history))
+        .map_err(in_db(db))?;
+    let list = |ts: &[NaiveDateTime]| {
+        ts.iter()
+            .map(|t| t.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    println!("{} entries in {}", history.entries().len(), file.display());
+    if changes == ProfileChanges::default() {
+        println!("stored settings unchanged");
+    }
+    for (what, ts) in [
+        ("added", &changes.added),
+        ("changed", &changes.changed),
+        ("removed", &changes.removed),
+    ] {
+        if !ts.is_empty() {
+            println!("{what}: {}", list(ts));
+        }
+    }
+    Ok(())
+}
+
+fn show_settings(at: Option<NaiveDateTime>, db: &Path) -> Result<(), Error> {
+    let at = at.unwrap_or_else(|| chrono::Local::now().naive_local());
+    let history = Store::open(db)
+        .and_then(|s| s.profiles())
+        .map_err(in_db(db))?;
+    let (from, profile) = history.at(at).ok_or(Error::NoSettings(at))?;
+    print!("{}", settings_file::format(from, profile));
+    Ok(())
 }
 
 fn ingest(source: &Path, archive: &Path, db: &Path) -> Result<(), Error> {
@@ -102,20 +177,20 @@ fn ingest(source: &Path, archive: &Path, db: &Path) -> Result<(), Error> {
         export.basal.len(),
     );
 
-    let store_err = |e| Error::Store(db.into(), e);
-    let mut store = Store::open(db).map_err(store_err)?;
-    let new = store.insert(&export).map_err(store_err)?;
+    let store_err = in_db(db);
+    let mut store = Store::open(db).map_err(&store_err)?;
+    let new = store.insert(&export).map_err(&store_err)?;
     println!(
-        "new in store: {} CGM, {} fingerstick, {} boluses, {} basal segments",
-        new.cgm, new.bg, new.boluses, new.basal
+        "new in store: {} CGM, {} fingerstick, {} boluses, {} basal segments, {} alarms",
+        new.cgm, new.bg, new.boluses, new.basal, new.alarms
     );
-    if let Some((first, last)) = store.span().map_err(store_err)? {
+    if let Some((first, last)) = store.span().map_err(&store_err)? {
         println!("store covers {first} .. {last}");
     }
     Ok(())
 }
 
-fn simulate_export(dir: &Path, kagr: f64) -> Result<(), Error> {
+fn simulate_export(dir: &Path, kagr: f64, db: &Path) -> Result<(), Error> {
     let export = tir_tuner_ingest::read_export(dir)?;
     let cgm = &export.cgm;
     let real_mmol: Vec<f64> = cgm
@@ -154,10 +229,27 @@ fn simulate_export(dir: &Path, kagr: f64) -> Result<(), Error> {
     // In-silico run over 24 hours starting at a representative admit.
     let subject = with_basal_glucose(
         &tir_tuner_body::subject::VirtualSubject::population_mean(),
-        5.8,
+        TARGET_GLUCOSE_MMOL_L,
+    );
+    let history = Store::open(db)
+        .and_then(|s| s.profiles())
+        .map_err(in_db(db))?;
+    let auto = match history.at(cgm_start) {
+        Some((_, p)) => AutoMode::new(p.auto()),
+        None => {
+            println!("no settings stored for {cgm_start}, using the default target and weight");
+            AutoMode::default()
+        }
+    };
+    println!(
+        "Auto mode: target {:.1} mmol/L at start, weight {} kg",
+        auto.target_mmol_l(cgm_start.time()),
+        auto.weight_kg()
     );
     let cfg = SimConfig {
         subject,
+        auto,
+        start_time: cgm_start.time(),
         admit_glucose_mg_per_dl: 140.0,
         duration_hours: 24.0,
         meals,

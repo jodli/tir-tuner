@@ -1,0 +1,13 @@
+[package]
+name = "tir-tuner-bolus"
+version.workspace = true
+edition.workspace = true
+description = "The CamAPS FX bolus calculator"
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+tir-tuner-common = { path = "../tir-tuner-common" }
+
+[lints]
+workspace = true

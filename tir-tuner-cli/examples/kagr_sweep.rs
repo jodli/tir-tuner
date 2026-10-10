@@ -48,7 +48,7 @@ fn main() {
         end5.iter().map(|v| format!("{v:.2}")).collect::<Vec<_>>()
     );
     let subject = tir_tuner_cli::engine::SimConfig::default().subject;
-    let params = controller_model(&subject);
+    let params = controller_model(&subject, subject.weight_kg);
 
     println!(
         "belief params: s_id={:.6} bic={:.2} egp={:.4} f01={:.4} mcr_i={:.4} vg={:.4} rest-math={:.2}",

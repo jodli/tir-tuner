@@ -11,5 +11,6 @@
 //! For a patient-facing companion page, see `docs/patient/loop.md`.
 
 pub mod engine;
+pub mod settings_file;
 
 pub use engine::{SimConfig, SimTrace};

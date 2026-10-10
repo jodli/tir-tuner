@@ -11,6 +11,7 @@
 //!   pump including the hard hypoglycemia cutoff and maximum delivery
 //!   limits.
 //! * [`imm`] - the interacting multiple model mode-probability bookkeeping.
+//! * [`AutoMode`] - personal target and weight in the controller's units.
 //!
 //! The Kani formal verification suite lives in [`verification`] and is
 //! only compiled when `cfg(kani)` is set (i.e. under `cargo kani`).
@@ -20,16 +21,16 @@
 pub mod controller;
 pub mod hovorka;
 pub mod imm;
+mod settings;
+
+pub use settings::AutoMode;
 
 #[cfg(kani)]
 pub mod verification;
 
-/// Default glucose target (mmol/L). Ware et al. 2022.
-pub const TARGET_GLUCOSE_MMOL_L: f64 = 5.8;
-/// Lower end of the user-adjustable target range (mmol/L).
-pub const TARGET_RANGE_MIN_MMOL_L: f64 = 4.4;
-/// Upper end of the user-adjustable target range (mmol/L).
-pub const TARGET_RANGE_MAX_MMOL_L: f64 = 11.0;
+/// Default glucose target (mmol/L), used where no personal target is set.
+/// Ware et al. 2022, user manual p59.
+pub const TARGET_GLUCOSE_MMOL_L: f64 = tir_tuner_common::settings::DEFAULT_TARGET_MMOL_L;
 /// Hard hypoglycemia cutoff: mandatory zero delivery below this
 /// interstitial glucose reading (mmol/L).
 pub const HARD_HYPO_CUTOFF_MMOL_L: f64 = 4.4;

@@ -9,3 +9,4 @@
 *.duckdb
 *.duckdb.wal
 *.duckdb.bak-*
+/settings.toml

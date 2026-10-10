@@ -4,6 +4,7 @@ members = [
     "tir-tuner-analysis",
     "tir-tuner-aps",
     "tir-tuner-body",
+    "tir-tuner-bolus",
     "tir-tuner-cgm",
     "tir-tuner-cli",
     "tir-tuner-common",

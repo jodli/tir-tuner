@@ -9,6 +9,7 @@ license.workspace = true
 name = "tir_tuner_aps"
 
 [dependencies]
+chrono.workspace = true
 tir-tuner-common = { path = "../tir-tuner-common" }
 
 [dev-dependencies]
