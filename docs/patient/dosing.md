@@ -11,6 +11,10 @@ sources:
 
 A pump with a bolus calculator works out each bolus from a handful of personal numbers. Each number describes one thing about your body. When the bolus is regularly too big or too small at a certain time of day, one of these numbers is usually the reason.
 
+<figure class="panel" data-fig="dosing" data-lines="Ratio too high: 70% of the insulin|Ratio right|Ratio too low: 130% of the insulin">
+<figcaption><strong>One 60 g meal, three carb ratios</strong><span>Starting at 100 mg/dL, Auto mode off, so only the bolus acts. Too little insulin leaves the sugar high hours later. Too much ends in a low.</span></figcaption>
+</figure>
+
 ## Carb ratio: insulin for food
 
 The carb ratio says how many grams of carbs one unit of insulin covers. A ratio of 12 means 1 U for every 12 g of carbs, so a 60 g meal needs 5 U.
@@ -64,5 +68,3 @@ A few limits sit around this:
 ## Different numbers for different times
 
 The body's need for insulin is not the same all day. That is why each of these numbers can be set in time blocks, in half-hour steps. When the sugar runs high after breakfast on most days but not after dinner, it is the morning block that is off, not the whole day.
-
-Next: [how the pump decides on its own](brain.md).

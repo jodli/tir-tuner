@@ -11,6 +11,10 @@ sources:
 
 Eine Pumpe mit Bolusrechner berechnet jeden Bolus aus ein paar persönlichen Zahlen. Jede Zahl beschreibt eine Sache an Ihrem Körper. Wenn der Bolus zu einer bestimmten Tageszeit regelmäßig zu groß oder zu klein ist, liegt es meist an einer dieser Zahlen.
 
+<figure class="panel" data-fig="dosing" data-lines="Verhältnis zu hoch: 70 % des Insulins|Verhältnis richtig|Verhältnis zu niedrig: 130 % des Insulins">
+<figcaption><strong>Eine Mahlzeit mit 60 g, drei Kohlenhydratverhältnisse</strong><span>Start bei 100 mg/dl, Auto-Modus aus, nur der Bolus wirkt. Zu wenig Insulin lässt den Zucker noch Stunden später hoch. Zu viel endet in einer Unterzuckerung.</span></figcaption>
+</figure>
+
 ## Kohlenhydratverhältnis: Insulin fürs Essen
 
 Das Kohlenhydratverhältnis (in der App: insulin-to-carb ratio) sagt, wie viele Gramm Kohlenhydrate eine Einheit Insulin abdeckt. Ein Verhältnis von 12 bedeutet 1 IE für je 12 g Kohlenhydrate, eine Mahlzeit mit 60 g braucht also 5 IE.
@@ -64,5 +68,3 @@ Ein paar Grenzen gibt es dabei:
 ## Verschiedene Zahlen für verschiedene Zeiten
 
 Der Körper braucht nicht den ganzen Tag gleich viel Insulin. Deshalb lässt sich jede dieser Zahlen in Zeitblöcken einstellen, in Halbstundenschritten. Wenn der Zucker nach dem Frühstück an den meisten Tagen hoch ist, nach dem Abendessen aber nicht, stimmt der Morgenblock nicht, nicht der ganze Tag.
-
-Weiter: [Wie die Pumpe selbst entscheidet](brain.md).

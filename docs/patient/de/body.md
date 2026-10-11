@@ -11,6 +11,10 @@ sources:
 
 Blutzucker ist ein Gleichgewicht. Zucker fließt aus der Leber und aus dem Essen ins Blut, und er fließt hinaus ins Gehirn, in die Muskeln und ins Fettgewebe. Die Zahl auf Ihrem Sensor ist das, was dieses Gleichgewicht gerade im Blut übrig lässt.
 
+<figure class="panel" data-fig="fasting" data-lines="Mit Basalinsulin|Ganz ohne Insulin">
+<figcaption><strong>Acht Stunden ohne Essen</strong><span>Der virtuelle Patient startet bei 100 mg/dl. Mit Basalinsulin bleibt die Linie flach. Ohne Insulin staut sich der Zucker aus der Leber, und der Wert steigt über 200.</span></figcaption>
+</figure>
+
 ## Die Leber bildet den ganzen Tag Zucker
 
 Die Leber speichert Zucker und gibt ihn ins Blut ab, Tag und Nacht, ob Sie essen oder nicht. So bleibt das Gehirn auch im Schlaf versorgt. Insulin bremst die Leber: Je mehr Insulin im Blut ist, desto weniger Zucker gibt sie ab, und mit genug Insulin hört sie ganz auf.
@@ -44,16 +48,3 @@ Zucker verteilt sich im Blut und in der Flüssigkeit um die Zellen. Ein kleinere
 Wenn niemand isst und das Basalinsulin genau passt, gibt die Leber so viel hinein, wie der Körper herausnimmt, und der Zucker bleibt flach. Das ist das Ziel des Basalinsulins: eine flache Linie über Nacht und zwischen den Mahlzeiten. Steigt die Linie nachts ohne Essen langsam an, ist für diese Zeit zu wenig Basalinsulin da. Fällt sie, ist es zu viel.
 
 Der Körper braucht nicht den ganzen Tag gleich viel. Hormone, Bewegung und Krankheit verändern, wie stark der Körper auf Insulin reagiert, manchmal innerhalb von Stunden. Deshalb erlaubt eine Pumpe unterschiedliche Basalraten und Faktoren für verschiedene Tageszeiten.
-
-```mermaid
-flowchart LR
-    L["Leber: ohne Insulin etwa 13 g/h"] --> B((Blutzucker))
-    F[Essen] --> B
-    B --> BR["Gehirn: etwa 8 g/h, ohne Insulin"]
-    B --> M["Muskeln und Fett: nur mit Insulin"]
-    B --> K["Nieren: erst über etwa 160 mg/dl"]
-```
-
-Zahlen für einen 70 kg schweren Erwachsenen ohne Insulin.
-
-Weiter: [Vom Teller ins Blut](food.md).

@@ -11,6 +11,10 @@ sources:
 
 Blood sugar is a balance. Sugar flows in from the liver and from food, and it flows out into the brain, the muscles and the fat tissue. The number on your sensor is whatever that balance leaves in the blood at the moment.
 
+<figure class="panel" data-fig="fasting" data-lines="With basal insulin|Without any insulin">
+<figcaption><strong>Eight hours without food</strong><span>The virtual patient starts at 100 mg/dL. With basal insulin the line stays flat. Without it, the sugar from the liver piles up and the level climbs past 200.</span></figcaption>
+</figure>
+
 ## The liver makes sugar all day
 
 The liver stores sugar and releases it into the blood, day and night, whether you eat or not. That is how the brain stays fuelled while you sleep. Insulin is what slows the liver down: the more insulin in the blood, the less sugar the liver releases, and enough insulin stops it completely.
@@ -44,16 +48,3 @@ Sugar spreads through the blood and the fluid around the cells. A smaller body h
 If nobody eats and the basal insulin is just right, what the liver puts in equals what the body takes out, and the sugar stays flat. That is the goal of basal insulin: a flat line overnight and between meals. If the line climbs slowly in the night without food, there is too little basal insulin for that time. If it falls, there is too much.
 
 Your body doesn't need the same amount all day. Hormones, sleep, activity and illness shift how strongly the body reacts to insulin, sometimes within hours. That is why a pump allows different basal rates and ratios for different times of the day.
-
-```mermaid
-flowchart LR
-    L["Liver: about 13 g/h without insulin"] --> B((Blood sugar))
-    F[Food] --> B
-    B --> BR["Brain: about 8 g/h, no insulin needed"]
-    B --> M["Muscle and fat: only with insulin"]
-    B --> K["Kidneys: only above about 160 mg/dL"]
-```
-
-Numbers for a 70 kg adult with no insulin.
-
-Next: [from plate to blood](food.md).

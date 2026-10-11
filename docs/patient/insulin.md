@@ -12,6 +12,10 @@ sources:
 
 Insulin is the signal that lets sugar leave the blood. A pump delivers it under the skin, and from there it has a long way to go. The numbers on this page are for a fast insulin like Fiasp given by a pump.
 
+<figure class="panel" data-fig="insulin" data-lines="Insulin in the blood|Braking the liver|Burning and storing sugar|Moving sugar into tissues">
+<figcaption><strong>One bolus, four timelines</strong><span>After a 5 U bolus. Each line is shown as a share of its own peak, so you can compare when each effect comes and goes, not how big it is.</span></figcaption>
+</figure>
+
 ## From the skin to the blood
 
 Insulin from a pump doesn't go into the blood directly. It forms a small depot under the skin and seeps out of it slowly. The level in the blood peaks about one hour after a bolus. After about three hours, nearly all of it (90%) has left the skin.
@@ -27,15 +31,6 @@ Once in the blood, insulin does three different things, and each one starts and 
 3. **It moves sugar from the blood into the tissues.** This one is slow. It peaks about 3 hours after a bolus and half of it is still there after 7.5 hours.
 
 So a bolus doesn't have one "duration". Its effect is strongest in the first two hours, and a slower tail lasts well into the following hours.
-
-```mermaid
-flowchart LR
-    P[Pump] --> S["Depot under the skin"]
-    S -->|"peak in blood after about 1 h"| B((Insulin in the blood))
-    B --> L["Brakes the liver: peak about 1 h 40 min"]
-    B --> T["Tissues burn and store sugar: peak about 1 h 20 min"]
-    B --> M["Sugar moves into tissues: peak about 3 h, long tail"]
-```
 
 ## Insulin on board and the action time setting
 
@@ -60,5 +55,3 @@ Things that change how strongly the body reacts to the same insulin:
 - **The time of day.** Even without anything special going on, the body's response to insulin drifts by a few percent over a few hours.
 
 A blocked cannula or a failing set looks like resistance to insulin: the sugar keeps rising no matter how much the pump delivers, because the insulin never arrives.
-
-Next: [carb ratio, correction factor, target](dosing.md).

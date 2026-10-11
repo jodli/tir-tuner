@@ -11,6 +11,10 @@ sources:
 
 Ein Sensor sammelt Hunderte Werte am Tag. Ihre Klinik fasst sie in wenigen Zahlen zusammen, und diese Zahlen werden weltweit gleich verwendet, ein Bericht aus der einen Klinik bedeutet also in der anderen dasselbe.
 
+<figure class="panel" data-fig="day" data-lines="Typischer Tag">
+<figcaption><strong>Der virtuelle Patient und die Ziele</strong><span>Die zwei Wochen von der ersten Seite. Zeit im Zielbereich und Zeit darüber erreichen die Ziele. Die Zeit darunter nicht: 6 % unter 70 und 2 % unter 54.</span></figcaption>
+</figure>
+
 ## Zwei Einheiten für dieselbe Sache
 
 Zucker wird je nach Land und Gerät in mg/dl oder mmol/l gemessen. Das ist dieselbe Sache auf einer anderen Skala: 1 mmol/l sind 18 mg/dl.
@@ -47,5 +51,3 @@ Der **Variationskoeffizient** (VK, englisch CV) sagt, wie stark die Werte um die
 ## Den eigenen Bericht lesen
 
 Ein einzelner Tag sagt wenig. Ein vergessener Bolus oder eine falsch geschätzte Mahlzeit kann ihn ruinieren. Berichte umfassen meist die letzten 14 Tage, und Muster über diese Zeit zählen: dasselbe Hoch nach derselben Mahlzeit, dasselbe Tief zur selben Nachtzeit. Solche Muster zeigen auf eine bestimmte Zeit und eine bestimmte Einstellung, wie auf der Seite [Kohlenhydratverhältnis, Korrekturfaktor, Zielwert](dosing.md) beschrieben.
-
-Zurück zur [Übersicht](index.md).

@@ -12,6 +12,10 @@ sources:
 
 Insulin ist das Signal, das den Zucker aus dem Blut lässt. Eine Pumpe gibt es unter die Haut, und von dort hat es einen langen Weg. Die Zahlen auf dieser Seite gelten für ein schnelles Insulin wie Fiasp aus einer Pumpe.
 
+<figure class="panel" data-fig="insulin" data-lines="Insulin im Blut|Bremst die Leber|Zucker verbrennen und speichern|Zucker ins Gewebe bringen">
+<figcaption><strong>Ein Bolus, vier Zeitpläne</strong><span>Nach einem Bolus von 5 IE. Jede Linie ist als Anteil an ihrem eigenen Gipfel gezeigt. So lässt sich vergleichen, wann jede Wirkung kommt und geht, nicht wie groß sie ist.</span></figcaption>
+</figure>
+
 ## Von der Haut ins Blut
 
 Insulin aus der Pumpe geht nicht direkt ins Blut. Es bildet unter der Haut ein kleines Depot und sickert langsam daraus heraus. Im Blut ist es etwa eine Stunde nach einem Bolus am höchsten. Nach etwa drei Stunden hat fast alles (90 %) die Haut verlassen.
@@ -27,15 +31,6 @@ Im Blut macht Insulin drei verschiedene Dinge, und jedes beginnt und klingt in s
 3. **Es bringt Zucker aus dem Blut ins Gewebe.** Diese Wirkung ist langsam. Sie ist etwa 3 Stunden nach einem Bolus am stärksten, und nach 7,5 Stunden ist noch die Hälfte da.
 
 Ein Bolus hat also nicht die eine "Wirkdauer". Seine Wirkung ist in den ersten zwei Stunden am stärksten, und ein langsamerer Rest reicht weit in die folgenden Stunden.
-
-```mermaid
-flowchart LR
-    P[Pumpe] --> S["Depot unter der Haut"]
-    S -->|"im Blut am höchsten nach etwa 1 h"| B((Insulin im Blut))
-    B --> L["Bremst die Leber: am stärksten nach etwa 1 h 40 min"]
-    B --> T["Gewebe verbrennt und speichert Zucker: am stärksten nach etwa 1 h 20 min"]
-    B --> M["Zucker wandert ins Gewebe: am stärksten nach etwa 3 h, langer Rest"]
-```
 
 ## Aktives Insulin und die Wirkdauer-Einstellung
 
@@ -60,5 +55,3 @@ Was verändert, wie stark der Körper auf dasselbe Insulin reagiert:
 - **Die Tageszeit.** Auch ohne besonderen Anlass schwankt die Reaktion des Körpers auf Insulin um ein paar Prozent im Lauf weniger Stunden.
 
 Eine verstopfte Kanüle oder ein defektes Set sieht aus wie Insulinresistenz: Der Zucker steigt weiter, egal wie viel die Pumpe abgibt, weil das Insulin nie ankommt.
-
-Weiter: [Kohlenhydratverhältnis, Korrekturfaktor, Zielwert](dosing.md).

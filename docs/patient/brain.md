@@ -13,6 +13,10 @@ sources:
 
 In Auto mode the pump no longer follows a fixed basal rate. An app reads the sensor, decides how much insulin is needed right now, and tells the pump. It does that again and again, day and night. This page explains how such a system thinks.
 
+<figure class="panel" data-fig="compare" data-lines="Auto mode|Fixed basal rate">
+<figcaption><strong>The same two weeks, with and without Auto mode</strong><span>Same meals and boluses. Auto mode brings the highs after meals down. In this virtual patient it also adds time below range, which is why the safety rules below matter.</span></figcaption>
+</figure>
+
 ## It looks ahead
 
 Insulin needs about an hour to reach its peak, so reacting to the current reading is always too late. A system that only reacts gives more insulin while the sugar rises, keeps giving while the earlier insulin is still on its way, and ends in a low.
@@ -67,5 +71,3 @@ Sometimes you know something the system can't see yet.
 **Boost** is for times when you need more insulin than usual: illness, stress, hormones, steroids. The system gives about a third more insulin while the sugar is above target, and still cuts back when it falls. Used for more than about 9 hours, Boost can push the time below range over 4%.
 
 **Ease-off** is for times when you need less insulin: sport, a long walk, a day of gardening, alcohol, hot weather, illness with vomiting or diarrhoea, the start of a period. The system aims higher and gives less. Activity makes the body more sensitive to insulin, and insulin given before it is still working during it, so Ease-off works best when started 60 to 90 minutes before the activity. Used for more than about 9 hours, Ease-off can push the time above 10 mmol/L over 30%.
-
-Next: [the sensor](sensor.md).

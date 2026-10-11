@@ -11,6 +11,10 @@ sources:
 
 Ein CGM-Sensor liefert alle paar Minuten einen neuen Zuckerwert, Tag und Nacht. Er ist der einzige Blick, den die Pumpe auf Ihren Körper hat, deshalb lohnt es sich zu wissen, was er eigentlich misst.
 
+<figure class="panel" data-fig="sensor" data-lines="Blut|Flüssigkeit unter der Haut|Sensorwerte">
+<figcaption><strong>Blut, Gewebeflüssigkeit und Sensor nach einer Mahlzeit</strong><span>Eine Mahlzeit mit 60 g und ihrem Bolus. Die Flüssigkeit unter der Haut folgt dem Blut etwas später, und jeder Wert alle 15 Minuten bringt seinen eigenen kleinen Fehler mit.</span></figcaption>
+</figure>
+
 ## Er misst nicht im Blut
 
 Der dünne Faden des Sensors sitzt direkt unter der Haut, in der Flüssigkeit zwischen den Zellen. Er misst den Zucker in dieser Flüssigkeit, nicht im Blut. Zucker wandert aus dem Blut in diese Flüssigkeit, die beiden liegen also nah beieinander, aber die Flüssigkeit folgt dem Blut mit einer Verzögerung von grob zehn Minuten.
@@ -25,15 +29,6 @@ Der Fehler ist hartnäckig. Misst der Sensor jetzt zu hoch, misst er wahrscheinl
 
 Diese Hartnäckigkeit ist der Grund, warum ein einzelner seltsamer Wert keine Reaktion wert ist, und warum ein automatisches System jeden neuen Wert gegen seine eigene Vorhersage abwägt, statt ihm blind zu glauben.
 
-```mermaid
-flowchart LR
-    B((Blutzucker)) -->|"etwa 10 min Verzögerung"| F[Flüssigkeit unter der Haut]
-    F --> S[Sensor]
-    S -->|"kleiner, hartnäckiger Fehler"| R[Messwert]
-```
-
 ## Wann ein Fingerpiks sinnvoll ist
 
 Wenn der Wert nicht dazu passt, wie Sie sich fühlen oder was Sie erwarten, messen Sie mit einem Messgerät nach. Der Fingerpiks misst das Blut selbst.
-
-Weiter: [Die Zahlen in Ihrem Bericht](math-and-metrics.md).

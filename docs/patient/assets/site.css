@@ -1,0 +1,168 @@
+@font-face {
+  font-family: "Public Sans";
+  src: url("public-sans-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Public Sans";
+  src: url("public-sans-latin-wght-italic.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* The clinic report's palette: ink on white, the five range colours. */
+:root {
+  color-scheme: light;
+  --ink: #1d1d1b;
+  --muted: #55534f;
+  --rule: #1d1d1b;
+  --hair: #c9c7c2;
+  --paper: #ffffff;
+  --band: #e9f4e7;
+  --spread-outer: #e4e3df;
+  --spread-inner: #c3c1bb;
+  --vlow: #8b1a1a;
+  --low: #e53935;
+  --in: #4caf50;
+  --high: #f9d648;
+  --vhigh: #f28c28;
+  /* The high yellow disappears as a line on white. */
+  --limit-high: #c9a400;
+  --gap: clamp(1rem, 4vw, 1.5rem);
+  --measure: 40rem;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scrollbar-color: var(--hair) var(--paper); }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 1.0625rem/1.6 "Public Sans", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+::selection { background: var(--high); color: var(--ink); }
+a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 0.18em; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Masthead: the report's header strip, range bar and page index. */
+.strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem var(--gap);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.strip ::selection { background: var(--paper); color: var(--ink); }
+.where { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lang { display: flex; flex-shrink: 0; gap: 0.9rem; }
+.lang a { text-decoration: none; opacity: 0.75; }
+.lang a:hover { opacity: 1; text-decoration: underline; }
+.lang [aria-current] { border-bottom: 2px solid var(--paper); }
+.strip :focus-visible { outline-color: var(--paper); }
+
+.range { display: flex; height: 0.7rem; }
+.range i { display: block; min-width: 2px; }
+.vlow, .low { background-image: repeating-linear-gradient(135deg, transparent 0 3px, rgb(255 255 255 / 0.55) 3px 4.5px); }
+.vlow { background-color: var(--vlow); }
+.low { background-color: var(--low); }
+.in { background: var(--in); }
+.high { background: var(--high); }
+.vhigh { background: var(--vhigh); }
+
+.range-key { margin: 0; padding: 0.4rem var(--gap); border-bottom: 1px solid var(--hair); font-size: 0.8125rem; text-align: center; }
+.chapters { border-bottom: 1px solid var(--rule); }
+.chapters ol { display: flex; margin: 0 auto; padding: 0; list-style: none; max-width: calc(var(--measure) + 2 * var(--gap)); }
+.chapters li { flex: 1; }
+.chapters a {
+  position: relative;
+  display: block;
+  padding: 0.55rem 0;
+  text-align: center;
+  text-decoration: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border-left: 1px solid var(--hair);
+}
+.chapters li:first-child a { border-left: 0; }
+.chapters a:hover { background: var(--band); }
+.chapters a[aria-current] { background: var(--ink); color: var(--paper); }
+.chapters a.stopped::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  border: 0.4rem solid var(--ink);
+  border-bottom-color: transparent;
+  border-left-color: transparent;
+}
+
+/* Reading column. */
+main, .foot { max-width: calc(var(--measure) + 2 * var(--gap)); margin: 0 auto; padding: 0 var(--gap); }
+main { padding-top: 1.75rem; }
+h1 { margin: 0 0 1rem; font-size: clamp(1.9rem, 6vw, 2.6rem); font-weight: 800; line-height: 1.08; letter-spacing: -0.015em; text-wrap: balance; }
+h2 { margin: 2.6rem 0 0.6rem; font-size: 1.3rem; font-weight: 700; line-height: 1.25; text-wrap: balance; }
+p, ul, ol { margin: 0 0 1rem; }
+main li { margin-bottom: 0.35rem; }
+strong { font-weight: 700; }
+
+table { width: 100%; margin: 1.25rem 0 1.5rem; border-collapse: collapse; font-size: 0.9375rem; }
+th, td { padding: 0.45rem 0.6rem 0.45rem 0; text-align: left; vertical-align: top; border-bottom: 1px solid var(--hair); }
+thead th { border-bottom: 1px solid var(--rule); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+td:not(:first-child), th:not(:first-child) { padding-left: 0.6rem; }
+
+/* Figures: ruled report panels. */
+figure.panel { margin: 1.75rem 0 2rem; border: 1px solid var(--rule); }
+.panel figcaption { padding: 0.65rem 0.8rem 0.6rem; border-bottom: 1px solid var(--rule); }
+.panel figcaption strong { display: block; font-size: 0.8125rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.panel figcaption span { display: block; margin-top: 0.15rem; color: var(--muted); font-size: 0.875rem; line-height: 1.45; }
+.panel svg { display: block; width: 100%; height: auto; }
+.panel .plot { padding: 0.5rem 0.4rem 0.2rem; }
+.panel .bars { display: grid; gap: 0.6rem; padding: 0.2rem 0.8rem 0.8rem; font-size: 0.875rem; }
+.panel .bars .range { height: 0.9rem; margin-top: 0.25rem; }
+.panel details { border-top: 1px solid var(--hair); font-size: 0.875rem; }
+.panel summary { padding: 0.5rem 0.8rem; cursor: pointer; color: var(--muted); font-weight: 600; }
+.panel summary:hover { color: var(--ink); }
+.panel details table { margin: 0; padding: 0 0.8rem; font-size: 0.8125rem; }
+.panel details .scroll { overflow-x: auto; padding: 0 0.8rem 0.6rem; }
+.panel .virtual { padding: 0.45rem 0.8rem; border-top: 1px solid var(--hair); color: var(--muted); font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; }
+
+svg text { font-family: "Public Sans", system-ui, sans-serif; fill: var(--ink); }
+svg .tick { font-size: 11px; fill: var(--muted); }
+svg .tick-sub { font-size: 9px; fill: var(--muted); }
+svg .label { font-size: 12px; font-weight: 600; }
+svg .grid { stroke: var(--hair); stroke-width: 1; }
+svg .edge { stroke: var(--ink); stroke-width: 1; }
+svg .limit-high { stroke: var(--limit-high); stroke-width: 2; }
+svg .limit-low { stroke: var(--low); stroke-width: 2; }
+
+.mermaid { margin: 1.75rem 0 2rem; padding: 1rem 0.5rem; border: 1px solid var(--rule); text-align: center; overflow-x: auto; }
+
+/* End of chapter: the way forward, then the standing note. */
+.foot { padding-bottom: 3rem; }
+.turn { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin-top: 3rem; border: 1px solid var(--rule); background: var(--rule); }
+.turn > * { background: var(--paper); }
+.turn a { display: flex; align-items: center; gap: 0.6rem; padding: 0.8rem; text-decoration: none; font-weight: 700; line-height: 1.3; }
+.turn .arrow { flex-shrink: 0; width: 16px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.turn a:hover { background: var(--band); }
+.turn [rel="next"] { justify-content: flex-end; text-align: right; }
+.note { margin-top: 1.25rem; color: var(--muted); font-size: 0.875rem; }
+
+@media (min-width: 60rem) {
+  body { font-size: 1.125rem; }
+}
+
+.panel .legend { display: flex; flex-wrap: wrap; gap: 0.3rem 1.1rem; margin: 0; padding: 0.6rem 0.8rem 0; list-style: none; font-size: 0.8125rem; }
+.panel .legend li { display: flex; flex: 0 0 auto; max-width: 100%; align-items: center; gap: 0.4rem; margin: 0; }
+.panel .legend svg { flex-shrink: 0; width: 28px; height: 10px; }

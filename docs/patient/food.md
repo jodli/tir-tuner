@@ -11,6 +11,10 @@ sources:
 
 Carbohydrates are sugar in different packaging: starch in bread and pasta, sugar in fruit and sweets. The gut breaks them down into single sugar molecules and passes them into the blood. One gram of carbs becomes about one gram of sugar in the blood. Carb ratios and the pages here count carbs only.
 
+<figure class="panel" data-fig="gut" data-lines="20 g|50 g|100 g">
+<figcaption><strong>Sugar arriving from the gut</strong><span>Grams per hour reaching the blood after one meal, virtual patient at 75 kg. 50 g and 100 g both hit the gut's top speed: the curve goes flat instead of higher, and the bigger meal just stays flat for longer.</span></figcaption>
+</figure>
+
 ## How fast it arrives
 
 Digestion is not instant. The food first sits in the stomach and then moves through the gut, and the sugar arrives in the blood spread out over time. For a small amount like 20 g, the flow into the blood is strongest about 40 minutes after eating, half has arrived after about an hour, and most of it after about two and a half hours.
@@ -45,12 +49,3 @@ Carbs eaten to treat a low are different from a meal: they are there to raise th
 ## Body size
 
 The same 30 g of carbs raises the sugar of a smaller person more than that of a larger person, because the sugar spreads through less body fluid. This is part of why carb ratios differ so much between people.
-
-```mermaid
-flowchart LR
-    P[Plate] --> S[Stomach]
-    S --> G["Gut: top speed per hour"]
-    G -->|"20 g: strongest after about 40 min"| B((Blood sugar))
-```
-
-Next: [how insulin works](insulin.md).

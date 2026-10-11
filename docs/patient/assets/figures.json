@@ -1,0 +1,5 @@
+---
+layout: null
+permalink: /assets/figures.json
+---
+{{ site.data.figures | jsonify }}

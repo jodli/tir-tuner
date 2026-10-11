@@ -11,6 +11,10 @@ sources:
 
 Kohlenhydrate sind Zucker in verschiedener Verpackung: Stärke in Brot und Nudeln, Zucker in Obst und Süßigkeiten. Der Darm zerlegt sie in einzelne Zuckermoleküle und gibt sie ins Blut. Aus einem Gramm Kohlenhydrate wird etwa ein Gramm Zucker im Blut. Das Kohlenhydratverhältnis und diese Seiten zählen nur Kohlenhydrate.
 
+<figure class="panel" data-fig="gut" data-lines="20 g|50 g|100 g">
+<figcaption><strong>Zucker aus dem Darm</strong><span>Gramm pro Stunde, die nach einer Mahlzeit im Blut ankommen, virtueller Patient mit 75 kg. 50 g und 100 g erreichen beide das Höchsttempo des Darms: Die Kurve wird flach statt höher, und die größere Mahlzeit bleibt einfach länger flach.</span></figcaption>
+</figure>
+
 ## Wie schnell er ankommt
 
 Verdauung geht nicht sofort. Das Essen liegt erst im Magen und wandert dann durch den Darm, und der Zucker kommt über eine längere Zeit verteilt im Blut an. Bei einer kleinen Menge wie 20 g ist der Zufluss ins Blut etwa 40 Minuten nach dem Essen am stärksten, die Hälfte ist nach etwa einer Stunde angekommen, das meiste nach etwa zweieinhalb Stunden.
@@ -45,12 +49,3 @@ Kohlenhydrate gegen ein Tief sind etwas anderes als eine Mahlzeit: Sie sollen de
 ## Körpergröße
 
 Dieselben 30 g Kohlenhydrate heben den Zucker eines kleineren Menschen stärker als den eines größeren, weil sich der Zucker in weniger Körperflüssigkeit verteilt. Das ist ein Grund, warum Kohlenhydratverhältnisse von Mensch zu Mensch so verschieden sind.
-
-```mermaid
-flowchart LR
-    P[Teller] --> S[Magen]
-    S --> G["Darm: Höchstgeschwindigkeit pro Stunde"]
-    G -->|"20 g: am stärksten nach etwa 40 min"| B((Blutzucker))
-```
-
-Weiter: [Wie Insulin wirkt](insulin.md).

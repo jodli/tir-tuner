@@ -12,3 +12,10 @@
 /settings.toml
 /docs/papers/
 /mutants.out*
+
+# impeccable working files
+.impeccable/config.local.json
+.impeccable/hook.cache.json
+.impeccable/mocks/
+.impeccable/review/
+.impeccable/questions/

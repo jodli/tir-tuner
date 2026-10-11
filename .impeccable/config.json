@@ -1,0 +1,33 @@
+{
+  "hook": {
+    "enabled": true,
+    "limits": {
+      "maxFindings": 5,
+      "maxChars": 8000
+    }
+  },
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/challenger-rail.html"
+        ],
+        "createdAt": "2026-10-11T07:27:44.060Z",
+        "reason": "agent: bone ground is the dealt catalog world's own palette in a decision sketch"
+      },
+      {
+        "rule": "wide-tracking",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/challenger-rail.html"
+        ],
+        "createdAt": "2026-10-11T07:27:44.109Z",
+        "reason": "agent: tracking only on short small-caps running head and section label, the world's apparatus style"
+      }
+    ]
+  }
+}

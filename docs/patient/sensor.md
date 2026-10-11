@@ -11,6 +11,10 @@ sources:
 
 A CGM sensor gives a new sugar reading every few minutes, day and night. It is the only view the pump has of your body, so it helps to know what it actually measures.
 
+<figure class="panel" data-fig="sensor" data-lines="Blood|Fluid under the skin|Sensor readings">
+<figcaption><strong>Blood, fluid and sensor after a meal</strong><span>A 60 g meal with its bolus. The fluid under the skin follows the blood a little later, and each reading every 15 minutes adds its own small error.</span></figcaption>
+</figure>
+
 ## It doesn't measure blood
 
 The sensor's thin filament sits just under the skin, in the fluid between the cells. It measures the sugar in that fluid, not in the blood. Sugar passes from the blood into this fluid, so the two are close, but the fluid follows the blood with a delay of roughly ten minutes.
@@ -25,15 +29,6 @@ The error is sticky. If the sensor reads too high now, it will probably still re
 
 That stickiness is why one strange reading is not worth acting on, and why an automatic system weighs each new value against its own prediction instead of trusting it blindly.
 
-```mermaid
-flowchart LR
-    B((Blood sugar)) -->|"about 10 min delay"| F[Fluid under the skin]
-    F --> S[Sensor]
-    S -->|"small, sticky error"| R[Reading]
-```
-
 ## When to check with a finger prick
 
 When the reading doesn't match how you feel or what you expect, check with a meter. The finger prick measures the blood itself.
-
-Next: [the numbers on your report](math-and-metrics.md).

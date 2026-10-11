@@ -1,0 +1,362 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-11T00:00:00Z",
+  "title": "Design System: The artificial pancreas project, for patients",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "primary",
+        "displayName": "Report Ink",
+        "canonical": "oklch(23.0% 0.004 107)",
+        "tonalRamp": [
+          "#0b0b09",
+          "#242422",
+          "#40403e",
+          "#5e5e5b",
+          "#7d7d7b",
+          "#9e9e9c",
+          "#c4c4c1",
+          "#eeeeec"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Report Grey",
+        "canonical": "oklch(44.3% 0.007 85)",
+        "tonalRamp": [
+          "#0c0b08",
+          "#262420",
+          "#413f3c",
+          "#5f5d59",
+          "#7f7d79",
+          "#a09e9a",
+          "#c6c4bf",
+          "#f0eeeb"
+        ]
+      },
+      "hair": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "oklch(83.0% 0.007 89)",
+        "tonalRamp": [
+          "#0c0b08",
+          "#252420",
+          "#41403b",
+          "#5f5d59",
+          "#7f7d78",
+          "#a09e99",
+          "#c6c4bf",
+          "#f0eeeb"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "oklch(100.0% 0.000 90)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#242424",
+          "#404040",
+          "#5d5d5d",
+          "#7d7d7d",
+          "#9e9e9e",
+          "#c4c4c4",
+          "#eeeeee"
+        ]
+      },
+      "band": {
+        "role": "neutral",
+        "displayName": "Target Band Green",
+        "canonical": "oklch(95.5% 0.021 141)",
+        "tonalRamp": [
+          "#070d06",
+          "#1f271d",
+          "#3a4338",
+          "#576156",
+          "#778175",
+          "#98a296",
+          "#bdc8bb",
+          "#e9f1e8"
+        ]
+      },
+      "spread-outer": {
+        "role": "neutral",
+        "displayName": "Outer Spread Grey",
+        "canonical": "oklch(91.5% 0.005 95)",
+        "tonalRamp": [
+          "#0c0b09",
+          "#252421",
+          "#40403c",
+          "#5e5e5a",
+          "#7e7d7a",
+          "#9f9e9b",
+          "#c5c4c0",
+          "#efeeeb"
+        ]
+      },
+      "spread-inner": {
+        "role": "neutral",
+        "displayName": "Inner Spread Grey",
+        "canonical": "oklch(81.1% 0.009 92)",
+        "tonalRamp": [
+          "#0c0b07",
+          "#25241f",
+          "#41403b",
+          "#5f5d58",
+          "#7f7d78",
+          "#a09e98",
+          "#c6c4be",
+          "#f0eeea"
+        ]
+      },
+      "very-low": {
+        "role": "secondary",
+        "displayName": "Very Low Maroon",
+        "canonical": "oklch(41.6% 0.148 27)",
+        "tonalRamp": [
+          "#340000",
+          "#580000",
+          "#7c030c",
+          "#a1312c",
+          "#c6534b",
+          "#ec766b",
+          "#ff9c90",
+          "#ffd3c8"
+        ]
+      },
+      "low": {
+        "role": "secondary",
+        "displayName": "Low Red",
+        "canonical": "oklch(60.8% 0.209 27)",
+        "tonalRamp": [
+          "#410000",
+          "#680000",
+          "#8f0000",
+          "#b70003",
+          "#de312f",
+          "#ff5b51",
+          "#ff8477",
+          "#ffc6b7"
+        ]
+      },
+      "in-range": {
+        "role": "secondary",
+        "displayName": "In Range Green",
+        "canonical": "oklch(67.3% 0.162 144)",
+        "tonalRamp": [
+          "#001600",
+          "#003400",
+          "#005300",
+          "#00730c",
+          "#2f9536",
+          "#55b858",
+          "#7cdf7e",
+          "#beffbd"
+        ]
+      },
+      "high": {
+        "role": "secondary",
+        "displayName": "High Yellow",
+        "canonical": "oklch(88.2% 0.158 95)",
+        "tonalRamp": [
+          "#1f0100",
+          "#3c1b00",
+          "#5a3900",
+          "#7a5900",
+          "#9b7900",
+          "#be9b00",
+          "#e5c22b",
+          "#ffee94"
+        ]
+      },
+      "very-high": {
+        "role": "secondary",
+        "displayName": "Very High Orange",
+        "canonical": "oklch(73.5% 0.161 59)",
+        "tonalRamp": [
+          "#320000",
+          "#550000",
+          "#781800",
+          "#9c3d00",
+          "#c05f00",
+          "#e68114",
+          "#ffa74b",
+          "#ffdc9f"
+        ]
+      },
+      "high-limit": {
+        "role": "secondary",
+        "displayName": "Darkened High Rule",
+        "canonical": "oklch(73.1% 0.150 93)",
+        "tonalRamp": [
+          "#200000",
+          "#3d1a00",
+          "#5b3800",
+          "#7b5800",
+          "#9d7800",
+          "#bf9a00",
+          "#e6c13b",
+          "#ffed99"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page title, once per page."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section heads in the reading column."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running text, 40rem measure; 1.125rem from 60rem wide."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Panel subtitles and the standing note, report grey."
+      },
+      "label-strip": {
+        "displayName": "Strip label",
+        "purpose": "Header strip, uppercase."
+      },
+      "label-panel": {
+        "displayName": "Panel label",
+        "purpose": "Report panel titles, uppercase."
+      },
+      "label-nav": {
+        "displayName": "Chapter tab",
+        "purpose": "Numbered chapter strip."
+      }
+    },
+    "shadows": [],
+    "motion": [],
+    "breakpoints": [
+      {
+        "name": "chart-wide",
+        "value": "520px (figure host width): chart aspect 0.72 below, 0.48 above"
+      },
+      {
+        "name": "desktop",
+        "value": "60rem: body 1.125rem"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Header Strip",
+      "kind": "nav",
+      "refersTo": "masthead-strip",
+      "description": "Full-bleed ink strip with chapter position, page name and language switch.",
+      "html": "<div class=\"ds-strip\"><span>1/8 · Type 1 diabetes, from the inside</span><nav class=\"ds-lang\"><span aria-current=\"true\">English</span><a href=\"#\">Deutsch</a></nav></div>",
+      "css": "font-family:'Public Sans',system-ui,sans-serif;font-variant-numeric:tabular-nums;.ds-strip{display:flex;justify-content:space-between;gap:1rem;padding:.7rem 1.5rem;background:#1d1d1b;color:#fff;font:600 .75rem/1.6 'Public Sans',system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase}.ds-lang{display:flex;gap:.9rem}.ds-lang a{color:inherit;text-decoration:none;opacity:.75}.ds-lang a:hover{opacity:1;text-decoration:underline}.ds-lang [aria-current]{border-bottom:2px solid #fff}.ds-lang a:focus-visible{outline:2px solid #fff;outline-offset:2px}"
+    },
+    {
+      "name": "Range Bar",
+      "kind": "custom",
+      "refersTo": "range-bar",
+      "description": "Stacked time in range bar in the five report colours; lows striped. Always paired with a text key.",
+      "html": "<div><div class=\"ds-range\"><i class=\"ds-vlow\" style=\"flex:1\"></i><i class=\"ds-low\" style=\"flex:5\"></i><i class=\"ds-in\" style=\"flex:86\"></i><i class=\"ds-high\" style=\"flex:7\"></i><i class=\"ds-vhigh\" style=\"flex:1\"></i></div><p class=\"ds-key\">14 virtual days: <strong>86%</strong> in range · 6% below · 8% above</p></div>",
+      "css": ".ds-range{display:flex;height:.7rem}.ds-range i{display:block;min-width:2px}.ds-vlow,.ds-low{background-image:repeating-linear-gradient(135deg,transparent 0 3px,rgb(255 255 255 / .55) 3px 4.5px);}.ds-vlow{background-color:#8b1a1a}.ds-low{background-color:#e53935}.ds-in{background:#4caf50}.ds-high{background:#f9d648}.ds-vhigh{background:#f28c28}.ds-key{margin:0;padding:.4rem 1.5rem;border-bottom:1px solid #c9c7c2;font:400 .8125rem/1.6 'Public Sans',system-ui,sans-serif;text-align:center;color:#1d1d1b;font-variant-numeric:tabular-nums}"
+    },
+    {
+      "name": "Chapter Strip",
+      "kind": "nav",
+      "refersTo": "chapter-tab",
+      "description": "Eight numbered tabs; hover band green, current inverted ink, stopped-at chapter marked with a corner triangle.",
+      "html": "<nav class=\"ds-chapters\"><ol><li><a href=\"#\">1</a></li><li><a href=\"#\" class=\"ds-stopped\">2</a></li><li><a href=\"#\" aria-current=\"page\">3</a></li><li><a href=\"#\">4</a></li><li><a href=\"#\">5</a></li></ol></nav>",
+      "css": ".ds-chapters{border-bottom:1px solid #1d1d1b}.ds-chapters ol{display:flex;margin:0;padding:0;list-style:none}.ds-chapters li{flex:1}.ds-chapters a{position:relative;display:block;padding:.55rem 0;text-align:center;text-decoration:none;color:#1d1d1b;font:600 .8125rem/1.6 'Public Sans',system-ui,sans-serif;border-left:1px solid #c9c7c2}.ds-chapters li:first-child a{border-left:0}.ds-chapters a:hover{background:#e9f4e7}.ds-chapters a:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}.ds-chapters a[aria-current]{background:#1d1d1b;color:#fff}.ds-stopped::after{content:'';position:absolute;top:0;right:0;border:.4rem solid #1d1d1b;border-bottom-color:transparent;border-left-color:transparent}"
+    },
+    {
+      "name": "Report Panel",
+      "kind": "card",
+      "refersTo": "report-panel",
+      "description": "Ruled figure panel: tracked-caps title, grey caption, chart on the target band, numbers table, provenance line.",
+      "html": "<figure class=\"ds-panel\"><figcaption><strong>Two weeks of one virtual patient</strong><span>The same four meals every day, each with a bolus, Auto mode on.</span></figcaption><svg viewBox=\"0 0 320 150\" class=\"ds-plot\"><rect x=\"40\" y=\"40\" width=\"270\" height=\"60\" fill=\"#e9f4e7\"/><line x1=\"40\" x2=\"310\" y1=\"40\" y2=\"40\" stroke=\"#c9a400\" stroke-width=\"2\"/><line x1=\"40\" x2=\"310\" y1=\"100\" y2=\"100\" stroke=\"#e53935\" stroke-width=\"2\"/><path d=\"M40 90 C80 20 110 30 140 80 S200 30 230 70 S290 60 310 85 L310 95 C280 75 250 90 230 85 S170 55 140 95 S80 50 40 100Z\" fill=\"#c3c1bb\" opacity=\".85\"/><path d=\"M40 95 C80 30 110 40 140 88 S200 40 230 78 S290 70 310 90\" fill=\"none\" stroke=\"#1d1d1b\" stroke-width=\"2.6\" stroke-linejoin=\"round\"/><line x1=\"40\" x2=\"310\" y1=\"130\" y2=\"130\" stroke=\"#1d1d1b\"/><text x=\"34\" y=\"44\" text-anchor=\"end\">180</text><text x=\"34\" y=\"104\" text-anchor=\"end\">70</text></svg><details><summary>Show the numbers</summary><table><thead><tr><th>Time</th><th>Median</th></tr></thead><tbody><tr><td>06:00</td><td>112</td></tr></tbody></table></details><div class=\"ds-virtual\">Virtual patient · model output</div></figure>",
+      "css": ".ds-panel{margin:0;border:1px solid #1d1d1b;background:#fff;color:#1d1d1b;font:400 1rem/1.6 'Public Sans',system-ui,sans-serif;font-variant-numeric:tabular-nums}.ds-panel figcaption{padding:.65rem .8rem .6rem;border-bottom:1px solid #1d1d1b}.ds-panel figcaption strong{display:block;font-size:.8125rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}.ds-panel figcaption span{display:block;margin-top:.15rem;color:#55534f;font-size:.875rem;line-height:1.45}.ds-plot{display:block;width:100%;height:auto;padding:.5rem .4rem .2rem}.ds-plot text{font-size:11px;fill:#55534f}.ds-panel details{border-top:1px solid #c9c7c2;font-size:.875rem}.ds-panel summary{padding:.5rem .8rem;cursor:pointer;color:#55534f;font-weight:600}.ds-panel summary:hover{color:#1d1d1b}.ds-panel summary:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}.ds-panel table{width:100%;border-collapse:collapse;font-size:.8125rem;margin:0 .8rem .6rem}.ds-panel th,.ds-panel td{padding:.45rem .6rem .45rem 0;text-align:left;border-bottom:1px solid #c9c7c2}.ds-panel thead th{border-bottom-color:#1d1d1b;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase}.ds-virtual{padding:.45rem .8rem;border-top:1px solid #c9c7c2;color:#55534f;font-size:.75rem;letter-spacing:.04em;text-transform:uppercase}"
+    },
+    {
+      "name": "Data Table",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Ruled report table: hairline rows, ink rule under tracked-caps heads.",
+      "html": "<table class=\"ds-table\"><thead><tr><th>Range</th><th>mg/dL</th><th>Share</th></tr></thead><tbody><tr><td>In range</td><td>70–180</td><td>86%</td></tr><tr><td>Below</td><td>under 70</td><td>6%</td></tr></tbody></table>",
+      "css": ".ds-table{width:100%;border-collapse:collapse;font:400 .9375rem/1.6 'Public Sans',system-ui,sans-serif;font-variant-numeric:tabular-nums;color:#1d1d1b}.ds-table th,.ds-table td{padding:.45rem .6rem;text-align:left;vertical-align:top;border-bottom:1px solid #c9c7c2}.ds-table th:first-child,.ds-table td:first-child{padding-left:0}.ds-table thead th{border-bottom:1px solid #1d1d1b;font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}"
+    },
+    {
+      "name": "Prev / Next",
+      "kind": "nav",
+      "refersTo": "turn-link",
+      "description": "Two-cell ink-framed chapter turn with SVG stroke arrows.",
+      "html": "<nav class=\"ds-turn\"><a href=\"#\" rel=\"prev\"><svg viewBox=\"0 0 16 12\"><path d=\"M15 6H2M6.5 1.5 2 6l4.5 4.5\"/></svg><span>How insulin works</span></a><a href=\"#\" rel=\"next\"><span>How the pump decides on its own</span><svg viewBox=\"0 0 16 12\"><path d=\"M1 6h13M9.5 1.5 14 6l-4.5 4.5\"/></svg></a></nav>",
+      "css": ".ds-turn{display:grid;grid-template-columns:1fr 1fr;gap:1px;border:1px solid #1d1d1b;background:#1d1d1b}.ds-turn a{display:flex;align-items:center;gap:.6rem;padding:.8rem;background:#fff;color:#1d1d1b;text-decoration:none;font:700 1rem/1.3 'Public Sans',system-ui,sans-serif}.ds-turn a:hover{background:#e9f4e7}.ds-turn a:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}.ds-turn [rel=next]{justify-content:flex-end;text-align:right}.ds-turn svg{flex-shrink:0;width:16px;height:12px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}"
+    },
+    {
+      "name": "Text Link",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Ink link with thin offset underline that thickens on hover.",
+      "html": "<p class=\"ds-p\">Start with <a href=\"#\">where blood sugar comes from</a>.</p>",
+      "css": ".ds-p{font:400 1.0625rem/1.6 'Public Sans',system-ui,sans-serif;color:#1d1d1b}.ds-p a{color:inherit;text-decoration-thickness:1px;text-underline-offset:.18em}.ds-p a:hover{text-decoration-thickness:2px}.ds-p a:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Clinic Report",
+    "overview": "Every page is set like the one-page glucose report a diabetes clinic prints (AGP style). The report's own furniture carries the explanation: a near-black header strip, the stacked time in range bar in the five report colours, ruled panels with the 70 to 180 band tinted pale green, a heavy ink median and a grey spread of days. A patient recognises it; a friend learns to read it on page one and reuses that skill on every chapter.\n\nThe world is flat, white and ruled. Ink does the structural work, hairlines separate, and colour is reserved for glucose meaning. One single-column reading measure, one sans family with tabular figures, square corners everywhere. Density is a printout's: compact labels and tables next to generous body text.\n\nEvery figure is virtual patient model output and says so in its own footer line.",
+    "keyCharacteristics": [
+      "White paper ground, ink rules, no shadows, no radius.",
+      "The five range colours mean glucose ranges and nothing else.",
+      "Colour never alone: every band has a text label, lows also carry a stripe pattern.",
+      "One glucose scale (mg/dL primary, mmol/L in small type under each tick) on every glucose figure.",
+      "Every figure has its numbers in a table under it."
+    ],
+    "rules": [
+      {
+        "name": "The Range Colours Are Data Rule",
+        "body": "The five range colours appear only where they encode a glucose range. Never as accent, link, button or decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The Never Colour Alone Rule",
+        "body": "Every coloured band carries a text label or a legend entry; lows also carry the stripe pattern.",
+        "section": "colors"
+      },
+      {
+        "name": "The Ink Accent Rule",
+        "body": "There is no brand accent. Emphasis is ink: weight, the inverted ink tab, the heavy median.",
+        "section": "colors"
+      },
+      {
+        "name": "The Report Label Rule",
+        "body": "Tracked uppercase belongs to report furniture only: the strip, panel titles, table heads and the provenance line. Body headings stay sentence case.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Numbers Rule",
+        "body": "`font-variant-numeric: tabular-nums` is set on body and inherited everywhere.",
+        "section": "typography"
+      },
+      {
+        "name": "The Printout Rule",
+        "body": "If it would not survive a black and white laser printer, it is not structure. Shadows, gradients and glows have no place; the only gradient is the low-range stripe pattern.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do draw every glucose figure on the one glucose scale with the band green 70 to 180 band and the two limit rules.",
+      "Do give every figure a numbers table and the virtual patient provenance line.",
+      "Do label every coloured band in text, and stripe the lows.",
+      "Do build containers from 1px ink rules on white with square corners.",
+      "Do keep emphasis in ink: weight, inversion, line thickness."
+    ],
+    "donts": [
+      "Don't use the five range colours for anything but glucose ranges.",
+      "Don't add shadows, rounded cards, or tinted card grounds.",
+      "Don't add a brand accent colour or a blue link colour.",
+      "Don't add decorative icons; the only icons are functional SVG arrows on prev/next.",
+      "Don't use tracked uppercase outside report furniture (strip, panel title, table head, provenance line).",
+      "Don't use the high yellow (#f9d648) as a line or text colour on white; use the darkened high rule."
+    ]
+  }
+}

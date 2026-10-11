@@ -11,6 +11,10 @@ sources:
 
 A sensor collects hundreds of readings a day. Your clinic sums them up in a few numbers, and the same numbers are used worldwide, so a report from one clinic means the same in another.
 
+<figure class="panel" data-fig="day" data-lines="Typical day">
+<figcaption><strong>The virtual patient against the goals</strong><span>The two weeks from the first page. Time in range and time above range meet the goals. Time below range doesn't: 6% below 70 and 2% below 54.</span></figcaption>
+</figure>
+
 ## Two units for the same thing
 
 Sugar is measured in mg/dL or mmol/L, depending on the country and the device. They are the same thing on a different scale: 1 mmol/L is 18 mg/dL.
@@ -47,5 +51,3 @@ The **coefficient of variation** (CV) says how much the readings swing around th
 ## Reading your own report
 
 A single day says little. One forgotten bolus or one wrong carb count can ruin it. Reports usually cover the last 14 days, and patterns over that time are what count: the same high after the same meal, the same low in the same part of the night. Those patterns point at a specific time and a specific setting, as described in [carb ratio, correction factor, target](dosing.md).
-
-Back to the [overview](index.md).
