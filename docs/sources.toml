@@ -248,6 +248,13 @@ values = [70.0, 180.0]
 status = "source"
 
 [[claim]]
+id = "battelino-level2-bands"
+source = "battelino2019"
+at = "p3, Table 2"
+values = [54.0, 250.0]
+status = "source"
+
+[[claim]]
 id = "battelino-integer-bands"
 source = "battelino2019"
 at = "p3, Table 2"

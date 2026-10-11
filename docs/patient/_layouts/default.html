@@ -2,7 +2,8 @@
 {%- assign slug = page.path | remove_first: "de/" | remove: ".md" %}
 {%- assign chapters = site.data.chapters %}
 {%- assign bins = site.data.figures.day.auto_bins %}
-{%- if lang == "de" %}{%- assign assets = "../assets/" %}{% else %}{%- assign assets = "assets/" %}{% endif %}
+{%- if lang == "de" %}{%- assign assets = "../assets/" %}{%- assign pc = "&nbsp;%" %}{% else %}{%- assign assets = "assets/" %}{%- assign pc = "%" %}{% endif %}
+{%- assign words = "in range,below,above" | split: "," %}{%- if lang == "de" %}{%- assign words = "im Ziel,unter,über" | split: "," %}{% endif %}
 {%- for c in chapters %}{%- if c.page == slug %}{%- assign n = forloop.index %}{% endif %}{% endfor %}
 <!doctype html>
 <html lang="{{ lang }}">
@@ -11,6 +12,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ page.title }}</title>
   <link rel="preload" href="{{ assets }}public-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{ assets }}figures.json" as="fetch" crossorigin>
   <link rel="stylesheet" href="{{ assets }}site.css">
 </head>
 <body data-chapter="{{ n }}" data-assets="{{ assets }}">
@@ -25,10 +27,10 @@
     <div class="range" aria-hidden="true">
       <i class="vlow" style="flex:{{ bins[0] }}"></i><i class="low" style="flex:{{ bins[1] }}"></i><i class="in" style="flex:{{ bins[2] }}"></i><i class="high" style="flex:{{ bins[3] }}"></i><i class="vhigh" style="flex:{{ bins[4] }}"></i>
     </div>
-    <p class="range-key">{% if lang == "de" %}{{ site.data.figures.day.days }} virtuelle Tage: <strong>{{ bins[2] | round }}&nbsp;%</strong> im Ziel · {{ bins[0] | plus: bins[1] | round }}&nbsp;% unter · {{ bins[3] | plus: bins[4] | round }}&nbsp;% über{% else %}{{ site.data.figures.day.days }} virtual days: <strong>{{ bins[2] | round }}%</strong> in range · {{ bins[0] | plus: bins[1] | round }}% below · {{ bins[3] | plus: bins[4] | round }}% above{% endif %}</p>
+    <p class="range-key">{{ site.data.figures.day.days }} {% if lang == "de" %}virtuelle Tage{% else %}virtual days{% endif %}: <strong>{{ bins[2] | round }}{{ pc }}</strong> {{ words[0] }} · {{ bins[0] | plus: bins[1] | round }}{{ pc }} {{ words[1] }} · {{ bins[3] | plus: bins[4] | round }}{{ pc }} {{ words[2] }}</p>
     <nav class="chapters" aria-label="{% if lang == 'de' %}Kapitel{% else %}Chapters{% endif %}">
       <ol>
-        {% for c in chapters %}<li><a href="{% if c.page == 'index' %}./{% else %}{{ c.page }}.html{% endif %}" data-n="{{ forloop.index }}" title="{{ c[lang] }}"{% if forloop.index == n %} aria-current="page"{% endif %}><span class="sr">{{ c[lang] }}, </span>{{ forloop.index }}</a></li>{% endfor %}
+        {% for c in chapters %}<li><a href="{{ c.href }}" data-n="{{ forloop.index }}" title="{{ c[lang] }}"{% if forloop.index == n %} aria-current="page"{% endif %}><span class="sr">{{ c[lang] }}, </span>{{ forloop.index }}</a></li>{% endfor %}
       </ol>
     </nav>
   </header>
@@ -38,8 +40,8 @@
   <footer class="foot">
     <nav class="turn" aria-label="{% if lang == 'de' %}Weiterlesen{% else %}Keep reading{% endif %}">
       {% assign prev = n | minus: 2 %}{% assign next = n %}
-      {% if n > 1 %}{% assign c = chapters[prev] %}<a rel="prev" href="{% if c.page == 'index' %}./{% else %}{{ c.page }}.html{% endif %}"><svg class="arrow" viewBox="0 0 16 12" aria-hidden="true"><path d="M15 6H2M6.5 1.5 2 6l4.5 4.5"/></svg><span>{{ c[lang] }}</span></a>{% else %}<span></span>{% endif %}
-      {% if n < chapters.size %}{% assign c = chapters[next] %}<a rel="next" href="{{ c.page }}.html"><span>{{ c[lang] }}</span><svg class="arrow" viewBox="0 0 16 12" aria-hidden="true"><path d="M1 6h13M9.5 1.5 14 6l-4.5 4.5"/></svg></a>{% else %}<span></span>{% endif %}
+      {% if n > 1 %}{% assign c = chapters[prev] %}<a rel="prev" href="{{ c.href }}"><svg class="arrow" viewBox="0 0 16 12" aria-hidden="true"><path d="M15 6H2M6.5 1.5 2 6l4.5 4.5"/></svg><span>{{ c[lang] }}</span></a>{% else %}<span></span>{% endif %}
+      {% if n < chapters.size %}{% assign c = chapters[next] %}<a rel="next" href="{{ c.href }}"><span>{{ c[lang] }}</span><svg class="arrow" viewBox="0 0 16 12" aria-hidden="true"><path d="M1 6h13M9.5 1.5 14 6l-4.5 4.5"/></svg></a>{% else %}<span></span>{% endif %}
     </nav>
     <p class="note">{% if lang == "de" %}Keine medizinische Beratung. Alle Kurven stammen von einem virtuellen Patienten, nicht von einem echten Menschen. Änderungen an Ihren Einstellungen besprechen Sie mit Ihrem Diabetesteam.{% else %}Not medical advice. Every curve comes from a virtual patient, not a real person. Changes to your settings belong with your care team.{% endif %}</p>
   </footer>

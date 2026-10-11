@@ -8,6 +8,11 @@ pub const TIR_LOW_MG_DL: f64 = 70.0;
 /// Highest reading in range, mg/dL. src: battelino-tir-band
 pub const TIR_HIGH_MG_DL: f64 = 180.0;
 
+/// Below this is level 2 hypoglycemia, mg/dL. src: battelino-level2-bands
+pub const TBR_VERY_LOW_MG_DL: f64 = 54.0;
+/// Above this is level 2 hyperglycemia, mg/dL. src: battelino-level2-bands
+pub const TAR_VERY_HIGH_MG_DL: f64 = 250.0;
+
 /// src: percent
 const PERCENT: f64 = 100.0;
 
@@ -21,6 +26,21 @@ pub fn time_in_range_pct(readings: &[MgDl]) -> f64 {
 /// Percent of readings below 70 mg/dL.
 pub fn time_below_range_pct(readings: &[MgDl]) -> f64 {
     pct(readings, |mg| mg < TIR_LOW_MG_DL)
+}
+
+/// Percent of readings very low, low, in range, high and very high.
+pub fn range_bands_pct(readings: &[MgDl]) -> [f64; 5] {
+    [
+        pct(readings, |mg| mg < TBR_VERY_LOW_MG_DL),
+        pct(readings, |mg| {
+            (TBR_VERY_LOW_MG_DL..TIR_LOW_MG_DL).contains(&mg)
+        }),
+        time_in_range_pct(readings),
+        pct(readings, |mg| {
+            mg > TIR_HIGH_MG_DL && mg <= TAR_VERY_HIGH_MG_DL
+        }),
+        pct(readings, |mg| mg > TAR_VERY_HIGH_MG_DL),
+    ]
 }
 
 fn valid(readings: &[MgDl]) -> impl Iterator<Item = f64> + Clone + '_ {
@@ -80,6 +100,14 @@ mod tests {
         let r = mg(&[54.0, 69.0, 70.0, 180.0, 181.0]);
         assert_eq!(time_in_range_pct(&r), 40.0);
         assert_eq!(time_below_range_pct(&r), 40.0);
+    }
+
+    #[test]
+    fn battelino_level2_bands_split_54_and_250() {
+        let r = mg(&[
+            40.0, 53.0, 54.0, 69.0, 180.0, 181.0, 200.0, 250.0, 251.0, 300.0,
+        ]);
+        assert_eq!(range_bands_pct(&r), [20.0, 20.0, 10.0, 30.0, 20.0]);
     }
 
     #[test]

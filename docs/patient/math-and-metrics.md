@@ -12,7 +12,7 @@ sources:
 A sensor collects hundreds of readings a day. Your clinic sums them up in a few numbers, and the same numbers are used worldwide, so a report from one clinic means the same in another.
 
 <figure class="panel" data-fig="day" data-lines="Typical day">
-<figcaption><strong>The virtual patient against the goals</strong><span>The two weeks from the first page. Time in range and time above range meet the goals. Time below range doesn't: 6% below 70 and 2% below 54.</span></figcaption>
+<figcaption><strong>The virtual patient against the goals</strong><span>The two weeks from the first page. It meets every goal: 89% in range, 2% below 70 with less than 1% below 54, and 8% above 180 with none above 250.</span></figcaption>
 </figure>
 
 ## Two units for the same thing

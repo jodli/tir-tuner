@@ -12,7 +12,7 @@ sources:
 Ein Sensor sammelt Hunderte Werte am Tag. Ihre Klinik fasst sie in wenigen Zahlen zusammen, und diese Zahlen werden weltweit gleich verwendet, ein Bericht aus der einen Klinik bedeutet also in der anderen dasselbe.
 
 <figure class="panel" data-fig="day" data-lines="Typischer Tag">
-<figcaption><strong>Der virtuelle Patient und die Ziele</strong><span>Die zwei Wochen von der ersten Seite. Zeit im Zielbereich und Zeit darüber erreichen die Ziele. Die Zeit darunter nicht: 6 % unter 70 und 2 % unter 54.</span></figcaption>
+<figcaption><strong>Der virtuelle Patient und die Ziele</strong><span>Die zwei Wochen von der ersten Seite. Er erreicht jedes Ziel: 89 % im Zielbereich, 2 % unter 70, davon weniger als 1 % unter 54, und 8 % über 180, nichts über 250.</span></figcaption>
 </figure>
 
 ## Zwei Einheiten für dieselbe Sache

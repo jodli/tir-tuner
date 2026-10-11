@@ -1,24 +1,32 @@
 - page: index
+  href: ./
   en: Type 1 diabetes, from the inside
   de: Typ-1-Diabetes von innen
 - page: body
+  href: body.html
   en: Where blood sugar comes from
   de: Woher der Blutzucker kommt
 - page: food
+  href: food.html
   en: From plate to blood
   de: Vom Teller ins Blut
 - page: insulin
+  href: insulin.html
   en: How insulin works
   de: Wie Insulin wirkt
 - page: dosing
+  href: dosing.html
   en: Carb ratio, correction factor, target
   de: Kohlenhydratverhältnis, Korrekturfaktor, Zielwert
 - page: brain
+  href: brain.html
   en: How the pump decides on its own
   de: Wie die Pumpe selbst entscheidet
 - page: sensor
+  href: sensor.html
   en: The sensor
   de: Der Sensor
 - page: math-and-metrics
+  href: math-and-metrics.html
   en: The numbers on your report
   de: Die Zahlen in Ihrem Bericht

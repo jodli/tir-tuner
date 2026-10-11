@@ -161,6 +161,28 @@ pub fn icr_boluses(subject: &VirtualSubject, meals: &[Meal], factor: f64) -> Vec
         .collect()
 }
 
+/// Four meals bolused at 0.8 of the Walsh ratio, from 140 mg/dL. The tests
+/// hold it in range and the patient pages show it.
+pub fn realistic_day(seed: u64) -> SimConfig {
+    let mut cfg = SimConfig {
+        duration_hours: 24.0,
+        admit_glucose_mg_per_dl: 140.0,
+        meals: [(360.0, 60.0), (600.0, 50.0), (840.0, 70.0), (1140.0, 60.0)]
+            .map(|(start_min, carbs_g)| Meal {
+                start_min,
+                carbs_g,
+                announced: true,
+            })
+            .to_vec(),
+        variability_seed: seed,
+        pump_seed: seed + 100,
+        sensor_seed: seed + 200,
+        ..SimConfig::default()
+    };
+    cfg.boluses = icr_boluses(&cfg.subject, &cfg.meals, 0.8);
+    cfg
+}
+
 /// Run one scenario deterministically from the seeds.
 ///
 /// # Panics
@@ -506,28 +528,13 @@ mod tests {
         assert!(closed > open, "closed {closed:.1}% vs open {open:.1}%");
     }
 
-    /// Four bolused meals at 0.8 of the Walsh ratio, as a mean over 8 seed
-    /// sets: W10's variability makes single days swing (worst of 24: 8% TBR).
+    /// A mean over 8 seed sets: W10's variability makes single days swing
+    /// (worst of 24: 8% TBR).
     #[test]
     fn realistic_day_stays_in_range() {
         let (mut tir, mut low) = (0.0, 0.0);
         for seed in 1..=8 {
-            let mut cfg = SimConfig {
-                duration_hours: 24.0,
-                admit_glucose_mg_per_dl: 140.0,
-                meals: vec![
-                    meal(360.0, 60.0, true),
-                    meal(600.0, 50.0, true),
-                    meal(840.0, 70.0, true),
-                    meal(1140.0, 60.0, true),
-                ],
-                variability_seed: seed,
-                pump_seed: seed + 100,
-                sensor_seed: seed + 200,
-                ..SimConfig::default()
-            };
-            cfg.boluses = icr_boluses(&cfg.subject, &cfg.meals, 0.8);
-            let ig = simulate(&cfg).interstitial_mmol_per_l;
+            let ig = simulate(&realistic_day(seed)).interstitial_mmol_per_l;
             tir += tir_pct(&ig) / 8.0;
             low += tbr_pct(&ig) / 8.0;
         }

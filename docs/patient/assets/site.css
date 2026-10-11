@@ -33,6 +33,7 @@
   --limit-high: #c9a400;
   --gap: clamp(1rem, 4vw, 1.5rem);
   --measure: 40rem;
+  --page: calc(var(--measure) + 2 * var(--gap));
 }
 
 * { box-sizing: border-box; }
@@ -83,7 +84,7 @@ a:hover { text-decoration-thickness: 2px; }
 
 .range-key { margin: 0; padding: 0.4rem var(--gap); border-bottom: 1px solid var(--hair); font-size: 0.8125rem; text-align: center; }
 .chapters { border-bottom: 1px solid var(--rule); }
-.chapters ol { display: flex; margin: 0 auto; padding: 0; list-style: none; max-width: calc(var(--measure) + 2 * var(--gap)); }
+.chapters ol { display: flex; margin: 0 auto; padding: 0; list-style: none; max-width: var(--page); }
 .chapters li { flex: 1; }
 .chapters a {
   position: relative;
@@ -109,7 +110,7 @@ a:hover { text-decoration-thickness: 2px; }
 }
 
 /* Reading column. */
-main, .foot { max-width: calc(var(--measure) + 2 * var(--gap)); margin: 0 auto; padding: 0 var(--gap); }
+main, .foot { max-width: var(--page); margin: 0 auto; padding: 0 var(--gap); }
 main { padding-top: 1.75rem; }
 h1 { margin: 0 0 1rem; font-size: clamp(1.9rem, 6vw, 2.6rem); font-weight: 800; line-height: 1.08; letter-spacing: -0.015em; text-wrap: balance; }
 h2 { margin: 2.6rem 0 0.6rem; font-size: 1.3rem; font-weight: 700; line-height: 1.25; text-wrap: balance; }
@@ -128,6 +129,9 @@ figure.panel { margin: 1.75rem 0 2rem; border: 1px solid var(--rule); }
 .panel figcaption strong { display: block; font-size: 0.8125rem; letter-spacing: 0.06em; text-transform: uppercase; }
 .panel figcaption span { display: block; margin-top: 0.15rem; color: var(--muted); font-size: 0.875rem; line-height: 1.45; }
 .panel svg { display: block; width: 100%; height: auto; }
+.panel .legend { display: flex; flex-wrap: wrap; gap: 0.3rem 1.1rem; margin: 0; padding: 0.6rem 0.8rem 0; list-style: none; font-size: 0.8125rem; }
+.panel .legend li { display: flex; flex: 0 0 auto; max-width: 100%; align-items: center; gap: 0.4rem; margin: 0; }
+.panel .legend svg { flex-shrink: 0; width: 28px; height: 10px; }
 .panel .plot { padding: 0.5rem 0.4rem 0.2rem; }
 .panel .bars { display: grid; gap: 0.6rem; padding: 0.2rem 0.8rem 0.8rem; font-size: 0.875rem; }
 .panel .bars .range { height: 0.9rem; margin-top: 0.25rem; }
@@ -141,7 +145,6 @@ figure.panel { margin: 1.75rem 0 2rem; border: 1px solid var(--rule); }
 svg text { font-family: "Public Sans", system-ui, sans-serif; fill: var(--ink); }
 svg .tick { font-size: 11px; fill: var(--muted); }
 svg .tick-sub { font-size: 9px; fill: var(--muted); }
-svg .label { font-size: 12px; font-weight: 600; }
 svg .grid { stroke: var(--hair); stroke-width: 1; }
 svg .edge { stroke: var(--ink); stroke-width: 1; }
 svg .limit-high { stroke: var(--limit-high); stroke-width: 2; }
@@ -162,7 +165,3 @@ svg .limit-low { stroke: var(--low); stroke-width: 2; }
 @media (min-width: 60rem) {
   body { font-size: 1.125rem; }
 }
-
-.panel .legend { display: flex; flex-wrap: wrap; gap: 0.3rem 1.1rem; margin: 0; padding: 0.6rem 0.8rem 0; list-style: none; font-size: 0.8125rem; }
-.panel .legend li { display: flex; flex: 0 0 auto; max-width: 100%; align-items: center; gap: 0.4rem; margin: 0; }
-.panel .legend svg { flex-shrink: 0; width: 28px; height: 10px; }

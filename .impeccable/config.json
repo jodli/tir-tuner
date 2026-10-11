@@ -27,6 +27,15 @@
         ],
         "createdAt": "2026-10-11T07:27:44.109Z",
         "reason": "agent: tracking only on short small-caps running head and section label, the world's apparatus style"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/*.html"
+        ],
+        "createdAt": "2026-10-11T08:11:48.589Z",
+        "reason": "agent: decision sketches of the unchosen directions, written before DESIGN.md existed; gitignored, never shipped"
       }
     ]
   }
