@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 //! In-silico closed loop: body -> CGM -> aps controller -> pump.
 //!
 //! The subject starts at rest at the admit glucose, on the basal that holds

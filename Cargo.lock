@@ -1760,7 +1760,6 @@ dependencies = [
  "chrono",
  "clap",
  "serde",
- "serde_json",
  "thiserror",
  "tir-tuner-advisor",
  "tir-tuner-analysis",
@@ -1769,6 +1768,7 @@ dependencies = [
  "tir-tuner-cgm",
  "tir-tuner-common",
  "tir-tuner-ingest",
+ "tir-tuner-sim",
  "tir-tuner-store",
  "toml",
 ]
@@ -1795,6 +1795,18 @@ dependencies = [
  "thiserror",
  "tir-tuner-common",
  "zip 8.6.0",
+]
+
+[[package]]
+name = "tir-tuner-sim"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde_json",
+ "tir-tuner-aps",
+ "tir-tuner-body",
+ "tir-tuner-cgm",
+ "tir-tuner-common",
 ]
 
 [[package]]

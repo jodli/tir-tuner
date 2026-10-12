@@ -9,6 +9,7 @@ members = [
     "tir-tuner-cli",
     "tir-tuner-common",
     "tir-tuner-ingest",
+    "tir-tuner-sim",
     "tir-tuner-store",
 ]
 resolver = "2"

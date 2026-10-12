@@ -1,10 +1,10 @@
 use tir_tuner_body::subject::VirtualSubject;
-use tir_tuner_cli::engine::{Bolus, Meal, SimConfig, simulate, w10_auto};
 use tir_tuner_common::data::BolusKind;
 use tir_tuner_common::metrics::{
     coefficient_of_variation, mean_glucose, time_below_range_pct, time_in_range_pct,
 };
 use tir_tuner_common::units::{HOURS_PER_DAY, MIN_PER_HOUR, MgDl, mg_dl_series};
+use tir_tuner_sim::{Bolus, Meal, SimConfig, simulate, w10_auto};
 
 use chrono::NaiveDateTime;
 use clap::{Parser, Subcommand};

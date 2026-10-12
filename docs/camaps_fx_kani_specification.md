@@ -104,7 +104,7 @@ Applied to the NMPC rate, in `Mode::rate`:
 
 ---
 
-## 6. Simulation wiring (`tir-tuner-cli/src/engine.rs`)
+## 6. Simulation wiring (`tir-tuner-sim/src/lib.rs`)
 
 * Each period: CGM reading, belief update (section 3), NMPC, Auto mode rules, pump.
 * The belief hears of announced meals and of every bolus, applied in the first minute of the period. Unannounced meals reach it only through the CGM.

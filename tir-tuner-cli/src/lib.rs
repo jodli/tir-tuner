@@ -1,14 +1,5 @@
 #![warn(missing_docs)]
-//! Time-in-range tuner CLI: replay real Glooko data through the verified
-//! closed-loop stack (body -> CGM -> aps controller -> pump) and report
-//! the clinical outcome metrics.
-//!
-//! The binary is deliberately thin: it parses Glooko CSVs, builds a
-//! [`SimConfig`], runs the [`engine`], and prints a metrics line. All the
-//! simulation machinery lives in the library so it can be driven from
-//! tests and future tooling.
+//! Time-in-range tuner CLI: replay real Glooko data through the closed loop
+//! in `tir-tuner-sim` and report the clinical outcome metrics.
 
-pub mod engine;
 pub mod settings_file;
-
-pub use engine::{SimConfig, SimTrace};

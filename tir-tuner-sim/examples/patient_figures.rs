@@ -1,6 +1,6 @@
 //! Curve data for the patient pages, from the virtual patient.
 //!
-//! `cargo run -p tir-tuner-cli --example patient_figures > docs/patient/_data/figures.json`
+//! `cargo run -p tir-tuner-sim --example patient_figures > docs/patient/_data/figures.json`
 //!
 //! Every figure is a run of the body, sensor and controller models. The
 //! scenarios (meals, doses, seeds) are made up for the pages.
@@ -12,7 +12,6 @@ use tir_tuner_body::solver::{DT_MIN, rest_state, step};
 use tir_tuner_body::state::BodyState;
 use tir_tuner_body::subject::{VirtualSubject, W10_WEIGHT_KG};
 use tir_tuner_cgm::{CgmSensor, SAMPLE_INTERVAL_MIN, SensorModel};
-use tir_tuner_cli::engine::{SimConfig, realistic_day, simulate};
 use tir_tuner_common::metrics::{
     TAR_VERY_HIGH_MG_DL, TIR_HIGH_MG_DL, TIR_LOW_MG_DL, range_bands_pct,
 };
@@ -20,6 +19,7 @@ use tir_tuner_common::units::{
     MG_PER_DL_PER_MMOL_PER_L, MIN_PER_HOUR, MMOL_PER_GRAM_CHO, MU_PER_UNIT, MgDl, MmolL,
     mg_dl_series,
 };
+use tir_tuner_sim::{SimConfig, realistic_day, simulate};
 
 const DAYS: u64 = 14;
 const REST_MG_DL: f64 = 100.0;

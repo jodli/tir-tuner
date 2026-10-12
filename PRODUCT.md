@@ -8,7 +8,7 @@ web
 
 ## Stack
 
-Delegated: static HTML/CSS/JS on GitHub Pages, with the Rust simulator compiled to WebAssembly for anything interactive. Chosen because the medical code already lives in Rust and is verified there (sources lint, mutants, Kani), so the browser should run that code, not a JS copy of it. The existing patient pages in `docs/patient` are a Jekyll site and can stay Jekyll or move to plain static HTML. Open: the simulation engine sits in `tir-tuner-cli`, which pulls in DuckDB, so it has to move into its own crate before it compiles to WebAssembly.
+Delegated: static HTML/CSS/JS on GitHub Pages, with the Rust simulator compiled to WebAssembly for anything interactive. Chosen because the medical code already lives in Rust and is verified there (sources lint, mutants, Kani), so the browser should run that code, not a JS copy of it. The existing patient pages in `docs/patient` are a Jekyll site and can stay Jekyll or move to plain static HTML. The simulation engine is `tir-tuner-sim`, which has no DuckDB dependency, so it can compile to WebAssembly.
 
 ## Users
 

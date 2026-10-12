@@ -1,0 +1,19 @@
+[package]
+name = "tir-tuner-sim"
+version.workspace = true
+edition.workspace = true
+description = "In-silico closed loop: body, CGM, Auto mode controller and pump"
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+tir-tuner-aps = { path = "../tir-tuner-aps" }
+tir-tuner-body = { path = "../tir-tuner-body" }
+tir-tuner-cgm = { path = "../tir-tuner-cgm" }
+tir-tuner-common = { path = "../tir-tuner-common" }
+
+[dev-dependencies]
+serde_json = "1.0.151"
+
+[lints]
+workspace = true

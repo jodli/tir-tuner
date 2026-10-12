@@ -1,6 +1,6 @@
 # Simulator spec: virtual patient, pump and CGM
 
-The in-silico testbed the controller runs against: the Wilinska 2010 (W10) virtual patient in `tir-tuner-body`, the pump model in `tir-tuner-body/src/pump.rs`, and the Breton & Kovatchev 2008 (B08) sensor in `tir-tuner-cgm`. The loop is wired in `tir-tuner-cli/src/engine.rs`.
+The in-silico testbed the controller runs against: the Wilinska 2010 (W10) virtual patient in `tir-tuner-body`, the pump model in `tir-tuner-body/src/pump.rs`, and the Breton & Kovatchev 2008 (B08) sensor in `tir-tuner-cgm`. The loop is wired in `tir-tuner-sim/src/lib.rs`.
 
 This document describes what the code does. Every number in it is a claim in `docs/sources.toml`, named in brackets, e.g. [w10-table1]. Page numbers are PDF pages of the papers in `docs/papers/` (local only). Where no source exists, the claim is marked `assumption` there and says so here.
 
