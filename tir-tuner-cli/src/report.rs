@@ -158,6 +158,7 @@ fn exclusion(e: &Exclusion) -> String {
         Exclusion::CgmGap => "CGM gap".into(),
         Exclusion::NextMeal(t) => format!("next meal {}", t.format("%H:%M")),
         Exclusion::PreviousMeal(t) => format!("previous meal {}", t.format("%H:%M")),
+        Exclusion::SpansBlocks => "spans two CR blocks".into(),
         Exclusion::Carbs(t) => format!("carbs {}", t.format("%H:%M")),
         Exclusion::Stacked(t) => format!("another correction {}", t.format("%H:%M")),
         Exclusion::Occlusion(t) => format!("occlusion {}", t.format("%m-%d %H:%M")),

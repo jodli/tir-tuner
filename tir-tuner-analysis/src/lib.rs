@@ -16,8 +16,8 @@ use tir_tuner_common::settings::{Block, Profile, ProfileHistory, walsh_basal_u_p
 use tir_tuner_common::units::{Grams, GramsPerUnit, MIN_PER_HOUR, MgDl, MgDlPerUnit, Units};
 
 /// Boluses this close are one meal: the user splits a meal and stops when
-/// full. src: user-split-meal
-const MERGE_MIN: i64 = 30;
+/// full. A later one is a snack. src: user-split-meal
+const MERGE_MIN: i64 = 60;
 /// Fatty meals rise again 4-5 h after the bolus. src: user-late-rise
 const LATE_END_MIN: i64 = 360;
 /// A longer CGM gap leaves an episode unreadable. src: own-cgm-gap
@@ -48,6 +48,8 @@ pub enum Exclusion {
     NextMeal(NaiveDateTime),
     /// The previous meal's insulin still acts.
     PreviousMeal(NaiveDateTime),
+    /// The meal's boluses fall in two carb ratio blocks.
+    SpansBlocks,
     /// Carbs while a correction acts.
     Carbs(NaiveDateTime),
     /// Another correction while one acts.
@@ -140,6 +142,7 @@ pub fn analyse(export: &Export, history: &ProfileHistory) -> Analysis {
     let meals = meal_groups(export);
     for (k, group) in meals.iter().enumerate() {
         let at = group[0].at;
+        let last = group[group.len() - 1].at;
         let Some((from, profile)) = history.at(at) else {
             out.without_settings += group.len();
             continue;
@@ -147,7 +150,15 @@ pub fn analyse(export: &Export, history: &ProfileHistory) -> Analysis {
         let s = profile.bolus();
         let carbs = Grams(group.iter().map(|b| b.carbs_g).sum());
         let units = Units(group.iter().map(|b| b.units).sum());
-        let calculated = round_to_step(carbs / s.carb_ratio(at.time()));
+        // The pump calculates each bolus with the ratio at its own time.
+        let calculated = round_to_step(Units(
+            group
+                .iter()
+                .map(|b| round_to_step(Grams(b.carbs_g) / s.carb_ratio(b.at.time())).0)
+                .sum(),
+        ));
+        let block = s.carb_ratios().block_at(at.time());
+        let spans_blocks = s.carb_ratios().block_at(last.time()) != block;
         let dose = match round_to_step(units).0.total_cmp(&calculated.0) {
             Ordering::Equal => Dose::AsCalculated,
             Ordering::Greater => Dose::WithCorrection,
@@ -160,17 +171,21 @@ pub fn analyse(export: &Export, history: &ProfileHistory) -> Analysis {
             boluses: group.len(),
             carbs,
             units,
-            block: s.carb_ratios().block_at(at.time()),
+            block,
             calculated,
             dose,
-            outcome: meal_outcome(
-                export,
-                history,
-                (from, profile),
-                at,
-                previous_meal,
-                next_meal,
-            ),
+            outcome: if spans_blocks {
+                Err(Exclusion::SpansBlocks)
+            } else {
+                meal_outcome(
+                    export,
+                    history,
+                    (from, profile),
+                    (at, last),
+                    previous_meal,
+                    next_meal,
+                )
+            },
         });
     }
     for b in export
@@ -265,11 +280,11 @@ fn meal_outcome(
     export: &Export,
     history: &ProfileHistory,
     (entry, profile): (NaiveDateTime, &Profile),
-    at: NaiveDateTime,
+    (at, last): (NaiveDateTime, NaiveDateTime),
     previous_meal: Option<NaiveDateTime>,
     next_meal: Option<NaiveDateTime>,
 ) -> Result<Outcome, Exclusion> {
-    let end = action_end(profile, at);
+    let end = action_end(profile, last);
     if let Some(prev) = previous_meal.filter(|&p| action_end(profile, p) > at) {
         return Err(Exclusion::PreviousMeal(prev));
     }
@@ -288,7 +303,7 @@ fn meal_outcome(
     let spike_then_low = first_high.is_some_and(|i| mg[i..].iter().any(|&g| below_range(g)));
     let at_action_end = value_at(w, end);
 
-    let late_end = at + TimeDelta::minutes(LATE_END_MIN);
+    let late_end = last + TimeDelta::minutes(LATE_END_MIN);
     let late_rise = (next_meal.is_none_or(|n| n >= late_end))
         .then(|| gap_free(&export.cgm, end, late_end))
         .flatten()
@@ -604,14 +619,15 @@ mod tests {
     }
 
     #[test]
-    fn boluses_up_to_30_min_apart_are_one_meal() {
+    fn boluses_up_to_60_min_apart_are_one_meal() {
         let e = export(
             flat(t(10, 11, 0), 720),
             vec![
                 bolus(t(10, 12, 0), 30.0, 2.5),
                 bolus(t(10, 12, 30), 20.0, 1.7),
-                bolus(t(10, 13, 0), 10.0, 0.8),
-                bolus(t(10, 13, 31), 24.0, 2.0),
+                bolus(t(10, 13, 30), 10.0, 0.8),
+                // A snack.
+                bolus(t(10, 14, 31), 24.0, 2.0),
                 bolus(t(10, 18, 0), 36.0, 3.0),
                 // Right at the end of the 18:00 meal's action time.
                 bolus(t(10, 20, 0), 36.0, 3.0),
@@ -623,9 +639,39 @@ mod tests {
             (m.len(), m[0].boluses, m[0].carbs, m[0].dose),
             (4, 3, Grams(60.0), Dose::AsCalculated)
         );
-        assert_eq!(m[0].outcome, Err(Exclusion::NextMeal(t(10, 13, 31))));
-        assert_eq!(m[1].outcome, Err(Exclusion::PreviousMeal(t(10, 13, 0))));
+        assert_eq!(m[0].outcome, Err(Exclusion::NextMeal(t(10, 14, 31))));
+        assert_eq!(m[1].outcome, Err(Exclusion::PreviousMeal(t(10, 13, 30))));
         assert!(m[2].outcome.is_ok() && m[3].outcome.is_ok());
+
+        // A chain is judged when the last bolus's action time is over.
+        let mut c = flat(t(10, 11, 0), 720);
+        c.iter_mut()
+            .filter(|r| r.at == t(10, 15, 30))
+            .for_each(|r| r.mg_dl = 200.0);
+        let e = export(
+            c,
+            vec![
+                bolus(t(10, 13, 0), 30.0, 2.5),
+                bolus(t(10, 13, 30), 20.0, 1.7),
+            ],
+        );
+        let o = analyse(&e, &one_profile()).meals[0].outcome.unwrap();
+        assert_eq!(o.at_action_end, MgDl(200.0));
+    }
+
+    #[test]
+    fn a_meal_across_two_carb_ratio_blocks_isnt_judged() {
+        let e = export(
+            flat(t(10, 9, 0), 360),
+            vec![
+                bolus(t(10, 10, 40), 20.0, 2.0),
+                bolus(t(10, 11, 20), 24.0, 2.0),
+            ],
+        );
+        let m = &analyse(&e, &one_profile()).meals[0];
+        // 20/10 + 24/12: each bolus with the ratio at its own time.
+        assert_eq!((m.calculated, m.dose), (Units(4.0), Dose::AsCalculated));
+        assert_eq!(m.outcome, Err(Exclusion::SpansBlocks));
     }
 
     #[test]

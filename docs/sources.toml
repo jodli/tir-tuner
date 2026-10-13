@@ -291,9 +291,9 @@ note = "Carbs logged with 0 U are hypo treatments."
 id = "user-split-meal"
 source = "user"
 at = "2026-10-12"
-values = [30]
+values = [60]
 status = "user"
-note = "The user splits a meal into several boluses and stops when full; boluses up to 30 min apart are one meal."
+note = "The user splits a meal into several boluses and stops when full; boluses up to 60 min apart are one meal, a later one is a snack."
 
 [[claim]]
 id = "user-in-range-at-action-end"
