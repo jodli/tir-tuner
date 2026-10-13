@@ -3,11 +3,19 @@
 
 use chrono::{NaiveDate, NaiveDateTime};
 
+use crate::units::MgDl;
+
 /// A CGM sample or fingerstick reading.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GlucoseReading {
     pub at: NaiveDateTime,
     pub mg_dl: f64,
+}
+
+impl GlucoseReading {
+    pub fn mg(&self) -> MgDl {
+        MgDl(self.mg_dl)
+    }
 }
 
 /// A manual bolus.

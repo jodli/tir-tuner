@@ -123,6 +123,11 @@ impl Block {
         format!("{}-{}", clock(self.start_min), clock(self.end_min))
     }
 
+    /// Whether the minute of the day `min` falls in this block.
+    pub fn contains(&self, min: u16) -> bool {
+        self.slots().any(|i| i == usize::from(min / STEP_MIN))
+    }
+
     fn slots(&self) -> impl Iterator<Item = usize> {
         let (start, end) = (self.start_min / STEP_MIN, self.end_min / STEP_MIN);
         let len = (end as usize + SLOTS - start as usize - 1) % SLOTS + 1;
@@ -163,7 +168,16 @@ impl Schedule {
     }
 
     pub fn at(&self, t: NaiveTime) -> f64 {
-        self.by_slot[(t.hour() * u32::from(MIN_PER_HOUR) + t.minute()) as usize / STEP_MIN as usize]
+        self.by_slot[usize::from(minute_of_day(t) / STEP_MIN)]
+    }
+
+    /// The block of [`Schedule::blocks`] that holds `t`.
+    pub fn block_at(&self, t: NaiveTime) -> Block {
+        let min = minute_of_day(t);
+        self.blocks()
+            .into_iter()
+            .find(|b| b.contains(min))
+            .expect("the blocks cover the day")
     }
 
     /// Fewest blocks: runs of equal values, the one across midnight whole.
@@ -188,6 +202,10 @@ impl Schedule {
         blocks.sort_by_key(|b| b.start_min);
         blocks
     }
+}
+
+fn minute_of_day(t: NaiveTime) -> u16 {
+    (t.hour() * u32::from(MIN_PER_HOUR) + t.minute()) as u16
 }
 
 /// `06`, `06:30`.
@@ -241,6 +259,15 @@ impl BolusSettings {
     }
     pub fn target(&self, t: NaiveTime) -> MgDl {
         MgDl(self.target.at(t))
+    }
+    pub fn carb_ratios(&self) -> &Schedule {
+        &self.carb_ratio
+    }
+    pub fn correction_factors(&self) -> &Schedule {
+        &self.correction_factor
+    }
+    pub fn insulin_action_hours(&self) -> f64 {
+        self.insulin_action_hours
     }
     pub fn max_bolus(&self) -> Units {
         Units(self.max_bolus_u)

@@ -6,8 +6,9 @@ description = "Deterministic CR/CF analysis over the store"
 license.workspace = true
 
 [dependencies]
+chrono.workspace = true
+tir-tuner-bolus = { path = "../tir-tuner-bolus" }
 tir-tuner-common = { path = "../tir-tuner-common" }
-tir-tuner-store = { path = "../tir-tuner-store" }
 
 [lints]
 workspace = true

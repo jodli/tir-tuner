@@ -57,13 +57,17 @@ pub fn suggest(
     };
     // No negative bolus; capped at the max bolus. src: man-max-bolus-cap
     let total = (meal + correction).clamp(Units(0.0), s.max_bolus());
-    // Nearest step. src: user-rounding-nearest
-    let total = Units((total.0 * STEPS_PER_U).round() / STEPS_PER_U);
+    let total = round_to_step(total);
     Ok(Suggestion {
         meal,
         correction,
         total,
     })
+}
+
+/// The nearest dose the pump can deliver. src: user-rounding-nearest
+pub fn round_to_step(u: Units) -> Units {
+    Units((u.0 * STEPS_PER_U).round() / STEPS_PER_U)
 }
 
 #[cfg(test)]

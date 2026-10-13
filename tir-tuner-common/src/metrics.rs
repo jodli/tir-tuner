@@ -16,16 +16,29 @@ pub const TAR_VERY_HIGH_MG_DL: f64 = 250.0;
 /// src: percent
 const PERCENT: f64 = 100.0;
 
+/// A reading in 70-180 mg/dL, on Battelino's whole mg/dL.
+pub fn in_range(g: MgDl) -> bool {
+    (TIR_LOW_MG_DL..=TIR_HIGH_MG_DL).contains(&g.0.round())
+}
+
+/// A reading below 70 mg/dL, on Battelino's whole mg/dL.
+pub fn below_range(g: MgDl) -> bool {
+    g.0.round() < TIR_LOW_MG_DL
+}
+
+/// A reading above 180 mg/dL, on Battelino's whole mg/dL.
+pub fn above_range(g: MgDl) -> bool {
+    g.0.round() > TIR_HIGH_MG_DL
+}
+
 /// Percent of readings in 70-180 mg/dL.
 pub fn time_in_range_pct(readings: &[MgDl]) -> f64 {
-    pct(readings, |mg| {
-        (TIR_LOW_MG_DL..=TIR_HIGH_MG_DL).contains(&mg)
-    })
+    pct(readings, |mg| in_range(MgDl(mg)))
 }
 
 /// Percent of readings below 70 mg/dL.
 pub fn time_below_range_pct(readings: &[MgDl]) -> f64 {
-    pct(readings, |mg| mg < TIR_LOW_MG_DL)
+    pct(readings, |mg| below_range(MgDl(mg)))
 }
 
 /// Percent of readings very low, low, in range, high and very high.
@@ -115,6 +128,21 @@ mod tests {
         let r = mg(&[69.4, 69.6, 180.4, 180.6]);
         assert_eq!(time_in_range_pct(&r), 50.0);
         assert_eq!(time_below_range_pct(&r), 25.0);
+    }
+
+    #[test]
+    fn range_edges_are_whole_mg_dl() {
+        let at = |g| {
+            (
+                below_range(MgDl(g)),
+                in_range(MgDl(g)),
+                above_range(MgDl(g)),
+            )
+        };
+        assert_eq!(at(69.4), (true, false, false));
+        assert_eq!(at(69.5), (false, true, false));
+        assert_eq!(at(180.4), (false, true, false));
+        assert_eq!(at(180.5), (false, false, true));
     }
 
     #[test]

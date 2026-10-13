@@ -2,4 +2,5 @@
 //! Time-in-range tuner CLI: replay real Glooko data through the closed loop
 //! in `tir-tuner-sim` and report the clinical outcome metrics.
 
+pub mod report;
 pub mod settings_file;

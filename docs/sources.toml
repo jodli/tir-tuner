@@ -15,6 +15,7 @@
 
 [lint]
 files = [
+  "tir-tuner-analysis/src/lib.rs",
   "tir-tuner-bolus/src/lib.rs",
   "tir-tuner-common/src/data.rs",
   "tir-tuner-common/src/euler.rs",
@@ -283,6 +284,59 @@ source = "user"
 at = "2026-10-10"
 status = "user"
 note = "Carbs logged with 0 U are hypo treatments."
+
+# Analysis (tir-tuner-analysis)
+
+[[claim]]
+id = "user-split-meal"
+source = "user"
+at = "2026-10-12"
+values = [30]
+status = "user"
+note = "The user splits a meal into several boluses and stops when full; boluses up to 30 min apart are one meal."
+
+[[claim]]
+id = "user-in-range-at-action-end"
+source = "user"
+at = "2026-10-12"
+status = "user"
+note = "Once the insulin action time (2.5 h) is over, glucose should be in range again. A meal is judged there."
+
+[[claim]]
+id = "user-late-rise"
+source = "user"
+at = "2026-10-12"
+values = [360]
+status = "user"
+note = "Fatty meals rise again 4-5 h after the bolus; big evening meals cause night highs. The late window runs to 6 h so it covers 5 h."
+
+[[claim]]
+id = "own-cgm-gap"
+source = "own"
+values = [20]
+status = "assumption"
+note = "Libre 3 reads every minute; a gap over 20 min can hide a peak or a low, so the episode isn't judged."
+
+[[claim]]
+id = "own-occlusion-lookback"
+source = "own"
+values = [240]
+status = "assumption"
+note = "An occlusion up to 4 h before a meal may leave it under-dosed, so the meal isn't judged."
+
+[[claim]]
+id = "glooko-occlusion"
+source = "user"
+at = "ingest/2026-10-08/alarms_data_1.csv"
+status = "derived"
+note = "Glooko names the alarm 'Occlusion' (German 'Okklusion'); the ingest maps it to 'Occlusion'."
+
+[[claim]]
+id = "math-median"
+source = "math"
+values = [2]
+status = "source"
+note = "Upper median: the middle element, index n/2, of the sorted values. Pairs of neighbours for gap checks."
 
 # Controller (tir-tuner-aps). CamAPS FX itself isn't published: these are
 # its published lineage and our stand-ins.

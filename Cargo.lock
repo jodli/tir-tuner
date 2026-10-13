@@ -1716,8 +1716,9 @@ dependencies = [
 name = "tir-tuner-analysis"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "tir-tuner-bolus",
  "tir-tuner-common",
- "tir-tuner-store",
 ]
 
 [[package]]

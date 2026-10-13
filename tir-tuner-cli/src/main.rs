@@ -6,12 +6,12 @@ use tir_tuner_common::metrics::{
 use tir_tuner_common::units::{HOURS_PER_DAY, MIN_PER_HOUR, MgDl, mg_dl_series};
 use tir_tuner_sim::{Bolus, Meal, SimConfig, simulate, w10_auto};
 
-use chrono::NaiveDateTime;
+use chrono::{Days, NaiveDateTime};
 use clap::{Parser, Subcommand};
 use std::path::{Path, PathBuf};
 use tir_tuner_aps::AutoMode;
 use tir_tuner_aps::controller::Nmpc;
-use tir_tuner_cli::settings_file;
+use tir_tuner_cli::{report, settings_file};
 use tir_tuner_store::{ProfileChanges, Store};
 
 #[derive(Parser)]
@@ -33,10 +33,15 @@ enum Command {
         #[arg(long, default_value = "ingest")]
         archive: PathBuf,
     },
-    /// Glucose metrics over the last N days
+    /// Meals and corrections per settings block, over the last N days and the recent ones
     Report {
         #[arg(long, default_value_t = 30)]
-        days: u32,
+        days: u64,
+        #[arg(long, default_value_t = 3)]
+        recent: u64,
+        /// List every meal
+        #[arg(long)]
+        verbose: bool,
     },
     /// CR/CF proposals from the last N days against the baseline
     Recommend {
@@ -89,6 +94,8 @@ enum Error {
     Io(PathBuf, #[source] std::io::Error),
     #[error("{0}")]
     SettingsFile(PathBuf, #[source] settings_file::Error),
+    #[error("{0}: no data")]
+    Empty(PathBuf),
     #[error("no settings stored for {0}")]
     NoSettings(NaiveDateTime),
 }
@@ -110,7 +117,11 @@ fn run(cli: Cli) -> Result<(), Error> {
     match cli.command {
         Command::Simulate { dir, kagr } => simulate_export(&dir, kagr, &cli.db),
         Command::Ingest { source, archive } => ingest(&source, &archive, &cli.db),
-        Command::Report { .. } => Err(Error::NotImplemented("report")),
+        Command::Report {
+            days,
+            recent,
+            verbose,
+        } => report(days, recent, verbose, &cli.db),
         Command::Recommend { .. } => Err(Error::NotImplemented("recommend")),
         Command::Settings(SettingsCommand::Apply { file }) => apply_settings(&file, &cli.db),
         Command::Settings(SettingsCommand::Show { at }) => show_settings(at, &cli.db),
@@ -147,6 +158,23 @@ fn apply_settings(file: &Path, db: &Path) -> Result<(), Error> {
             println!("{what}: {}", list(ts));
         }
     }
+    Ok(())
+}
+
+fn report(days: u64, recent: u64, verbose: bool, db: &Path) -> Result<(), Error> {
+    let store = Store::open(db).map_err(in_db(db))?;
+    let (_, last) = store
+        .span()
+        .map_err(in_db(db))?
+        .ok_or_else(|| Error::Empty(db.into()))?;
+    let window = |n: u64| last - Days::new(n.saturating_sub(1));
+    let export = store.range(window(days), last).map_err(in_db(db))?;
+    let history = store.profiles().map_err(in_db(db))?;
+    let analysis = tir_tuner_analysis::analyse(&export, &history);
+    print!(
+        "{}",
+        report::render(&export, &analysis, window(recent), verbose)
+    );
     Ok(())
 }
 
