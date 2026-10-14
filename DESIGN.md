@@ -139,7 +139,7 @@ Ink on white with a strict, data-only clinical range palette.
 - **Spread Greys** (spread-outer, spread-inner): the 5 to 95 and 25 to 75 percentile spread of days behind the median.
 
 ### Named Rules
-**The Range Colours Are Data Rule.** The five range colours appear only where they encode a glucose range. Never as accent, link, button or decoration.
+**The Range Colours Are Data Rule.** The five range colours appear only where they encode a glucose range. Never as accent, link, button or decoration. Form controls follow: the demo slider's accent is ink, precisely because range colours are data-only.
 
 **The Never Colour Alone Rule.** Every coloured band carries a text label or a legend entry; lows also carry the stripe pattern.
 
@@ -158,12 +158,12 @@ Ink on white with a strict, data-only clinical range palette.
 - **Headline** (700, 1.3rem, 1.25): section heads inside the reading column.
 - **Body** (400, 1.0625rem, 1.6; 1.125rem from 60rem wide): running text in a 40rem measure.
 - **Caption** (400, 0.875rem, 1.45, report grey): panel subtitles, the standing note.
-- **Strip label** (600, 0.75rem, 0.1em, uppercase): header strip, chapter "n/8" and page name, language switch.
+- **Strip label** (600, 0.75rem, 0.1em, uppercase): header strip, chapter "n/9" and page name, language switch.
 - **Panel label** (700, 0.8125rem, 0.06em, uppercase): report panel titles, table column heads (0.75rem), the "virtual patient, model output" footer (400, 0.75rem, 0.04em).
 - **Chart text** (11px ticks, 9px sub-ticks, 12px 600 labels): inside SVG figures.
 
 ### Named Rules
-**The Report Label Rule.** Tracked uppercase belongs to report furniture only: the strip, panel titles, table heads and the provenance line. Body headings stay sentence case.
+**The Report Label Rule.** Tracked uppercase belongs to report furniture only: the strip, panel titles, table heads, the operate control's label and the provenance line. Body headings stay sentence case.
 
 **The Tabular Numbers Rule.** `font-variant-numeric: tabular-nums` is set on body and inherited everywhere.
 
@@ -186,12 +186,12 @@ Square corners throughout (radius 0). Containers are rectangles drawn with 1px i
 ## Components
 
 ### Masthead
-- **Header strip:** ink ground, paper text, strip label type, "n/8 · page name" left (truncates with ellipsis), language switch right. Current language underlined 2px in paper; the other at 75% opacity, full on hover.
+- **Header strip:** ink ground, paper text, strip label type, "n/9 · page name" left (truncates with ellipsis), language switch right. Current language underlined 2px in paper; the other at 75% opacity, full on hover.
 - **Range bar:** 0.7rem tall, five flex segments sized from the virtual patient's bins, very low and low striped. Decorative (aria-hidden); the range key under it says the numbers in text.
 - **Range key:** 0.8125rem centred line, in-range share in bold, hairline under it.
 
 ### Navigation
-- **Chapter strip:** eight equal numbered tabs, 600 0.8125rem, hairline dividers, ink rule under the strip. Hover fills band green; the current chapter is an inverted ink tab; the stopped-at chapter carries the corner triangle. Chapter names are screen-reader text and title tooltips.
+- **Chapter strip:** nine equal numbered tabs, 600 0.8125rem, hairline dividers, ink rule under the strip. Hover fills band green; the current chapter is an inverted ink tab; the stopped-at chapter carries the corner triangle. Chapter names are screen-reader text and title tooltips.
 - **Prev/next (turn):** two-cell grid with a 1px ink frame and ink gutter, 700 links with SVG arrows, next aligned right. Hover fills band green.
 
 ### Report Panel (signature)
@@ -202,6 +202,14 @@ Square corners throughout (radius 0). Containers are rectangles drawn with 1px i
 - **TIR bars:** per-case range bars (0.9rem) with labels.
 - **Show the numbers:** a details element, grey 600 summary, hairline above, holding the data table.
 - **Provenance line:** hairline above, grey 0.75rem tracked caps "virtual patient · model output".
+
+### Operate Panel (demo chapter)
+A report panel that re-runs its day on input. Same frame, title, chart, legend and provenance line as the report panel; the differences:
+- **Control row:** tracked-caps label, native range input with `accent-color: var(--ink)`, bold output with `min-width: 7ch`; 0.65rem 0.8rem 0.55rem inset, hairline below.
+- **Two-curve pairing:** the unchanged day is the muted 1.4px base ("as set"), the changed day the heavy ink 2.8px curve ("with your change"); legend samples carry the same weights.
+- **Comparison table:** always visible (no details disclosure), two value columns "as set" / "with your change", table styles as below.
+- **Recalculating:** while a run is pending the panel carries `calculating` and the plot dims to opacity 0.5 (150 ms ease-out).
+- **Failure:** the slider disables and a grey error line with `role="status"` takes the figure's place.
 
 ### Tables
 Full width, 0.9375rem, hairline row rules, ink rule under uppercase 0.75rem heads, left aligned, no zebra, no fills.
@@ -226,5 +234,5 @@ Links inherit ink, 1px underline at 0.18em offset, 2px on hover. Focus is a 2px 
 - **Don't** add shadows, rounded cards, or tinted card grounds.
 - **Don't** add a brand accent colour or a blue link colour.
 - **Don't** add decorative icons; the only icons are functional SVG arrows on prev/next.
-- **Don't** use tracked uppercase outside report furniture (strip, panel title, table head, provenance line).
+- **Don't** use tracked uppercase outside report furniture (strip, panel title, table head, operate control label, provenance line).
 - **Don't** use the high yellow (#f9d648) as a line or text colour on white; use the darkened high rule.

@@ -30,3 +30,7 @@
   href: math-and-metrics.html
   en: The numbers on your report
   de: Die Zahlen in Ihrem Bericht
+- page: demo
+  href: demo.html
+  en: "Try it: one day, two settings"
+  de: "Ausprobieren: ein Tag, zwei Einstellungen"

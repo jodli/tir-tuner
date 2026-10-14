@@ -7,7 +7,7 @@ related_targets: []
 
 # Patient pages
 
-Scope: all eight pages of `docs/patient` in English and German (`docs/patient/de`). Visitor mode: Read. Guided path, read in order like chapters.
+Scope: all nine pages of `docs/patient` in English and German (`docs/patient/de`). Visitor mode: Read. Guided path, read in order like chapters.
 
 Audience: friends the author sends a link to, on a phone; people with type 1 who want to understand their body and pump. Job: understand why a setting change moves the glucose curve. Content stays as written; figures replace Mermaid diagrams where a curve says it better. No papers, formulas or tool talk. Not medical advice, said on the first page and in the footer.
 

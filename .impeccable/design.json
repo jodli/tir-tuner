@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-11T00:00:00Z",
+  "generatedAt": "2026-10-14T00:00:00Z",
   "title": "Design System: The artificial pancreas project, for patients",
   "extensions": {
     "colorMeta": {
@@ -249,7 +249,7 @@
       "kind": "nav",
       "refersTo": "masthead-strip",
       "description": "Full-bleed ink strip with chapter position, page name and language switch.",
-      "html": "<div class=\"ds-strip\"><span>1/8 · Type 1 diabetes, from the inside</span><nav class=\"ds-lang\"><span aria-current=\"true\">English</span><a href=\"#\">Deutsch</a></nav></div>",
+      "html": "<div class=\"ds-strip\"><span>1/9 · Type 1 diabetes, from the inside</span><nav class=\"ds-lang\"><span aria-current=\"true\">English</span><a href=\"#\">Deutsch</a></nav></div>",
       "css": "font-family:'Public Sans',system-ui,sans-serif;font-variant-numeric:tabular-nums;.ds-strip{display:flex;justify-content:space-between;gap:1rem;padding:.7rem 1.5rem;background:#1d1d1b;color:#fff;font:600 .75rem/1.6 'Public Sans',system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase}.ds-lang{display:flex;gap:.9rem}.ds-lang a{color:inherit;text-decoration:none;opacity:.75}.ds-lang a:hover{opacity:1;text-decoration:underline}.ds-lang [aria-current]{border-bottom:2px solid #fff}.ds-lang a:focus-visible{outline:2px solid #fff;outline-offset:2px}"
     },
     {
@@ -264,7 +264,7 @@
       "name": "Chapter Strip",
       "kind": "nav",
       "refersTo": "chapter-tab",
-      "description": "Eight numbered tabs; hover band green, current inverted ink, stopped-at chapter marked with a corner triangle.",
+      "description": "Nine numbered tabs; hover band green, current inverted ink, stopped-at chapter marked with a corner triangle.",
       "html": "<nav class=\"ds-chapters\"><ol><li><a href=\"#\">1</a></li><li><a href=\"#\" class=\"ds-stopped\">2</a></li><li><a href=\"#\" aria-current=\"page\">3</a></li><li><a href=\"#\">4</a></li><li><a href=\"#\">5</a></li></ol></nav>",
       "css": ".ds-chapters{border-bottom:1px solid #1d1d1b}.ds-chapters ol{display:flex;margin:0;padding:0;list-style:none}.ds-chapters li{flex:1}.ds-chapters a{position:relative;display:block;padding:.55rem 0;text-align:center;text-decoration:none;color:#1d1d1b;font:600 .8125rem/1.6 'Public Sans',system-ui,sans-serif;border-left:1px solid #c9c7c2}.ds-chapters li:first-child a{border-left:0}.ds-chapters a:hover{background:#e9f4e7}.ds-chapters a:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}.ds-chapters a[aria-current]{background:#1d1d1b;color:#fff}.ds-stopped::after{content:'';position:absolute;top:0;right:0;border:.4rem solid #1d1d1b;border-bottom-color:transparent;border-left-color:transparent}"
     },
@@ -275,6 +275,14 @@
       "description": "Ruled figure panel: tracked-caps title, grey caption, chart on the target band, numbers table, provenance line.",
       "html": "<figure class=\"ds-panel\"><figcaption><strong>Two weeks of one virtual patient</strong><span>The same four meals every day, each with a bolus, Auto mode on.</span></figcaption><svg viewBox=\"0 0 320 150\" class=\"ds-plot\"><rect x=\"40\" y=\"40\" width=\"270\" height=\"60\" fill=\"#e9f4e7\"/><line x1=\"40\" x2=\"310\" y1=\"40\" y2=\"40\" stroke=\"#c9a400\" stroke-width=\"2\"/><line x1=\"40\" x2=\"310\" y1=\"100\" y2=\"100\" stroke=\"#e53935\" stroke-width=\"2\"/><path d=\"M40 90 C80 20 110 30 140 80 S200 30 230 70 S290 60 310 85 L310 95 C280 75 250 90 230 85 S170 55 140 95 S80 50 40 100Z\" fill=\"#c3c1bb\" opacity=\".85\"/><path d=\"M40 95 C80 30 110 40 140 88 S200 40 230 78 S290 70 310 90\" fill=\"none\" stroke=\"#1d1d1b\" stroke-width=\"2.6\" stroke-linejoin=\"round\"/><line x1=\"40\" x2=\"310\" y1=\"130\" y2=\"130\" stroke=\"#1d1d1b\"/><text x=\"34\" y=\"44\" text-anchor=\"end\">180</text><text x=\"34\" y=\"104\" text-anchor=\"end\">70</text></svg><details><summary>Show the numbers</summary><table><thead><tr><th>Time</th><th>Median</th></tr></thead><tbody><tr><td>06:00</td><td>112</td></tr></tbody></table></details><div class=\"ds-virtual\">Virtual patient · model output</div></figure>",
       "css": ".ds-panel{margin:0;border:1px solid #1d1d1b;background:#fff;color:#1d1d1b;font:400 1rem/1.6 'Public Sans',system-ui,sans-serif;font-variant-numeric:tabular-nums}.ds-panel figcaption{padding:.65rem .8rem .6rem;border-bottom:1px solid #1d1d1b}.ds-panel figcaption strong{display:block;font-size:.8125rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}.ds-panel figcaption span{display:block;margin-top:.15rem;color:#55534f;font-size:.875rem;line-height:1.45}.ds-plot{display:block;width:100%;height:auto;padding:.5rem .4rem .2rem}.ds-plot text{font-size:11px;fill:#55534f}.ds-panel details{border-top:1px solid #c9c7c2;font-size:.875rem}.ds-panel summary{padding:.5rem .8rem;cursor:pointer;color:#55534f;font-weight:600}.ds-panel summary:hover{color:#1d1d1b}.ds-panel summary:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}.ds-panel table{width:100%;border-collapse:collapse;font-size:.8125rem;margin:0 .8rem .6rem}.ds-panel th,.ds-panel td{padding:.45rem .6rem .45rem 0;text-align:left;border-bottom:1px solid #c9c7c2}.ds-panel thead th{border-bottom-color:#1d1d1b;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase}.ds-virtual{padding:.45rem .8rem;border-top:1px solid #c9c7c2;color:#55534f;font-size:.75rem;letter-spacing:.04em;text-transform:uppercase}"
+    },
+    {
+      "name": "Operate Range",
+      "kind": "input",
+      "refersTo": null,
+      "description": "Operate control row: tracked-caps label, native range with ink accent, bold fixed-width output; recalculating dims the plot to half opacity.",
+      "html": "<div class=\"ds-operate\"><label for=\"ds-cr\">Breakfast carb ratio</label><input type=\"range\" id=\"ds-cr\" min=\"5\" max=\"20\" step=\"0.5\" value=\"11\"><output for=\"ds-cr\">11 g/U</output></div>",
+      "css": ".ds-operate{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem 1rem;padding:.65rem .8rem .55rem;border-bottom:1px solid #c9c7c2;font-family:'Public Sans',system-ui,sans-serif;font-variant-numeric:tabular-nums;color:#1d1d1b}.ds-operate label{font-size:.8125rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}.ds-operate input[type=range]{flex:1 1 9rem;accent-color:#1d1d1b}.ds-operate output{min-width:7ch;font-weight:700}.ds-operate input:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}"
     },
     {
       "name": "Data Table",
@@ -314,7 +322,7 @@
     "rules": [
       {
         "name": "The Range Colours Are Data Rule",
-        "body": "The five range colours appear only where they encode a glucose range. Never as accent, link, button or decoration.",
+        "body": "The five range colours appear only where they encode a glucose range. Never as accent, link, button or decoration. Form controls follow: the demo slider's accent is ink, precisely because range colours are data-only.",
         "section": "colors"
       },
       {
@@ -329,7 +337,7 @@
       },
       {
         "name": "The Report Label Rule",
-        "body": "Tracked uppercase belongs to report furniture only: the strip, panel titles, table heads and the provenance line. Body headings stay sentence case.",
+        "body": "Tracked uppercase belongs to report furniture only: the strip, panel titles, table heads, the operate control's label and the provenance line. Body headings stay sentence case.",
         "section": "typography"
       },
       {
@@ -355,7 +363,7 @@
       "Don't add shadows, rounded cards, or tinted card grounds.",
       "Don't add a brand accent colour or a blue link colour.",
       "Don't add decorative icons; the only icons are functional SVG arrows on prev/next.",
-      "Don't use tracked uppercase outside report furniture (strip, panel title, table head, provenance line).",
+      "Don't use tracked uppercase outside report furniture (strip, panel title, table head, operate control label, provenance line).",
       "Don't use the high yellow (#f9d648) as a line or text colour on white; use the darkened high rule."
     ]
   }

@@ -165,3 +165,15 @@ svg .limit-low { stroke: var(--low); stroke-width: 2; }
 @media (min-width: 60rem) {
   body { font-size: 1.125rem; }
 }
+
+/* Demo: the slider retunes the breakfast bolus, the day follows. */
+.demo-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 1rem; padding: 0.65rem 0.8rem 0.55rem; border-bottom: 1px solid var(--hair); }
+.demo-controls label { font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.demo-controls input[type="range"] { flex: 1 1 9rem; accent-color: var(--ink); }
+.demo-controls output { min-width: 7ch; font-weight: 700; }
+.demo .plot { transition: opacity 150ms ease-out; }
+.demo.calculating .plot { opacity: 0.5; }
+.demo .demo-table { overflow-x: auto; padding: 0.2rem 0.8rem 0.8rem; }
+.demo .demo-table table { margin: 0; }
+.demo .demo-table th[scope="row"] { font-weight: 400; }
+.demo-error { margin: 0; padding: 0.6rem 0.8rem 0.8rem; color: var(--muted); }
