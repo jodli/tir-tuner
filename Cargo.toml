@@ -11,6 +11,7 @@ members = [
     "tir-tuner-ingest",
     "tir-tuner-sim",
     "tir-tuner-store",
+    "tir-tuner-web",
 ]
 resolver = "2"
 

@@ -1,0 +1,20 @@
+[package]
+name = "tir-tuner-web"
+version.workspace = true
+edition.workspace = true
+description = "Wasm binding that runs one virtual day for the patient-site demo"
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+console_error_panic_hook = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1.0.151"
+tir-tuner-common = { path = "../tir-tuner-common" }
+tir-tuner-sim = { path = "../tir-tuner-sim" }
+wasm-bindgen = "0.2"
+
+[lints]
+workspace = true
