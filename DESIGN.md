@@ -134,8 +134,8 @@ Ink on white with a strict, data-only clinical range palette.
 ### Neutral
 - **Paper** (paper): page ground, panel ground, text on the ink strip.
 - **Report Grey** (muted): figure captions, axis ticks, secondary lines, the standing note, the "show the numbers" summary.
-- **Hairline** (hair): table row rules, chapter tab dividers, grid lines, inner panel dividers, scrollbar thumb.
-- **Target Band Green** (band): the 70 to 180 band behind glucose curves, and the hover fill for chapter tabs and prev/next links.
+- **Hairline** (hair): table row rules, chapter tab dividers, grid lines, inner panel dividers, scrollbar thumb, the chip borders.
+- **Target Band Green** (band): the 70 to 180 band behind glucose curves, and the hover fill for chapter tabs, preset chips and prev/next links.
 - **Spread Greys** (spread-outer, spread-inner): the 5 to 95 and 25 to 75 percentile spread of days behind the median.
 
 ### Named Rules
@@ -158,12 +158,12 @@ Ink on white with a strict, data-only clinical range palette.
 - **Headline** (700, 1.3rem, 1.25): section heads inside the reading column.
 - **Body** (400, 1.0625rem, 1.6; 1.125rem from 60rem wide): running text in a 40rem measure.
 - **Caption** (400, 0.875rem, 1.45, report grey): panel subtitles, the standing note.
-- **Strip label** (600, 0.75rem, 0.1em, uppercase): header strip, chapter "n/9" and page name, language switch.
+- **Strip label** (600, 0.75rem, 0.1em, uppercase): header strip, chapter "n/10" and page name, language switch.
 - **Panel label** (700, 0.8125rem, 0.06em, uppercase): report panel titles, table column heads (0.75rem), the "virtual patient, model output" footer (400, 0.75rem, 0.04em).
 - **Chart text** (11px ticks, 9px sub-ticks, 12px 600 labels): inside SVG figures.
 
 ### Named Rules
-**The Report Label Rule.** Tracked uppercase belongs to report furniture only: the strip, panel titles, table heads, the operate control's label and the provenance line. Body headings stay sentence case.
+**The Report Label Rule.** Tracked uppercase belongs to report furniture only: the strip, panel titles, table heads, the operate control's label, the mode toggle and the provenance line. Body headings stay sentence case.
 
 **The Tabular Numbers Rule.** `font-variant-numeric: tabular-nums` is set on body and inherited everywhere.
 
@@ -181,17 +181,17 @@ Flat. No box shadows anywhere. Depth comes from ink: 1px ink rules around panels
 
 ## Shapes
 
-Square corners throughout (radius 0). Containers are rectangles drawn with 1px ink rules. The chapter you stopped at carries a small ink corner triangle (0.4rem) at the tab's top right. Arrows on prev/next are inline SVG strokes (1.8 width, round caps).
+Square corners throughout (radius 0). Containers are rectangles drawn with 1px ink rules. The chapter you stopped at carries a small ink corner triangle (0.4rem) at the tab's top right. Arrows on prev/next are inline SVG strokes (1.8 width, round caps). Bolus markers on the playground chart are small ink triangles pointing down onto the axis.
 
 ## Components
 
 ### Masthead
-- **Header strip:** ink ground, paper text, strip label type, "n/9 · page name" left (truncates with ellipsis), language switch right. Current language underlined 2px in paper; the other at 75% opacity, full on hover.
+- **Header strip:** ink ground, paper text, strip label type, "n/10 · page name" left (truncates with ellipsis), language switch right. Current language underlined 2px in paper; the other at 75% opacity, full on hover.
 - **Range bar:** 0.7rem tall, five flex segments sized from the virtual patient's bins, very low and low striped. Decorative (aria-hidden); the range key under it says the numbers in text.
 - **Range key:** 0.8125rem centred line, in-range share in bold, hairline under it.
 
 ### Navigation
-- **Chapter strip:** nine equal numbered tabs, 600 0.8125rem, hairline dividers, ink rule under the strip. Hover fills band green; the current chapter is an inverted ink tab; the stopped-at chapter carries the corner triangle. Chapter names are screen-reader text and title tooltips.
+- **Chapter strip:** ten equal numbered tabs, 600 0.8125rem, hairline dividers, ink rule under the strip. Hover fills band green; the current chapter is an inverted ink tab; the stopped-at chapter carries the corner triangle. Chapter names are screen-reader text and title tooltips.
 - **Prev/next (turn):** two-cell grid with a 1px ink frame and ink gutter, 700 links with SVG arrows, next aligned right. Hover fills band green.
 
 ### Report Panel (signature)
@@ -210,6 +210,14 @@ A report panel that re-runs its day on input. Same frame, title, chart, legend a
 - **Comparison table:** always visible (no details disclosure), two value columns "as set" / "with your change", table styles as below.
 - **Recalculating:** while a run is pending the panel carries `calculating` and the plot dims to opacity 0.5 (150 ms ease-out).
 - **Failure:** the slider disables and a grey error line with `role="status"` takes the figure's place.
+
+### Playground Panel (play chapter)
+A report panel the reader composes: preset chips load ready-made days, the calculator sliders retune the bolus maths, an event editor holds the day's meals and boluses, and a single heavy ink curve answers. Same frame, title, chart furniture, provenance line, `calculating` dim and failure behaviour as the operate panel; the additions:
+- **Preset chips:** square buttons, 600 0.8125rem, hairline border, no fill; hover fills band green. One row under the title loads a story ("Forgot the breakfast bolus", "Untreated day", "Stacked corrections"), one at the editor's end adds rows ("Add meal", "Add bolus").
+- **Mode toggle:** a two-cell segmented control in a 1px ink frame ("Auto mode" / "Basal only"), tracked caps 600 0.8125rem with an ink divider between the cells; the active cell is an inverted ink tab (`aria-pressed`), the chapter tab's inversion carried into a control.
+- **Event rows:** hairline-divided rows at 0.875rem; a native time input (15 min steps) and a number input, hairline-bordered and unfilled, a grey unit letter; meal rows end in a right-aligned suggestion chip (`+ 5.5 U`) from the dosing chapter's calculator, every row a grey `×` delete that inks on hover.
+- **Bolus markers:** small ink triangles pointing down onto the axis with grey dose labels; when a bolus shares a meal's minute, the gram label steps left of the tick and the dose label right.
+- **Play table:** the report table with a single value column ("The day") and rows for in range, below 70, above 180, bolus insulin and mean glucose.
 
 ### Tables
 Full width, 0.9375rem, hairline row rules, ink rule under uppercase 0.75rem heads, left aligned, no zebra, no fills.
@@ -234,5 +242,5 @@ Links inherit ink, 1px underline at 0.18em offset, 2px on hover. Focus is a 2px 
 - **Don't** add shadows, rounded cards, or tinted card grounds.
 - **Don't** add a brand accent colour or a blue link colour.
 - **Don't** add decorative icons; the only icons are functional SVG arrows on prev/next.
-- **Don't** use tracked uppercase outside report furniture (strip, panel title, table head, operate control label, provenance line).
+- **Don't** use tracked uppercase outside report furniture (strip, panel title, table head, operate control label, mode toggle, provenance line).
 - **Don't** use the high yellow (#f9d648) as a line or text colour on white; use the darkened high rule.

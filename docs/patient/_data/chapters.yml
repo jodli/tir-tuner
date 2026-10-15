@@ -34,3 +34,7 @@
   href: demo.html
   en: "Try it: one day, two settings"
   de: "Ausprobieren: ein Tag, zwei Einstellungen"
+- page: play
+  href: play.html
+  en: "The playground"
+  de: "Die Spielwiese"

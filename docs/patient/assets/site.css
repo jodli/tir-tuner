@@ -177,3 +177,27 @@ svg .limit-low { stroke: var(--low); stroke-width: 2; }
 .demo .demo-table table { margin: 0; }
 .demo .demo-table th[scope="row"] { font-weight: 400; }
 .demo-error { margin: 0; padding: 0.6rem 0.8rem 0.8rem; color: var(--muted); }
+
+/* Playground: the reader composes the day; presets load ready-made stories. */
+.play-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding: 0.65rem 0.8rem 0.55rem; border-bottom: 1px solid var(--hair); }
+.playground .chip { font: inherit; font-size: 0.8125rem; font-weight: 600; padding: 0.2rem 0.75rem; border: 1px solid var(--hair); background: none; color: var(--ink); }
+.playground .chip:hover { background: var(--band); }
+.seg { display: inline-flex; border: 1px solid var(--rule); }
+.seg button { font: inherit; font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.3rem 0.8rem; border: 0; background: none; color: var(--ink); }
+.seg button + button { border-left: 1px solid var(--rule); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.play-editor { border-bottom: 1px solid var(--hair); }
+.event-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.55rem; padding: 0.35rem 0.8rem; border-bottom: 1px solid var(--hair); font-size: 0.875rem; }
+.event-row:last-child { border-bottom: 0; }
+.event-row input[type="time"], .event-row input[type="number"] { font: inherit; font-size: 0.875rem; padding: 0.15rem 0.3rem; border: 1px solid var(--hair); background: none; color: var(--ink); }
+.event-row input[type="time"] { width: 5.4rem; }
+.event-row input[type="number"] { width: 4.2rem; }
+.event-row .unit { color: var(--muted); }
+.event-row .give { margin-left: auto; }
+.event-row .drop { font: inherit; border: 0; background: none; color: var(--muted); padding: 0.1rem 0.3rem; }
+.event-row .drop:hover { color: var(--ink); }
+.playground .plot { transition: opacity 150ms ease-out; }
+.playground.calculating .plot { opacity: 0.5; }
+.playground .play-table { overflow-x: auto; padding: 0.2rem 0.8rem 0.8rem; }
+.playground .play-table table { margin: 0; }
+.playground .play-table th[scope="row"] { font-weight: 400; }

@@ -7,11 +7,23 @@
  */
 export function run_day(request: string): string;
 
+/**
+ * Run a reader-composed day through the sim's two existing arms.
+ */
+export function run_scenario(request: string): string;
+
+/**
+ * The bolus calculator with the reader's three dials; no insulin on board.
+ */
+export function suggest_bolus(request: string): string;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly run_day: (a: number, b: number) => [number, number, number, number];
+    readonly run_scenario: (a: number, b: number) => [number, number, number, number];
+    readonly suggest_bolus: (a: number, b: number) => [number, number, number, number];
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-14T00:00:00Z",
+  "generatedAt": "2026-10-15T00:00:00Z",
   "title": "Design System: The artificial pancreas project, for patients",
   "extensions": {
     "colorMeta": {
@@ -249,7 +249,7 @@
       "kind": "nav",
       "refersTo": "masthead-strip",
       "description": "Full-bleed ink strip with chapter position, page name and language switch.",
-      "html": "<div class=\"ds-strip\"><span>1/9 · Type 1 diabetes, from the inside</span><nav class=\"ds-lang\"><span aria-current=\"true\">English</span><a href=\"#\">Deutsch</a></nav></div>",
+      "html": "<div class=\"ds-strip\"><span>1/10 · Type 1 diabetes, from the inside</span><nav class=\"ds-lang\"><span aria-current=\"true\">English</span><a href=\"#\">Deutsch</a></nav></div>",
       "css": "font-family:'Public Sans',system-ui,sans-serif;font-variant-numeric:tabular-nums;.ds-strip{display:flex;justify-content:space-between;gap:1rem;padding:.7rem 1.5rem;background:#1d1d1b;color:#fff;font:600 .75rem/1.6 'Public Sans',system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase}.ds-lang{display:flex;gap:.9rem}.ds-lang a{color:inherit;text-decoration:none;opacity:.75}.ds-lang a:hover{opacity:1;text-decoration:underline}.ds-lang [aria-current]{border-bottom:2px solid #fff}.ds-lang a:focus-visible{outline:2px solid #fff;outline-offset:2px}"
     },
     {
@@ -264,7 +264,7 @@
       "name": "Chapter Strip",
       "kind": "nav",
       "refersTo": "chapter-tab",
-      "description": "Nine numbered tabs; hover band green, current inverted ink, stopped-at chapter marked with a corner triangle.",
+      "description": "Ten numbered tabs; hover band green, current inverted ink, stopped-at chapter marked with a corner triangle.",
       "html": "<nav class=\"ds-chapters\"><ol><li><a href=\"#\">1</a></li><li><a href=\"#\" class=\"ds-stopped\">2</a></li><li><a href=\"#\" aria-current=\"page\">3</a></li><li><a href=\"#\">4</a></li><li><a href=\"#\">5</a></li></ol></nav>",
       "css": ".ds-chapters{border-bottom:1px solid #1d1d1b}.ds-chapters ol{display:flex;margin:0;padding:0;list-style:none}.ds-chapters li{flex:1}.ds-chapters a{position:relative;display:block;padding:.55rem 0;text-align:center;text-decoration:none;color:#1d1d1b;font:600 .8125rem/1.6 'Public Sans',system-ui,sans-serif;border-left:1px solid #c9c7c2}.ds-chapters li:first-child a{border-left:0}.ds-chapters a:hover{background:#e9f4e7}.ds-chapters a:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}.ds-chapters a[aria-current]{background:#1d1d1b;color:#fff}.ds-stopped::after{content:'';position:absolute;top:0;right:0;border:.4rem solid #1d1d1b;border-bottom-color:transparent;border-left-color:transparent}"
     },
@@ -283,6 +283,22 @@
       "description": "Operate control row: tracked-caps label, native range with ink accent, bold fixed-width output; recalculating dims the plot to half opacity.",
       "html": "<div class=\"ds-operate\"><label for=\"ds-cr\">Breakfast carb ratio</label><input type=\"range\" id=\"ds-cr\" min=\"5\" max=\"20\" step=\"0.5\" value=\"11\"><output for=\"ds-cr\">11 g/U</output></div>",
       "css": ".ds-operate{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem 1rem;padding:.65rem .8rem .55rem;border-bottom:1px solid #c9c7c2;font-family:'Public Sans',system-ui,sans-serif;font-variant-numeric:tabular-nums;color:#1d1d1b}.ds-operate label{font-size:.8125rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}.ds-operate input[type=range]{flex:1 1 9rem;accent-color:#1d1d1b}.ds-operate output{min-width:7ch;font-weight:700}.ds-operate input:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}"
+    },
+    {
+      "name": "Preset Chip",
+      "kind": "chip",
+      "refersTo": null,
+      "description": "Square hairline chip for the playground's ready-made days and add buttons; hover fills band green.",
+      "html": "<div class=\"ds-play\"><button class=\"ds-chip\" type=\"button\">Forgot the breakfast bolus</button><button class=\"ds-chip\" type=\"button\">Add meal</button></div>",
+      "css": ".ds-play{display:flex;flex-wrap:wrap;gap:.4rem;padding:.65rem .8rem .55rem;border-bottom:1px solid #c9c7c2;font-family:'Public Sans',system-ui,sans-serif}.ds-chip{font:600 .8125rem/1.6 'Public Sans',system-ui,sans-serif;padding:.2rem .75rem;border:1px solid #c9c7c2;border-radius:0;background:none;color:#1d1d1b;cursor:pointer}.ds-chip:hover{background:#e9f4e7}.ds-chip:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}"
+    },
+    {
+      "name": "Mode Toggle",
+      "kind": "button",
+      "refersTo": null,
+      "description": "Segmented Auto mode / Basal only toggle in tracked caps; the pressed side is ink-filled like the current chapter tab.",
+      "html": "<span class=\"ds-seg\" role=\"group\" aria-label=\"Mode\"><button type=\"button\" aria-pressed=\"true\">Auto mode</button><button type=\"button\" aria-pressed=\"false\">Basal only</button></span>",
+      "css": ".ds-seg{display:inline-flex;border:1px solid #1d1d1b}.ds-seg button{font:600 .8125rem/1.6 'Public Sans',system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;padding:.3rem .8rem;border:0;border-radius:0;background:none;color:#1d1d1b;cursor:pointer}.ds-seg button+button{border-left:1px solid #1d1d1b}.ds-seg button[aria-pressed=true]{background:#1d1d1b;color:#fff}.ds-seg button:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}"
     },
     {
       "name": "Data Table",
@@ -337,7 +353,7 @@
       },
       {
         "name": "The Report Label Rule",
-        "body": "Tracked uppercase belongs to report furniture only: the strip, panel titles, table heads, the operate control's label and the provenance line. Body headings stay sentence case.",
+        "body": "Tracked uppercase belongs to report furniture only: the strip, panel titles, table heads, the operate control's label, the mode toggle and the provenance line. Body headings stay sentence case.",
         "section": "typography"
       },
       {

@@ -1837,9 +1837,12 @@ dependencies = [
 name = "tir-tuner-web"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "console_error_panic_hook",
  "serde",
  "serde_json",
+ "tir-tuner-body",
+ "tir-tuner-bolus",
  "tir-tuner-common",
  "tir-tuner-sim",
  "wasm-bindgen",
