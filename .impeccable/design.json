@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-15T00:00:00Z",
+  "generatedAt": "2026-10-22T00:00:00Z",
   "title": "Design System: The artificial pancreas project, for patients",
   "extensions": {
     "colorMeta": {
@@ -239,11 +239,19 @@
     "breakpoints": [
       {
         "name": "chart-wide",
-        "value": "520px (figure host width): chart aspect 0.72 below, 0.48 above"
+        "value": "520px (figure host width): report charts aspect 0.72 below, 0.48 above; the playground plot draws 0.62 / 0.42"
       },
       {
         "name": "desktop",
         "value": "60rem: body 1.125rem"
+      },
+      {
+        "name": "sticky-view",
+        "value": "48rem viewport height: the playground view pins under the top edge"
+      },
+      {
+        "name": "narrow-editor",
+        "value": "34rem: the bolus segment wraps"
       }
     ]
   },
@@ -292,8 +300,8 @@
       "name": "Preset Chip",
       "kind": "chip",
       "refersTo": null,
-      "description": "Square hairline chip, 2.25rem tall, for the playground's ready-made days, add buttons and meal suggestions; hover fills band green, a pressed preset inverts to ink, a disabled chip goes frameless in report grey.",
-      "html": "<div class=\"ds-play\"><button class=\"ds-chip\" type=\"button\" aria-pressed=\"true\">Forgot the breakfast bolus</button><button class=\"ds-chip\" type=\"button\" aria-pressed=\"false\">Untreated day</button><button class=\"ds-chip\" type=\"button\">Give 5.5 U</button><button class=\"ds-chip\" type=\"button\" disabled>Given</button></div>",
+      "description": "Square hairline chip, 2.25rem tall, for the playground's ready-made days and the editor's Done, Remove and Add a correction actions; hover fills band green, a pressed preset inverts to ink, a disabled chip goes frameless in report grey.",
+      "html": "<div class=\"ds-play\"><button class=\"ds-chip\" type=\"button\" aria-pressed=\"true\">Forgot the breakfast bolus</button><button class=\"ds-chip\" type=\"button\" aria-pressed=\"false\">Untreated day</button><button class=\"ds-chip\" type=\"button\">Done</button><button class=\"ds-chip\" type=\"button\">Add a correction</button><button class=\"ds-chip\" type=\"button\" disabled>Remove</button></div>",
       "css": ".ds-play{display:flex;flex-wrap:wrap;gap:.4rem;padding:.65rem .8rem .55rem;border-bottom:1px solid #c9c7c2;font-family:'Public Sans',system-ui,sans-serif}.ds-chip{font:600 .8125rem/1.6 'Public Sans',system-ui,sans-serif;min-height:2.25rem;padding:.2rem .75rem;border:1px solid #c9c7c2;border-radius:0;background:none;color:#1d1d1b;cursor:pointer}.ds-chip:hover:not(:disabled){background:#e9f4e7}.ds-chip[aria-pressed=true]{border-color:#1d1d1b;background:#1d1d1b;color:#fff}.ds-chip:disabled{border-color:transparent;color:#55534f;cursor:default}.ds-chip:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}"
     },
     {
@@ -303,6 +311,22 @@
       "description": "Segmented Auto mode / Basal only toggle in tracked caps; the pressed side is ink-filled like the current chapter tab.",
       "html": "<span class=\"ds-seg\" role=\"group\" aria-label=\"Mode\"><button type=\"button\" aria-pressed=\"true\">Auto mode</button><button type=\"button\" aria-pressed=\"false\">Basal only</button></span>",
       "css": ".ds-seg{display:inline-flex;border:1px solid #1d1d1b}.ds-seg button{font:600 .8125rem/1.6 'Public Sans',system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;min-height:2.25rem;padding:.3rem .8rem;border:0;border-radius:0;background:none;color:#1d1d1b;cursor:pointer}.ds-seg button+button{border-left:1px solid #1d1d1b}.ds-seg button:hover{background:#e9f4e7}.ds-seg button[aria-pressed=true]{background:#1d1d1b;color:#fff}.ds-seg button:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}"
+    },
+    {
+      "name": "Day Strip Marker",
+      "kind": "button",
+      "refersTo": "day-marker",
+      "description": "Editor marker on the strip under the playground chart: bordered ink box with grams over a drawn dose triangle (or grey none), a +N badge when markers pile, selected inverts to ink and rises to the front.",
+      "html": "<div class=\"ds-lane\"><button class=\"ds-marker\" type=\"button\" aria-label=\"Meal at 12:00, 50 g, bolus 4.5 U\"><span class=\"ds-m-top\">50 g</span><span class=\"ds-m-dose\"><svg viewBox=\"0 0 12 12\" aria-hidden=\"true\"><path d=\"M1 2h10L6 10z\"/></svg>4.5</span><span class=\"ds-pile\">+2</span></button><button class=\"ds-marker ds-on\" type=\"button\" aria-label=\"Meal at 13:00, 60 g, no bolus\"><span class=\"ds-m-top\">60 g</span><span class=\"ds-m-dose ds-none\">none</span></button></div>",
+      "css": ".ds-lane{position:relative;height:3.4rem;margin:0 .4rem;border-top:1px solid #c9c7c2;border-bottom:1px solid #c9c7c2;font-family:'Public Sans',system-ui,sans-serif;font-variant-numeric:tabular-nums}.ds-lane:hover{background:color-mix(in srgb,#e9f4e7 55%,transparent)}.ds-marker{position:absolute;top:.3rem;left:5rem;display:grid;justify-items:center;align-content:center;gap:.05rem;min-width:2.75rem;height:2.75rem;padding:0 .35rem;transform:translateX(-50%);border:1px solid #1d1d1b;border-radius:0;background:#fff;color:#1d1d1b;font:inherit;line-height:1.1;cursor:grab;touch-action:none}.ds-marker::before{content:'';position:absolute;top:-.35rem;left:50%;width:1px;height:.35rem;background:#1d1d1b}.ds-marker:hover{background:#e9f4e7}.ds-marker.ds-on{background:#1d1d1b;color:#fff;z-index:3}.ds-marker:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px;z-index:3}.ds-m-top{font-size:.75rem;font-weight:700}.ds-m-dose{display:flex;align-items:center;gap:.2rem;font-size:.6875rem}.ds-m-dose.ds-none{color:#55534f}.ds-on .ds-none{color:#c9c7c2}.ds-m-dose svg{width:.5rem;height:.5rem;fill:currentColor}.ds-pile{position:absolute;top:-.5rem;right:-.5rem;min-width:1.1rem;height:1.1rem;padding:0 .15rem;display:grid;place-items:center;background:#1d1d1b;color:#fff;font-size:.6875rem;font-weight:700}"
+    },
+    {
+      "name": "Inspector Stepper",
+      "kind": "input",
+      "refersTo": "stepper-button",
+      "description": "Playground inspector row: tracked-caps label, bold output, and two square hairline buttons holding drawn minus and plus strokes; hover fills band green, an exhausted end disables to hairline grey.",
+      "html": "<div class=\"ds-stepper\"><span class=\"ds-st-label\">Carbs</span><button class=\"ds-st-btn\" type=\"button\" aria-label=\"Less carbs\"><svg viewBox=\"0 0 12 12\" aria-hidden=\"true\"><path d=\"M2 6h8\"/></svg></button><output>50 g</output><button class=\"ds-st-btn\" type=\"button\" aria-label=\"More carbs\"><svg viewBox=\"0 0 12 12\" aria-hidden=\"true\"><path d=\"M6 2v8M2 6h8\"/></svg></button></div>",
+      "css": ".ds-stepper{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .6rem;font-family:'Public Sans',system-ui,sans-serif;font-variant-numeric:tabular-nums;color:#1d1d1b}.ds-st-label{min-width:6.5rem;font-size:.8125rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}.ds-stepper output{min-width:4.5rem;text-align:center;font-weight:700}.ds-st-btn{display:grid;place-items:center;width:2.25rem;height:2.25rem;padding:0;border:1px solid #c9c7c2;border-radius:0;background:none;color:#1d1d1b;cursor:pointer}.ds-st-btn:hover:not(:disabled){background:#e9f4e7}.ds-st-btn:disabled{color:#c9c7c2;cursor:default}.ds-st-btn svg{width:.75rem;height:.75rem;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}.ds-st-btn:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}"
     },
     {
       "name": "Data Table",
@@ -382,7 +406,7 @@
       "Don't use the five range colours for anything but glucose ranges.",
       "Don't add shadows, rounded cards, or tinted card grounds.",
       "Don't add a brand accent colour or a blue link colour.",
-      "Don't add decorative icons; the only icons are functional SVG arrows on prev/next.",
+      "Don't add decorative icons; the only icons are functional drawn SVGs: the prev/next arrows, the steppers' plus and minus, and the markers' dose triangle.",
       "Don't use tracked uppercase outside report furniture (strip, panel title, table head, operate control label, provenance line).",
       "Don't use the high yellow (#f9d648) as a line or text colour on white; use the darkened high rule."
     ]

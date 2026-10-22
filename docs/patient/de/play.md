@@ -23,12 +23,8 @@ Die anderen Kapitel zeigen Tage, die der virtuelle Patient erlebt hat. Dieser is
 </fieldset>
 <div class="play-view" id="view"></div>
 <fieldset class="play-group">
-<legend>Ihr Tag</legend>
-<div id="events"></div>
-<div class="play-actions">
-<button type="button" class="chip" id="add-meal">Mahlzeit hinzufügen</button>
-<button type="button" class="chip" id="add-bolus">Bolus hinzufügen</button>
-</div>
+<legend id="day-title">Ihr Tag</legend>
+<div id="inspector"></div>
 </fieldset>
 <fieldset class="play-group">
 <legend>Pumpe</legend>

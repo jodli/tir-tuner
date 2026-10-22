@@ -23,12 +23,8 @@ The other chapters show days the virtual patient lived through. This one is your
 </fieldset>
 <div class="play-view" id="view"></div>
 <fieldset class="play-group">
-<legend>Your day</legend>
-<div id="events"></div>
-<div class="play-actions">
-<button type="button" class="chip" id="add-meal">Add meal</button>
-<button type="button" class="chip" id="add-bolus">Add bolus</button>
-</div>
+<legend id="day-title">Your day</legend>
+<div id="inspector"></div>
 </fieldset>
 <fieldset class="play-group">
 <legend>Pump</legend>

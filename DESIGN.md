@@ -104,6 +104,21 @@ components:
     padding: "0.8rem"
   turn-link-hover:
     backgroundColor: "{colors.band}"
+  day-marker:
+    backgroundColor: "{colors.paper}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.none}"
+    height: "2.75rem"
+    width: "2.75rem"
+  day-marker-selected:
+    backgroundColor: "{colors.ink}"
+    textColor: "{colors.paper}"
+  stepper-button:
+    backgroundColor: "none"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.none}"
+    height: "2.25rem"
+    width: "2.25rem"
 ---
 
 # Design System: The artificial pancreas project, for patients
@@ -137,18 +152,18 @@ Ink on white with a strict, data-only clinical range palette.
 - **Darkened High Rule** (high-limit): the 180 mg/dL limit line on charts. The high yellow is invisible as a 2px line on white, so the line uses this darker gold. The 70 line uses low red.
 
 ### Neutral
-- **Paper** (paper): page ground, panel ground, text on the ink strip.
-- **Report Grey** (muted): figure captions, axis ticks, secondary lines (the muted "before" curve), the standing note, the "show the numbers" summary, the playground's hint, empty-state, unit and disabled-chip text, the resting delete icon.
-- **Hairline** (hair): table row rules, chapter tab dividers, grid lines, inner panel dividers, scrollbar thumb, the chip borders, the playground's group and event-row dividers and input borders.
-- **Target Band Green** (band): the 70 to 180 band behind glucose curves, and the hover fill for chapter tabs, playground chips, mode toggle cells, the delete button and prev/next links.
+- **Paper** (paper): page ground, panel ground, text on the ink strip and on inverted markers, chips and tabs.
+- **Report Grey** (muted): figure captions, axis ticks, secondary lines (the muted "before" curve), the standing note, the "show the numbers" summary, the playground's empty states and hints, the "none" dose text on unbolused markers, and disabled chip, segment and stepper text.
+- **Hairline** (hair): table row rules, chapter tab dividers, grid lines, inner panel dividers, scrollbar thumb, the chip borders, the playground's group dividers, the day strip's top and bottom rules, the dotted moment lines, and the stepper borders and disabled strokes.
+- **Target Band Green** (band): the 70 to 180 band behind glucose curves, and the hover fill for chapter tabs, playground chips, day markers, steppers, mode toggle and bolus segment cells, and prev/next links.
 - **Spread Greys** (spread-outer, spread-inner): the 5 to 95 and 25 to 75 percentile spread of days behind the median.
 
-### Named Rules
+### Named Rules (optional, powerful)
 **The Range Colours Are Data Rule.** The five range colours appear only where they encode a glucose range. Never as accent, link, button or decoration. Form controls follow: the demo slider's accent is ink, precisely because range colours are data-only.
 
 **The Never Colour Alone Rule.** Every coloured band carries a text label or a legend entry; lows also carry the stripe pattern.
 
-**The Ink Accent Rule.** There is no brand accent. Emphasis is ink: weight, the inverted ink tab, the heavy median.
+**The Ink Accent Rule.** There is no brand accent. Emphasis is ink: weight, the inverted ink tab, the heavy median, the inverted selected marker.
 
 ## Typography
 
@@ -169,7 +184,7 @@ Ink on white with a strict, data-only clinical range palette.
 - **Chart text** (11px ticks, 9px sub-ticks, 12px 600 labels): inside SVG figures.
 
 ### Named Rules
-**The Report Label Rule.** Tracked uppercase belongs to report furniture only: the strip, panel titles, table heads, the operate control's label, the mode toggle and the provenance line. Body headings stay sentence case, and so do control-group legends inside a panel ("Your day", "Pump"): they name a group the reader works in, not a column of the report.
+**The Report Label Rule.** Tracked uppercase belongs to report furniture only: the strip, panel titles, table heads, the operate control's label, the playground's stepper and segment labels, the mode toggle and the provenance line. Body headings stay sentence case, and so do control-group legends inside a panel ("Your day", "Pump"): they name a group the reader works in, not a column of the report.
 
 **The Tabular Numbers Rule.** `font-variant-numeric: tabular-nums` is set on body and inherited everywhere.
 
@@ -177,17 +192,17 @@ Ink on white with a strict, data-only clinical range palette.
 
 Single reading column: max width 40rem plus two gutters, centred, gutter `clamp(1rem, 4vw, 1.5rem)`. The masthead runs full bleed; the chapter strip's tabs sit inside the column width. Main starts 1.75rem below the masthead; h2 sections open with 2.6rem above. Figures sit at full column width with 1.75rem above and 2rem below. Panel internals use a 0.8rem side inset.
 
-Phone first (390px reference). Charts take a 0.72 aspect under 520px host width and 0.48 above. At 60rem the body size steps up to 1.125rem; nothing else reflows. Wide tables inside panels scroll horizontally in their own box.
+Phone first (390px reference). Charts take a 0.72 aspect under 520px host width and 0.48 above (the playground's own plot draws 0.62 / 0.42). At 60rem the body size steps up to 1.125rem; nothing else reflows. Wide tables inside panels scroll horizontally in their own box.
 
 ## Elevation & Depth
 
-Flat. No box shadows anywhere. Depth comes from ink: 1px ink rules around panels, 1px hairlines inside them, and inversion (ink ground, paper text) for the header strip and current chapter.
+Flat. No box shadows anywhere. Depth comes from ink: 1px ink rules around panels, 1px hairlines inside them, and inversion (ink ground, paper text) for the header strip, current chapter, pressed chips and the selected day marker. Stacking order is z-index only: the selected or focused marker rises to the front of a pile.
 
 **The Printout Rule.** If it would not survive a black and white laser printer, it is not structure. Shadows, gradients and glows have no place; the only gradient is the low-range stripe pattern.
 
 ## Shapes
 
-Square corners throughout (radius 0). Containers are rectangles drawn with 1px ink rules. The chapter you stopped at carries a small ink corner triangle (0.4rem) at the tab's top right. Arrows on prev/next are inline SVG strokes (1.8 width, round caps). Bolus markers on the playground chart are small ink triangles pointing down onto the axis. The playground's delete button is a drawn SVG cross (12 unit box, 1.8 stroke, round caps, the arrows' stroke), never a typed glyph.
+Square corners throughout (radius 0). Containers are rectangles drawn with 1px ink rules. The chapter you stopped at carries a small ink corner triangle (0.4rem) at the tab's top right. Arrows on prev/next are inline SVG strokes (1.8 width, round caps), and the playground's steppers use the same drawn strokes for plus and minus (12 unit box, 1.8, round caps). The playground's day strip hangs under the chart's time axis: square markers with a 1px ink border, grams over a drawn dose triangle, each tied to its minute by a dotted hairline. Drawn SVG strokes, never typed glyphs, for every functional icon.
 
 ## Components
 
@@ -218,17 +233,20 @@ A report panel that re-runs its day on input. Same frame, title, chart, legend a
 - **Failure:** the slider disables and a grey error line with `role="status"` takes the figure's place.
 
 ### Playground Panel (play chapter)
-A report panel the reader composes: ready-made days, an event editor of meals and boluses, the pump mode and the calculator and resistance sliders, and the chart answers with the same two-curve vocabulary as the operate panel. Same frame, title, chart furniture, provenance line and `calculating` dim as the operate panel; the additions:
+A report panel the reader composes: ready-made days, a day editor on the strip under the chart, the pump mode and the calculator and resistance dials, and the chart answers with the same two-curve vocabulary as the operate panel. Same frame, title, chart furniture, provenance line and `calculating` dim as the operate panel; the additions:
 - **Groups:** controls sit in borderless fieldsets divided by hairlines, each opened by a Group label legend in sentence case: "Start from a ready-made day", "Your day", "Pump", "Bolus calculator", "What if" (German equivalents).
-- **Sticky view:** legend, chart and summary line sit in one paper-ground view straight under the presets, ink rule below. From 40rem viewport height it is `position: sticky` at the top, so the chart stays in sight while the groups below change the day; shorter screens let it scroll.
+- **Sticky view:** legend, chart, day strip and summary line sit in one paper-ground view straight under the presets, ink rule below. From 48rem viewport height it is `position: sticky` at the top, so the chart stays in sight while the groups below change the day; shorter screens let it scroll.
 - **Summary line:** the masthead's range key format ("**n%** in range · n% below · n% above"), live as `role="status"`.
-- **Before and now:** the day before the last change is the muted 1.4px curve under the 2.8px ink "Now" curve, with legend samples at the same weights; one slider drag counts as one change. The play table gains "Before" / "Now" columns; with no change yet it has a single "Now" column. Rows: in range, below 70, above 180, bolus insulin, mean glucose.
-- **Chips:** square buttons, 600 0.8125rem, hairline border, no fill, 2.25rem tall; hover fills band green. Preset chips carry `aria-pressed` and the pressed one inverts to ink, like the mode toggle; any edit clears it. "Add meal" / "Add bolus" close the editor group and place the new row 3 h after the last event (07:00 when empty).
+- **Before and now:** the day before the last change is the muted 1.4px curve under the 2.8px ink "Now" curve, with legend samples at the same weights; one edit inside a pending run counts as one change. The play table gains "Before" / "Now" columns; with no change yet it has a single "Now" column. Rows: in range, below 70, above 180, bolus insulin, mean glucose.
+- **Day strip (the editor):** a 3.4rem lane under the chart's time axis, hairline rules above and below; hovering tints it half-strength band green. Each moment is a square marker (2.75rem box, 1px ink border, paper ground) showing grams (700 0.75rem) over a drawn dose triangle with the units (0.6875rem), or grey "none" when no bolus sits there; a marker without carbs (a correction) takes a grey border. A dotted hairline (2 3 dash) drops from the chart to each marker's minute and turns solid ink for the selection. Markers are buttons: arrow keys move in 15 min steps (shift 60), Delete removes, activation selects; the selected marker inverts to ink and rises to the front.
+- **Piles:** overlapping markers keep their true minute and pile; the pile's top marker carries a +N badge (ink ground, paper text, 0.6875rem 700) at its top right. Tapping a selected pile member cycles through the pile, so nothing ever moves or jumps.
+- **Adding and dragging:** tapping the empty lane adds a meal (40 g, Calculator bolus) at the tapped minute, snapped to 15; while a marker drags it shows the clock time in its top line, moving in 15 min steps.
+- **Inspector:** in the "Your day" group under the pinned view; the group's legend names the selection ("Meal at 12:00", "Correction at 12:00", otherwise "Your day"). It holds labelled steppers: tracked-caps label, bold output (min-width 4.5rem), and two 2.25rem square hairline buttons holding the drawn plus and minus strokes; hover fills band green, an exhausted end disables to hairline grey. Time steps 15 min, carbs 5 g, own dose 0.5 U.
+- **Bolus segment:** for meals, a segmented control like the mode toggle ("None" / "Calculator n U" / "My own", tracked caps 600 0.8125rem, ink frame, pressed inverts). The Calculator segment disables to grey when the calculator refuses or suggests zero; picking "My own" seeds the dose stepper. Below 34rem the segment wraps.
+- **Calculator loop:** a Calculator bolus follows the carb ratio, correction factor and target dials and reads the day's glucose at the meal's minute, so the simulation iterates until the dose list settles.
+- **Chips:** square buttons, 600 0.8125rem, hairline border, no fill, 2.25rem tall; hover fills band green. Preset chips carry `aria-pressed` and the pressed one inverts to ink, like the mode toggle; any edit clears it. The editor's action chips are "Done", "Remove" and "Add a correction"; the correction lands 2 h after the last event (07:00 when empty) and is selected at once.
 - **Mode toggle:** a two-cell segmented control in a 1px ink frame ("Auto mode" / "Basal only"), tracked caps 600 0.8125rem, ink divider, 2.25rem tall; hover fills band green, the active cell is an inverted ink tab (`aria-pressed`). A grey caption-size hint beside it (`aria-describedby`) says what the current mode does.
-- **Event rows:** a grid of bold kind label (Meal / Bolus), time input (15 min steps), amount input with grey unit, the suggestion chip and the delete button, hairline between rows, 0.875rem. Inputs are hairline-bordered, unfilled, 2.25rem tall. Below 34rem the chip drops to a second row under time and amount. An empty editor shows a grey line pointing to the add buttons and presets.
-- **Suggestion chip:** meal rows only, named for the action: "Give 5.5 U", or "Set to 6.8 U" when a bolus already sits at that minute. When there is nothing to do it disables and renders frameless in report grey: "Given", "No bolus suggested", "Too low for a bolus" (the calculator refuses below its minimum glucose). Chips refresh in place after each run; rebuilt rows return focus to the same event and field.
-- **Delete:** a 2.25rem square button holding the drawn SVG cross, grey at rest, ink on band green on hover, labelled "Delete the entry at 07:00".
-- **Bolus markers:** small ink triangles pointing down onto the axis with grey dose labels, centred. When a meal and a bolus share a minute, the gram label stacks above the dose label, both centred on the tick.
+- **Empty state:** with no moments yet, a grey line centres over the strip ("Tap here to add a meal at that time") and a grey line in the editor points to the strip and the presets.
 - **Failure:** every control disables and a grey `role="status"` line explains; a failed engine load and a failed run have separate messages.
 
 ### Tables
@@ -253,6 +271,6 @@ Links inherit ink, 1px underline at 0.18em offset, 2px on hover. Focus is a 2px 
 - **Don't** use the five range colours for anything but glucose ranges.
 - **Don't** add shadows, rounded cards, or tinted card grounds.
 - **Don't** add a brand accent colour or a blue link colour.
-- **Don't** add decorative icons; the only icons are functional drawn SVGs: the prev/next arrows and the playground's delete cross.
-- **Don't** use tracked uppercase outside report furniture (strip, panel title, table head, operate control label, mode toggle, provenance line).
+- **Don't** add decorative icons; the only icons are functional drawn SVGs: the prev/next arrows, the steppers' plus and minus, and the markers' dose triangle.
+- **Don't** use tracked uppercase outside report furniture (strip, panel title, table head, operate control label, playground stepper and segment labels, mode toggle, provenance line).
 - **Don't** use the high yellow (#f9d648) as a line or text colour on white; use the darkened high rule.
