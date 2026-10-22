@@ -404,16 +404,7 @@ function keyMove(ev) {
     e.min = snap(e.min + (ev.key === "ArrowLeft" ? -step : step));
   } else if (ev.key === "Delete" || ev.key === "Backspace") {
     ev.preventDefault();
-    mark();
-    const order = [...entries].sort((a, b) => a.min - b.min);
-    const i = order.indexOf(e);
-    entries = entries.filter((o) => o !== e);
-    selected = null;
-    schedule();
-    draw();
-    renderInspector();
-    const next = [...view.querySelectorAll(".marker")][Math.min(i, view.querySelectorAll(".marker").length - 1)];
-    (next ?? editor.querySelector(".chip"))?.focus();
+    removeEntry(e);
     return;
   } else {
     return;
@@ -423,6 +414,19 @@ function keyMove(ev) {
   draw();
   renderInspector();
   view.querySelector(`.marker[data-id="${e.id}"]`)?.focus();
+}
+
+// Removes a moment and moves focus to its neighbour in time order.
+function removeEntry(e) {
+  mark();
+  const i = [...entries].sort((a, b) => a.min - b.min).indexOf(e);
+  entries = entries.filter((o) => o !== e);
+  selected = null;
+  schedule();
+  draw();
+  renderInspector();
+  const markers = view.querySelectorAll(".marker");
+  (markers[Math.min(i, markers.length - 1)] ?? editor.querySelector(".chip"))?.focus();
 }
 
 function legend() {
@@ -639,18 +643,7 @@ function actions(e) {
     remove.type = "button";
     remove.dataset.key = "remove";
     remove.textContent = T.remove;
-    remove.addEventListener("click", () => {
-      mark();
-      const order = [...entries].sort((a, b) => a.min - b.min);
-      const i = order.indexOf(e);
-      entries = entries.filter((o) => o !== e);
-      selected = null;
-      schedule();
-      draw();
-      renderInspector();
-      const next = [...view.querySelectorAll(".marker")][Math.min(i, view.querySelectorAll(".marker").length - 1)];
-      (next ?? editor.querySelector(".chip"))?.focus();
-    });
+    remove.addEventListener("click", () => removeEntry(e));
   }
   const add = el("button", "chip", wrap);
   add.type = "button";
