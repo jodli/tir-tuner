@@ -12,18 +12,36 @@ sources:
 Die anderen Kapitel zeigen Tage, die der virtuelle Patient erlebt hat. Dieser ist Ihrer: Fügen Sie Mahlzeiten hinzu, entscheiden Sie über Bolusdosen, schalten Sie den Auto-Modus der Pumpe ein oder aus, und die Simulation antwortet mit dem Tag, der daraus folgt.
 
 <figure class="panel playground" id="play">
-<figcaption><strong>Die Spielwiese</strong><span>Mahlzeiten, Bolusdosen, Auto-Modus: Legen Sie die Hebel um, und der Tag zeichnet sich neu.</span></figcaption>
-<div class="play-actions" role="group" aria-label="Fertige Tage">
-<button type="button" class="chip" data-preset="forgot">Frühstücksbolus vergessen</button>
-<button type="button" class="chip" data-preset="untreated">Unbehandelt</button>
-<button type="button" class="chip" data-preset="stacked">Doppelte Korrektur</button>
+<figcaption><strong>Die Spielwiese</strong><span>Die schwarze Kurve ist Ihr Tag, wie er jetzt ist. Die graue Kurve ist der Tag vor Ihrer letzten Änderung, so zeigt jeder Schritt, was er bewirkt.</span></figcaption>
+<fieldset class="play-group">
+<legend>Mit einem fertigen Tag beginnen</legend>
+<div class="play-actions">
+<button type="button" class="chip" data-preset="forgot" aria-pressed="false">Frühstücksbolus vergessen</button>
+<button type="button" class="chip" data-preset="untreated" aria-pressed="false">Unbehandelt</button>
+<button type="button" class="chip" data-preset="stacked" aria-pressed="false">Doppelte Korrektur</button>
 </div>
-<div class="demo-controls" role="group" aria-label="Modus">
+</fieldset>
+<div class="play-view" id="view"></div>
+<fieldset class="play-group">
+<legend>Ihr Tag</legend>
+<div id="events"></div>
+<div class="play-actions">
+<button type="button" class="chip" id="add-meal">Mahlzeit hinzufügen</button>
+<button type="button" class="chip" id="add-bolus">Bolus hinzufügen</button>
+</div>
+</fieldset>
+<fieldset class="play-group">
+<legend>Pumpe</legend>
+<div class="demo-controls">
 <span class="seg">
-<button type="button" id="mode-auto" aria-pressed="true">Auto-Modus</button>
-<button type="button" id="mode-basal" aria-pressed="false">Nur Basalinsulin</button>
+<button type="button" id="mode-auto" aria-pressed="true" aria-describedby="mode-hint">Auto-Modus</button>
+<button type="button" id="mode-basal" aria-pressed="false" aria-describedby="mode-hint">Nur Basalinsulin</button>
 </span>
+<p class="play-hint" id="mode-hint">Die Pumpe berechnet das Insulin alle 15 Minuten neu.</p>
 </div>
+</fieldset>
+<fieldset class="play-group">
+<legend>Bolusrechner</legend>
 <div class="demo-controls">
 <label for="cr">Kohlenhydratverhältnis</label>
 <input type="range" id="cr" min="5" max="20" step="0.5" value="11">
@@ -39,16 +57,16 @@ Die anderen Kapitel zeigen Tage, die der virtuelle Patient erlebt hat. Dieser is
 <input type="range" id="tgt" min="80" max="190" step="1" value="100">
 <output for="tgt" id="tgt-out">100 mg/dl</output>
 </div>
+</fieldset>
+<fieldset class="play-group">
+<legend>Was wäre wenn</legend>
 <div class="demo-controls">
 <label for="res">Insulinresistenz</label>
 <input type="range" id="res" min="1" max="2" step="0.1" value="1">
 <output for="res" id="res-out">× 1,0</output>
 </div>
-<div class="play-editor" id="events"></div>
-<div class="play-actions">
-<button type="button" class="chip" id="add-meal">Mahlzeit hinzufügen</button>
-<button type="button" class="chip" id="add-bolus">Bolus hinzufügen</button>
-</div>
+</fieldset>
+<div class="play-table" id="totals"></div>
 </figure>
 
 ## Lesen Sie es wie einen Bericht

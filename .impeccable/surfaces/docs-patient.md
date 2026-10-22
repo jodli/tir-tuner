@@ -30,3 +30,5 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 Raises kept: one glucose scale on every glucose figure; every figure has its numbers in a small table under it; the chapter strip marks the chapter you stopped at.
 
 Open: units, mg/dL primary with mmol/L in small type (no switch).
+
+Playground (chapter 10, polish pass): the chart sits in a sticky view under the presets (from 40rem viewport height), with a before/now curve pair, a live range-key summary and Before/Now table columns. Controls are grouped in sentence-case fieldsets; meal rows carry action-named suggestion chips that disable to grey text ("Too low for a bolus" instead of failing the page); delete is a drawn SVG cross. No new colour; one new type role, Group label (700 0.9375rem).

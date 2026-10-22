@@ -12,18 +12,36 @@ sources:
 The other chapters show days the virtual patient lived through. This one is yours: add meals, decide on boluses, switch the pump's Auto mode on or off, and the simulator answers with the day that would follow.
 
 <figure class="panel playground" id="play">
-<figcaption><strong>The playground</strong><span>Meals, boluses, Auto mode: move the levers and the day redraws.</span></figcaption>
-<div class="play-actions" role="group" aria-label="Ready-made days">
-<button type="button" class="chip" data-preset="forgot">Forgot the breakfast bolus</button>
-<button type="button" class="chip" data-preset="untreated">Untreated day</button>
-<button type="button" class="chip" data-preset="stacked">Stacked corrections</button>
+<figcaption><strong>The playground</strong><span>The black curve is your day as it stands. The grey curve is the day before your last change, so every move shows what it did.</span></figcaption>
+<fieldset class="play-group">
+<legend>Start from a ready-made day</legend>
+<div class="play-actions">
+<button type="button" class="chip" data-preset="forgot" aria-pressed="false">Forgot the breakfast bolus</button>
+<button type="button" class="chip" data-preset="untreated" aria-pressed="false">Untreated day</button>
+<button type="button" class="chip" data-preset="stacked" aria-pressed="false">Stacked corrections</button>
 </div>
-<div class="demo-controls" role="group" aria-label="Mode">
+</fieldset>
+<div class="play-view" id="view"></div>
+<fieldset class="play-group">
+<legend>Your day</legend>
+<div id="events"></div>
+<div class="play-actions">
+<button type="button" class="chip" id="add-meal">Add meal</button>
+<button type="button" class="chip" id="add-bolus">Add bolus</button>
+</div>
+</fieldset>
+<fieldset class="play-group">
+<legend>Pump</legend>
+<div class="demo-controls">
 <span class="seg">
-<button type="button" id="mode-auto" aria-pressed="true">Auto mode</button>
-<button type="button" id="mode-basal" aria-pressed="false">Basal only</button>
+<button type="button" id="mode-auto" aria-pressed="true" aria-describedby="mode-hint">Auto mode</button>
+<button type="button" id="mode-basal" aria-pressed="false" aria-describedby="mode-hint">Basal only</button>
 </span>
+<p class="play-hint" id="mode-hint">The pump recalculates the insulin every 15 minutes.</p>
 </div>
+</fieldset>
+<fieldset class="play-group">
+<legend>Bolus calculator</legend>
 <div class="demo-controls">
 <label for="cr">Carb ratio</label>
 <input type="range" id="cr" min="5" max="20" step="0.5" value="11">
@@ -39,16 +57,16 @@ The other chapters show days the virtual patient lived through. This one is your
 <input type="range" id="tgt" min="80" max="190" step="1" value="100">
 <output for="tgt" id="tgt-out">100 mg/dL</output>
 </div>
+</fieldset>
+<fieldset class="play-group">
+<legend>What if</legend>
 <div class="demo-controls">
 <label for="res">Insulin resistance</label>
 <input type="range" id="res" min="1" max="2" step="0.1" value="1">
 <output for="res" id="res-out">× 1.0</output>
 </div>
-<div class="play-editor" id="events"></div>
-<div class="play-actions">
-<button type="button" class="chip" id="add-meal">Add meal</button>
-<button type="button" class="chip" id="add-bolus">Add bolus</button>
-</div>
+</fieldset>
+<div class="play-table" id="totals"></div>
 </figure>
 
 ## Read it like a report

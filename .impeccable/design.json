@@ -228,6 +228,10 @@
       "label-nav": {
         "displayName": "Chapter tab",
         "purpose": "Numbered chapter strip."
+      },
+      "label-group": {
+        "displayName": "Group label",
+        "purpose": "Playground fieldset legends, 700 0.9375rem, sentence case."
       }
     },
     "shadows": [],
@@ -288,9 +292,9 @@
       "name": "Preset Chip",
       "kind": "chip",
       "refersTo": null,
-      "description": "Square hairline chip for the playground's ready-made days and add buttons; hover fills band green.",
-      "html": "<div class=\"ds-play\"><button class=\"ds-chip\" type=\"button\">Forgot the breakfast bolus</button><button class=\"ds-chip\" type=\"button\">Add meal</button></div>",
-      "css": ".ds-play{display:flex;flex-wrap:wrap;gap:.4rem;padding:.65rem .8rem .55rem;border-bottom:1px solid #c9c7c2;font-family:'Public Sans',system-ui,sans-serif}.ds-chip{font:600 .8125rem/1.6 'Public Sans',system-ui,sans-serif;padding:.2rem .75rem;border:1px solid #c9c7c2;border-radius:0;background:none;color:#1d1d1b;cursor:pointer}.ds-chip:hover{background:#e9f4e7}.ds-chip:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}"
+      "description": "Square hairline chip, 2.25rem tall, for the playground's ready-made days, add buttons and meal suggestions; hover fills band green, a pressed preset inverts to ink, a disabled chip goes frameless in report grey.",
+      "html": "<div class=\"ds-play\"><button class=\"ds-chip\" type=\"button\" aria-pressed=\"true\">Forgot the breakfast bolus</button><button class=\"ds-chip\" type=\"button\" aria-pressed=\"false\">Untreated day</button><button class=\"ds-chip\" type=\"button\">Give 5.5 U</button><button class=\"ds-chip\" type=\"button\" disabled>Given</button></div>",
+      "css": ".ds-play{display:flex;flex-wrap:wrap;gap:.4rem;padding:.65rem .8rem .55rem;border-bottom:1px solid #c9c7c2;font-family:'Public Sans',system-ui,sans-serif}.ds-chip{font:600 .8125rem/1.6 'Public Sans',system-ui,sans-serif;min-height:2.25rem;padding:.2rem .75rem;border:1px solid #c9c7c2;border-radius:0;background:none;color:#1d1d1b;cursor:pointer}.ds-chip:hover:not(:disabled){background:#e9f4e7}.ds-chip[aria-pressed=true]{border-color:#1d1d1b;background:#1d1d1b;color:#fff}.ds-chip:disabled{border-color:transparent;color:#55534f;cursor:default}.ds-chip:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}"
     },
     {
       "name": "Mode Toggle",
@@ -298,7 +302,7 @@
       "refersTo": null,
       "description": "Segmented Auto mode / Basal only toggle in tracked caps; the pressed side is ink-filled like the current chapter tab.",
       "html": "<span class=\"ds-seg\" role=\"group\" aria-label=\"Mode\"><button type=\"button\" aria-pressed=\"true\">Auto mode</button><button type=\"button\" aria-pressed=\"false\">Basal only</button></span>",
-      "css": ".ds-seg{display:inline-flex;border:1px solid #1d1d1b}.ds-seg button{font:600 .8125rem/1.6 'Public Sans',system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;padding:.3rem .8rem;border:0;border-radius:0;background:none;color:#1d1d1b;cursor:pointer}.ds-seg button+button{border-left:1px solid #1d1d1b}.ds-seg button[aria-pressed=true]{background:#1d1d1b;color:#fff}.ds-seg button:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}"
+      "css": ".ds-seg{display:inline-flex;border:1px solid #1d1d1b}.ds-seg button{font:600 .8125rem/1.6 'Public Sans',system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;min-height:2.25rem;padding:.3rem .8rem;border:0;border-radius:0;background:none;color:#1d1d1b;cursor:pointer}.ds-seg button+button{border-left:1px solid #1d1d1b}.ds-seg button:hover{background:#e9f4e7}.ds-seg button[aria-pressed=true]{background:#1d1d1b;color:#fff}.ds-seg button:focus-visible{outline:2px solid #1d1d1b;outline-offset:2px}"
     },
     {
       "name": "Data Table",
@@ -353,7 +357,7 @@
       },
       {
         "name": "The Report Label Rule",
-        "body": "Tracked uppercase belongs to report furniture only: the strip, panel titles, table heads, the operate control's label, the mode toggle and the provenance line. Body headings stay sentence case.",
+        "body": "Tracked uppercase belongs to report furniture only: the strip, panel titles, table heads, the operate control's label, the mode toggle and the provenance line. Body headings stay sentence case, and so do control-group legends inside a panel.",
         "section": "typography"
       },
       {
